@@ -1,0 +1,3 @@
+The teleport animation includes both the exit and the re-entry, separated by a transparent frame. 
+To optimize and avoid creating two separate animations, you can use the transparent frame to reposition the wizard:
+this way, a single teleport animation will work for both the exit and the re-entry.

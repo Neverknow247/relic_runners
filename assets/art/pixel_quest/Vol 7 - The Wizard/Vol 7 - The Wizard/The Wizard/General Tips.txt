@@ -1,0 +1,4 @@
+All animation states, except for the run, start with a frame that only indicates the direction the character will move. 
+This first frame isn’t necessary for the animation itself, and when importing the PNGs into your engine, it’s recommended to skip it.
+
+The purpose of this frame is purely technical: it allows you to “align” the character and avoid small flickering when switching between animations. However, removing it results in smoother and more natural transitions between animations, without losing any visual quality.

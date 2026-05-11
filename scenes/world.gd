@@ -13,18 +13,17 @@ const ZONE_SCENES = {
 	"dungeon/main" : "res://scenes/levels/dungeon/dungeon_main.tscn",
 	"dungeon/room_1" : "res://scenes/levels/dungeon/dungeon_room_1.tscn",
 	"dungeon/room_2" : "res://scenes/levels/dungeon/dungeon_room_2.tscn",
+	
+	"keep/main" : "res://scenes/levels/keep/keep_main.tscn",
 }
 
 const PLAYER_SPRITES = [
-	preload("res://assets/art/tiny_dungeon/Tiles/tile_0084.png"),
-	preload("res://assets/art/tiny_dungeon/Tiles/tile_0111.png"),
-	preload("res://assets/art/tiny_dungeon/Tiles/tile_0099.png"),
-	preload("res://assets/art/tiny_dungeon/Tiles/tile_0100.png"),
-	#preload(),
-	#preload(),
-	#preload(),
-	#preload(),
-	#preload(),
+	#preload("res://assets/art/pixel_quest/wizard_standard.png"),
+	#preload("res://assets/art/pixel_quest/wizard_red.png"),
+	#preload("res://assets/art/pixel_quest/wizard_yellow.png"),
+	#preload("res://assets/art/pixel_quest/wizard_green.png"),
+	preload("res://assets/art/pixel_quest/wizard_blue.png"),
+	#preload("res://assets/art/pixel_quest/wizard_purple.png"),
 	#preload(),
 ]
 
@@ -33,6 +32,17 @@ const PLAYER_SPRITES = [
 @onready var players: Node2D = $y_sort_root/players
 @export var zone_container: Node2D
 @onready var leave_button: Button = $canvas_layer/leave_button
+
+enum PartyState {
+	HUB,
+	COUNTDOWN,
+	EXPEDITION
+}
+
+var party_state := PartyState.HUB
+var expedition_zone := "hub"
+var expedition_room := "main"
+var expedition_countdown_time := 5
 
 var shutting_down = false
 
@@ -340,10 +350,8 @@ func request_player_cosmetics(peer_id: int):
 func server_request_player_cosmetics(peer_id: int) -> void:
 	if !multiplayer.is_server():
 		return
-
 	if !player_cosmetics.has(peer_id):
 		player_cosmetics[peer_id] = generate_player_cosmetics(peer_id)
-
 	var sender_id := multiplayer.get_remote_sender_id()
 	client_apply_player_cosmetics.rpc_id(sender_id, peer_id, player_cosmetics[peer_id])
 
@@ -376,7 +384,6 @@ func set_player_active(player: Node, active: bool):
 	var label = player.get_node_or_null("name_label")
 	if label:
 		label.visible = active
-
 	set_player_collision_active(player, active)
 
 func set_player_collision_active(player: Node, active: bool):
@@ -391,7 +398,6 @@ func set_player_collision_active(player: Node, active: bool):
 			if !child.has_meta("original_collision_layer"):
 				child.set_meta("original_collision_layer", child.collision_layer)
 				child.set_meta("original_collision_mask", child.collision_mask)
-
 			child.collision_layer = child.get_meta("original_collision_layer") if active else 0
 			child.collision_mask = child.get_meta("original_collision_mask") if active else 0
 
@@ -411,7 +417,6 @@ func _on_leave_pressed():
 
 func cleanup_world():
 	shutting_down = true
-
 	if GlobalSteam.add_player.is_connected(_on_add_player):
 		GlobalSteam.add_player.disconnect(_on_add_player)
 	if GlobalSteam.remove_player.is_connected(_on_remove_player):

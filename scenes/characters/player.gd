@@ -3,6 +3,8 @@ extends CharacterBody2D
 var stats = Stats
 var rand = RandomNumberGenerator.new()
 
+@onready var sprite: Sprite2D = $sprite
+
 var state = move_state
 var has_dash = true
 var dash_input_axis
@@ -13,6 +15,8 @@ var friction = 500
 
 var max_velocity = default_max_velocity
 var acceleration = default_acceleration
+
+var last_facing = 1
 
 func _ready() -> void:
 	if is_multiplayer_authority():
@@ -36,6 +40,7 @@ func move_state(delta):
 		apply_acceleration(delta,input_axis)
 	else:
 		apply_friction(delta)
+	update_animations(input_axis)
 	move_and_slide()
 
 func is_moving(_input_axis):
@@ -46,3 +51,9 @@ func apply_acceleration(delta, _input_axis):
 
 func apply_friction(delta):
 	velocity = velocity.move_toward(Vector2.ZERO, friction * delta)
+
+func update_animations(input_vector):
+	var facing = input_vector.x
+	if facing != 0:
+		last_facing = facing
+		sprite.flip_h = facing != 1

@@ -2,16 +2,55 @@
 
 [ext_resource type="Script" uid="uid://br5760pq51hcv" path="res://scenes/characters/player.gd" id="1_rp718"]
 [ext_resource type="Theme" uid="uid://dx7snotftebdm" path="res://ui/themes/menu_theme.tres" id="2_76oj4"]
-[ext_resource type="Texture2D" uid="uid://06x14dfl018o" path="res://assets/art/tiny_dungeon/Tiles/tile_0084.png" id="3_76oj4"]
+[ext_resource type="Texture2D" uid="uid://cu2bfeiqr5ljd" path="res://assets/art/pixel_quest/wizard_blue.png" id="3_76oj4"]
 
 [sub_resource type="CapsuleShape2D" id="CapsuleShape2D_76oj4"]
-radius = 4.0
-height = 12.0
+radius = 6.0
+height = 16.0
 
 [sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_yewv4"]
 properties/0/path = NodePath(".:position")
 properties/0/spawn = true
 properties/0/replication_mode = 1
+
+[sub_resource type="Animation" id="Animation_76oj4"]
+length = 0.001
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("sprite:frame")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [0]
+}
+
+[sub_resource type="Animation" id="Animation_dyp2m"]
+resource_name = "idle_side"
+length = 0.8
+loop_mode = 1
+step = 0.1
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("sprite:frame")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.099999994, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1, 1),
+"update": 1,
+"values": [0, 1, 2, 3, 4, 5, 6, 7]
+}
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_atpat"]
+_data = {
+&"RESET": SubResource("Animation_76oj4"),
+&"idle_side": SubResource("Animation_dyp2m")
+}
 
 [node name="player" type="CharacterBody2D" unique_id=736798270]
 collision_layer = 2
@@ -19,9 +58,9 @@ script = ExtResource("1_rp718")
 
 [node name="name_label" type="Label" parent="." unique_id=1362109846]
 offset_left = -32.0
-offset_top = -24.0
+offset_top = -48.0
 offset_right = 1247.9999
-offset_bottom = 141.0
+offset_bottom = 117.0
 scale = Vector2(0.05, 0.05)
 theme = ExtResource("2_76oj4")
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
@@ -32,16 +71,21 @@ horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="sprite" type="Sprite2D" parent="." unique_id=1505886042]
-position = Vector2(0, -8)
+position = Vector2(0, -42)
 texture = ExtResource("3_76oj4")
+hframes = 8
+vframes = 10
 
 [node name="collision_shape_2d" type="CollisionShape2D" parent="." unique_id=242083290]
-position = Vector2(0, -4)
-rotation = 1.5707964
+position = Vector2(0, -8)
 shape = SubResource("CapsuleShape2D_76oj4")
 
 [node name="multiplayer_synchronizer" type="MultiplayerSynchronizer" parent="." unique_id=1479303565]
 replication_config = SubResource("SceneReplicationConfig_yewv4")
 
 [node name="camera_2d" type="Camera2D" parent="." unique_id=968866298]
-zoom = Vector2(8, 8)
+zoom = Vector2(6, 6)
+
+[node name="animation_player" type="AnimationPlayer" parent="." unique_id=1578696177]
+libraries/ = SubResource("AnimationLibrary_atpat")
+autoplay = &"idle_side"

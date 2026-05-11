@@ -1,0 +1,2 @@
+You can achieve the effect of lit candles by duplicating and looping the last two frames: 
+this way, the flames will look alive, with a continuous and realistic movement.
