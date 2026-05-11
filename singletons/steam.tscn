@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://5y571qbak8hi"]
+
+[ext_resource type="Script" uid="uid://b8atwwimlwrmx" path="res://singletons/steam.gd" id="1_ty0ko"]
+
+[node name="steam" type="Node" unique_id=1286502282]
+script = ExtResource("1_ty0ko")

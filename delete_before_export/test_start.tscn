@@ -1,0 +1,70 @@
+[gd_scene format=3 uid="uid://ica6hv7iputs"]
+
+[ext_resource type="Script" uid="uid://dy52vld5vqx0s" path="res://delete_before_export/test_start.gd" id="1_mln1v"]
+[ext_resource type="PackedScene" uid="uid://dyvl6ibu788xh" path="res://scenes/characters/player.tscn" id="2_criiu"]
+
+[sub_resource type="WorldBoundaryShape2D" id="WorldBoundaryShape2D_mln1v"]
+
+[node name="test_start" type="Node2D" unique_id=1706114442]
+script = ExtResource("1_mln1v")
+player_scene = ExtResource("2_criiu")
+
+[node name="static_body_2d" type="StaticBody2D" parent="." unique_id=379386646]
+position = Vector2(863, 1046)
+
+[node name="collision_shape_2d" type="CollisionShape2D" parent="static_body_2d" unique_id=1190917158]
+shape = SubResource("WorldBoundaryShape2D_mln1v")
+
+[node name="v_box_container" type="VBoxContainer" parent="." unique_id=576778724]
+custom_minimum_size = Vector2(600, 0)
+offset_left = 662.0
+offset_top = 116.0
+offset_right = 1162.0
+offset_bottom = 349.0
+
+[node name="host_button" type="Button" parent="v_box_container" unique_id=1086341977]
+layout_mode = 2
+theme_override_font_sizes/font_size = 48
+text = "Host"
+
+[node name="join_button" type="Button" parent="v_box_container" unique_id=169016194]
+layout_mode = 2
+theme_override_font_sizes/font_size = 48
+disabled = true
+text = "Join
+"
+
+[node name="id_prompt" type="LineEdit" parent="v_box_container" unique_id=1449359109]
+layout_mode = 2
+theme_override_font_sizes/font_size = 48
+placeholder_text = "Lobby ID"
+alignment = 1
+
+[node name="multiplayer_spawner" type="MultiplayerSpawner" parent="." unique_id=1065157085]
+_spawnable_scenes = PackedStringArray("uid://dyvl6ibu788xh")
+spawn_path = NodePath("..")
+
+[node name="v_box_container2" type="VBoxContainer" parent="." unique_id=1882243390]
+custom_minimum_size = Vector2(0, 500)
+offset_left = 1518.0
+offset_top = 49.0
+offset_right = 1854.0
+offset_bottom = 128.0
+
+[node name="get_lobby_list_button" type="Button" parent="v_box_container2" unique_id=1390393234]
+layout_mode = 2
+theme_override_font_sizes/font_size = 48
+text = "Get Lobby List"
+
+[node name="scroll_container" type="ScrollContainer" parent="v_box_container2" unique_id=1012414784]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="lobby_list" type="VBoxContainer" parent="v_box_container2/scroll_container" unique_id=819702726]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[connection signal="pressed" from="v_box_container/host_button" to="." method="_on_host_button_pressed"]
+[connection signal="pressed" from="v_box_container/join_button" to="." method="_on_join_button_pressed"]
+[connection signal="text_changed" from="v_box_container/id_prompt" to="." method="_on_id_prompt_text_changed"]
+[connection signal="pressed" from="v_box_container2/get_lobby_list_button" to="." method="_on_get_lobby_list_button_pressed"]

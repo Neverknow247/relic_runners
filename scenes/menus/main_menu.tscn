@@ -1,0 +1,94 @@
+[gd_scene format=3 uid="uid://clvys58un45qe"]
+
+[ext_resource type="Theme" uid="uid://dx7snotftebdm" path="res://ui/themes/menu_theme.tres" id="1_ovrgc"]
+[ext_resource type="Script" uid="uid://c4c57pmox1jey" path="res://scenes/menus/main_menu.gd" id="1_xqga4"]
+[ext_resource type="FontFile" uid="uid://dajgop274ppff" path="res://assets/fonts/Cinzel/static/Cinzel-SemiBold.ttf" id="3_2o76q"]
+
+[node name="main_menu" type="Control" unique_id=1837708785]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("1_ovrgc")
+script = ExtResource("1_xqga4")
+
+[node name="margin_container" type="MarginContainer" parent="." unique_id=1066732262]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 320
+theme_override_constants/margin_top = 80
+theme_override_constants/margin_right = 320
+theme_override_constants/margin_bottom = 80
+
+[node name="v_box_container" type="VBoxContainer" parent="margin_container" unique_id=1972996958]
+layout_mode = 2
+theme_override_constants/separation = 32
+
+[node name="label" type="Label" parent="margin_container/v_box_container" unique_id=1280191940]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("3_2o76q")
+theme_override_font_sizes/font_size = 240
+text = "Relic Runners"
+horizontal_alignment = 1
+
+[node name="margin_container" type="MarginContainer" parent="margin_container/v_box_container" unique_id=1034335004]
+layout_mode = 2
+theme_override_constants/margin_left = 640
+theme_override_constants/margin_top = 0
+theme_override_constants/margin_right = 640
+
+[node name="v_box_container" type="VBoxContainer" parent="margin_container/v_box_container/margin_container" unique_id=976928380]
+layout_mode = 2
+theme_override_constants/separation = 128
+alignment = 1
+
+[node name="host_button" type="Button" parent="margin_container/v_box_container/margin_container/v_box_container" unique_id=936626657]
+custom_minimum_size = Vector2(0, 234)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Host Game"
+
+[node name="v_box_container" type="VBoxContainer" parent="margin_container/v_box_container/margin_container/v_box_container" unique_id=253188778]
+layout_mode = 2
+theme_override_constants/separation = 32
+
+[node name="label" type="Label" parent="margin_container/v_box_container/margin_container/v_box_container/v_box_container" unique_id=1900081762]
+layout_mode = 2
+text = "Join Game"
+horizontal_alignment = 1
+
+[node name="refresh_button" type="Button" parent="margin_container/v_box_container/margin_container/v_box_container/v_box_container" unique_id=605854240]
+layout_mode = 2
+text = "Refresh List"
+
+[node name="server_list_background" type="ColorRect" parent="margin_container/v_box_container" unique_id=1211206534]
+layout_mode = 2
+size_flags_vertical = 3
+color = Color(0.10747976, 0.10747973, 0.10747973, 1)
+
+[node name="margin_container2" type="MarginContainer" parent="margin_container/v_box_container/server_list_background" unique_id=912597706]
+layout_mode = 0
+offset_right = 3200.0
+offset_bottom = 866.0
+size_flags_vertical = 3
+theme_override_constants/margin_left = 32
+theme_override_constants/margin_top = 32
+theme_override_constants/margin_right = 32
+theme_override_constants/margin_bottom = 32
+
+[node name="scroll_container" type="ScrollContainer" parent="margin_container/v_box_container/server_list_background/margin_container2" unique_id=822597280]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="lobby_v_box" type="VBoxContainer" parent="margin_container/v_box_container/server_list_background/margin_container2/scroll_container" unique_id=647432165]
+layout_mode = 2
+theme_override_constants/separation = 64
+
+[connection signal="pressed" from="margin_container/v_box_container/margin_container/v_box_container/host_button" to="." method="_on_host_button_pressed"]
+[connection signal="pressed" from="margin_container/v_box_container/margin_container/v_box_container/v_box_container/refresh_button" to="." method="_on_refresh_button_pressed"]

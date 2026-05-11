@@ -1,0 +1,49 @@
+[gd_scene format=3 uid="uid://c30kfmynsllj4"]
+
+[ext_resource type="Theme" uid="uid://dx7snotftebdm" path="res://ui/themes/menu_theme.tres" id="1_8g78h"]
+[ext_resource type="Script" uid="uid://glh0xi2lh620" path="res://scenes/menus/menu_items/lobby_button.gd" id="2_v7qy3"]
+
+[node name="lobby_button" type="Control" unique_id=15710961]
+custom_minimum_size = Vector2(1536, 187)
+layout_mode = 3
+anchors_preset = 0
+offset_right = 200.0
+offset_bottom = 40.0
+theme = ExtResource("1_8g78h")
+script = ExtResource("2_v7qy3")
+
+[node name="background" type="ColorRect" parent="." unique_id=1625612566]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.20152658, 0.20152658, 0.20152658, 1)
+
+[node name="h_box_container" type="HBoxContainer" parent="." unique_id=1693003424]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 64
+alignment = 1
+
+[node name="lobby_host" type="Label" parent="h_box_container" unique_id=1421922208]
+custom_minimum_size = Vector2(947, 0)
+layout_mode = 2
+text = "Neverknow247"
+
+[node name="lobby_player_count" type="Label" parent="h_box_container" unique_id=789728082]
+layout_mode = 2
+text = "1/16"
+
+[node name="join_lobby_button" type="Button" parent="h_box_container" unique_id=111409610]
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+size_flags_vertical = 4
+text = "JOIN"
+
+[connection signal="pressed" from="h_box_container/join_lobby_button" to="." method="_on_join_lobby_button_pressed"]

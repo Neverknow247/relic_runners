@@ -1,0 +1,32 @@
+[gd_scene format=4 uid="uid://b50bjf5ctu47y"]
+
+[ext_resource type="Theme" uid="uid://dx7snotftebdm" path="res://ui/themes/menu_theme.tres" id="1_dw13e"]
+[ext_resource type="TileSet" uid="uid://bfvmbvy1p01wb" path="res://assets/tilesets/1_bit_tiles.tres" id="2_54fhl"]
+[ext_resource type="PackedScene" uid="uid://bvtb5q00mduby" path="res://scenes/items/door.tscn" id="3_jg52x"]
+
+[node name="hub_room_2" type="Node2D" unique_id=1658596843]
+
+[node name="label" type="Label" parent="." unique_id=1894276175]
+offset_left = 488.0
+offset_top = 424.0
+offset_right = 739.0
+offset_bottom = 539.0
+theme = ExtResource("1_dw13e")
+text = "HUB 2"
+
+[node name="spawn_points" type="Node2D" parent="." unique_id=375996101]
+
+[node name="default" type="Marker2D" parent="spawn_points" unique_id=1200912716]
+position = Vector2(-24, 144)
+
+[node name="tile_maps" type="Node2D" parent="." unique_id=282776610]
+
+[node name="tile_map_layer" type="TileMapLayer" parent="tile_maps" unique_id=1026395899]
+tile_map_data = PackedByteArray("AAAAAP//AAAEAAEAAAD8/wgAAAAAAA0AAAAAAAgAAAAAAA0AAAD+/wgAAAAIAAkAAAD+/wcAAAAAAA0AAAD9/wgAAAALABEAAAD9/wcAAAALABEAAAD//wcAAAALABEAAAD//wgAAAALABEAAAD8/wcAAAAGAAsAAAD9/wYAAAAGAAsAAAD+/wYAAAAGAAsAAAD//wYAAAAGAAsAAAAAAAcAAAAGAAsAAAD+/wkAAAAIAAEAAAD+/woAAAAJAAEAAGD//woAAAAKAAEAAFD//wsAAAAIAAEAAAD//wwAAAAIAAEAAAD//w0AAAAMAAEAACAAAAoAAAAIAAEAAEABAAoAAAAIAAEAAEACAAoAAAAIAAEAAEADAAoAAAAKAAEAABADAAsAAAAIAAEAAAADAAkAAAAIAAEAAAADAAgAAAAIAAEAAAADAAcAAAAIAAEAAAADAAYAAAAMAAEAAAADAAwAAAAMAAEAACACAAkAAAAFAAAAAAABAAkAAAAQAAcAAAA=")
+tile_set = ExtResource("2_54fhl")
+
+[node name="doors" type="Node2D" parent="." unique_id=805026972]
+
+[node name="door" parent="doors" unique_id=1329496194 instance=ExtResource("3_jg52x")]
+position = Vector2(-24, 136)
+target_spawn = "hub_2"

@@ -1,0 +1,85 @@
+[gd_scene format=3 uid="uid://dj45pvishohso"]
+
+[ext_resource type="Script" uid="uid://di2ic8b7mdeg3" path="res://scenes/world.gd" id="1_nnsk1"]
+[ext_resource type="Theme" uid="uid://dx7snotftebdm" path="res://ui/themes/menu_theme.tres" id="2_rwgxs"]
+
+[node name="world" type="Node2D" unique_id=861009768 node_paths=PackedStringArray("zone_container")]
+script = ExtResource("1_nnsk1")
+zone_container = NodePath("zone_container")
+
+[node name="floor_container" type="Node2D" parent="." unique_id=1405729617]
+
+[node name="y_sort_root" type="Node2D" parent="." unique_id=1884291296]
+y_sort_enabled = true
+
+[node name="zone_objects" type="Node2D" parent="y_sort_root" unique_id=1347812664]
+y_sort_enabled = true
+
+[node name="players" type="Node2D" parent="y_sort_root" unique_id=1022022517]
+y_sort_enabled = true
+
+[node name="zone_container" type="Node2D" parent="." unique_id=1833399871]
+
+[node name="canvas_layer" type="CanvasLayer" parent="." unique_id=1329443861]
+
+[node name="go_hub_main_button" type="Button" parent="canvas_layer" unique_id=1415185275]
+visible = false
+offset_left = 32.0
+offset_top = 88.0
+offset_right = 115.0
+offset_bottom = 119.0
+theme = ExtResource("2_rwgxs")
+text = "Hub Main"
+
+[node name="go_hub_room1_button" type="Button" parent="canvas_layer" unique_id=168592909]
+visible = false
+offset_left = 88.0
+offset_top = 264.0
+offset_right = 335.0
+offset_bottom = 387.0
+theme = ExtResource("2_rwgxs")
+text = "Hub 1"
+
+[node name="go_hub_room2_button" type="Button" parent="canvas_layer" unique_id=1619998138]
+visible = false
+offset_left = 80.0
+offset_top = 448.0
+offset_right = 327.0
+offset_bottom = 571.0
+theme = ExtResource("2_rwgxs")
+text = "Hub 2"
+
+[node name="go_dungeon_main_button" type="Button" parent="canvas_layer" unique_id=930171636]
+visible = false
+offset_left = 656.0
+offset_top = 80.0
+offset_right = 1257.0
+offset_bottom = 203.0
+theme = ExtResource("2_rwgxs")
+text = "Dungeon Main"
+
+[node name="go_dungeon_room1_button" type="Button" parent="canvas_layer" unique_id=2002745602]
+visible = false
+offset_left = 736.0
+offset_top = 264.0
+offset_right = 1182.0
+offset_bottom = 387.0
+theme = ExtResource("2_rwgxs")
+text = "Dungeon 1"
+
+[node name="go_dungeon_room2_button" type="Button" parent="canvas_layer" unique_id=1626484754]
+visible = false
+offset_left = 728.0
+offset_top = 440.0
+offset_right = 1174.0
+offset_bottom = 563.0
+theme = ExtResource("2_rwgxs")
+text = "Dungeon 2"
+
+[node name="leave_button" type="Button" parent="canvas_layer" unique_id=887045908]
+offset_left = 3280.0
+offset_top = 56.0
+offset_right = 3792.0
+offset_bottom = 179.0
+theme = ExtResource("2_rwgxs")
+text = "Leave Lobby"
