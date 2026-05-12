@@ -249,7 +249,7 @@ func server_change_player_location(peer_id: int, zone: String, room: String, spa
 		"spawn": spawn_point,
 	}
 	if peer_id == multiplayer.get_unique_id():
-		client_change_location(zone, room, spawn_point)
+		await client_change_location(zone, room, spawn_point)
 	else:
 		client_change_location.rpc_id(peer_id, zone, room, spawn_point)
 	for other_id in player_locations.keys():
@@ -299,8 +299,6 @@ func client_place_remote_player_at_spawn(peer_id: int, zone: String, room: Strin
 		var spawn_pos = get_spawn_global_position(spawn_point)
 		var player = players.get_node(str(peer_id))
 		player.global_position = spawn_pos
-		if player.has_method("snap_visual_to_body"):
-			player.snap_visual_to_body()
 		player_initialized_positions[peer_id] = true
 	else:
 		player_initialized_positions[peer_id] = false
