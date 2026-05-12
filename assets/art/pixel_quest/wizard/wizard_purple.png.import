@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://byv0b33sm7jvk"
-path="res://.godot/imported/wizard_standard.png-6027a3a8411a14ca9e71532e1f872f45.ctex"
+uid="uid://vs0j28d3mx64"
+path="res://.godot/imported/wizard_purple.png-fad3e6561da399338d90479c3fa52fa5.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/pixel_quest/wizard_standard.png"
-dest_files=["res://.godot/imported/wizard_standard.png-6027a3a8411a14ca9e71532e1f872f45.ctex"]
+source_file="res://assets/art/pixel_quest/wizard/wizard_purple.png"
+dest_files=["res://.godot/imported/wizard_purple.png-fad3e6561da399338d90479c3fa52fa5.ctex"]
 
 [params]
 

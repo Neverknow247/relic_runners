@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://n8bm6qegs5qa"
-path="res://.godot/imported/wizard_green.png-5bf0a7dbfe17ed5016e9014e7c0b1458.ctex"
+uid="uid://c8ud1ssuo2kkb"
+path="res://.godot/imported/village_doors.png-88ed707131caf3be28e68bb335c20f04.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/pixel_quest/wizard_green.png"
-dest_files=["res://.godot/imported/wizard_green.png-5bf0a7dbfe17ed5016e9014e7c0b1458.ctex"]
+source_file="res://assets/art/pixel_quest/wall_decorations/village_doors.png"
+dest_files=["res://.godot/imported/village_doors.png-88ed707131caf3be28e68bb335c20f04.ctex"]
 
 [params]
 

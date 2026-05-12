@@ -1,0 +1,61 @@
+[gd_resource type="TileSet" format=3 uid="uid://cfhpqedp8vlos"]
+
+[ext_resource type="Texture2D" uid="uid://c8ud1ssuo2kkb" path="res://assets/art/pixel_quest/wall_decorations/village_doors.png" id="1_hy4gn"]
+[ext_resource type="Texture2D" uid="uid://cngn2xx0330ws" path="res://assets/art/pixel_quest/wall_decorations/village_windows.png" id="2_lyowf"]
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_dfeq0"]
+texture = ExtResource("1_hy4gn")
+0:0/size_in_atlas = Vector2i(2, 4)
+0:0/0 = 0
+0:0/0/texture_origin = Vector2i(0, -8)
+0:0/0/y_sort_origin = 24
+2:0/size_in_atlas = Vector2i(2, 4)
+2:0/0 = 0
+2:0/0/texture_origin = Vector2i(0, -8)
+2:0/0/y_sort_origin = 24
+4:0/size_in_atlas = Vector2i(2, 4)
+4:0/0 = 0
+4:0/0/texture_origin = Vector2i(0, -8)
+4:0/0/y_sort_origin = 24
+6:0/size_in_atlas = Vector2i(2, 4)
+6:0/0 = 0
+6:0/0/texture_origin = Vector2i(0, -8)
+6:0/0/y_sort_origin = 24
+8:0/size_in_atlas = Vector2i(2, 4)
+8:0/0 = 0
+8:0/0/texture_origin = Vector2i(0, -8)
+8:0/0/y_sort_origin = 24
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_aow7c"]
+texture = ExtResource("2_lyowf")
+0:0/size_in_atlas = Vector2i(3, 2)
+0:0/0 = 0
+0:0/0/texture_origin = Vector2i(0, -8)
+0:0/0/y_sort_origin = 40
+3:0/size_in_atlas = Vector2i(3, 2)
+3:0/0 = 0
+3:0/0/texture_origin = Vector2i(0, -8)
+3:0/0/y_sort_origin = 40
+6:0/size_in_atlas = Vector2i(3, 2)
+6:0/0 = 0
+6:0/0/texture_origin = Vector2i(0, -8)
+6:0/0/y_sort_origin = 40
+9:0/size_in_atlas = Vector2i(3, 2)
+9:0/0 = 0
+9:0/0/texture_origin = Vector2i(0, -8)
+9:0/0/y_sort_origin = 40
+12:0/size_in_atlas = Vector2i(3, 2)
+12:0/0 = 0
+12:0/0/texture_origin = Vector2i(0, -8)
+12:0/0/y_sort_origin = 40
+15:0/size_in_atlas = Vector2i(3, 2)
+15:0/0 = 0
+15:0/0/texture_origin = Vector2i(0, -8)
+15:0/0/y_sort_origin = 40
+0:2/0 = 0
+0:2/0/texture_origin = Vector2i(0, -4)
+0:2/0/y_sort_origin = 40
+
+[resource]
+sources/0 = SubResource("TileSetAtlasSource_dfeq0")
+sources/1 = SubResource("TileSetAtlasSource_aow7c")

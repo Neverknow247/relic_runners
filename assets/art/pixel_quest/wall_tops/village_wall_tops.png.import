@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cc7n6hytg082d"
-path="res://.godot/imported/wizard_blue.png-f879305b4a7127ac3d5120f0fdaa57a5.ctex"
+uid="uid://dyvgy15e1d0p8"
+path="res://.godot/imported/village_wall_tops.png-c575e760ec788bc5bf58ade981f43264.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/pixel_quest/wizard_blue.png"
-dest_files=["res://.godot/imported/wizard_blue.png-f879305b4a7127ac3d5120f0fdaa57a5.ctex"]
+source_file="res://assets/art/pixel_quest/wall_tops/village_wall_tops.png"
+dest_files=["res://.godot/imported/village_wall_tops.png-c575e760ec788bc5bf58ade981f43264.ctex"]
 
 [params]
 

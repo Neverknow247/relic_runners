@@ -18,12 +18,12 @@ const ZONE_SCENES = {
 }
 
 const PLAYER_SPRITES = [
-	#preload("res://assets/art/pixel_quest/wizard_standard.png"),
-	#preload("res://assets/art/pixel_quest/wizard_red.png"),
-	#preload("res://assets/art/pixel_quest/wizard_yellow.png"),
-	#preload("res://assets/art/pixel_quest/wizard_green.png"),
-	preload("res://assets/art/pixel_quest/wizard_blue.png"),
-	#preload("res://assets/art/pixel_quest/wizard_purple.png"),
+	#preload("res://assets/art/pixel_quest/wizard/wizard_standard.png"),
+	#preload("res://assets/art/pixel_quest/wizard/wizard_red.png"),
+	#preload("res://assets/art/pixel_quest/wizard/wizard_yellow.png"),
+	#preload("res://assets/art/pixel_quest/wizard/wizard_green.png"),
+	preload("res://assets/art/pixel_quest/wizard/wizard_blue.png"),
+	#preload("res://assets/art/pixel_quest/wizard/wizard_purple.png"),
 	#preload(),
 ]
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cpa0v8uda5k8c"
-path="res://.godot/imported/wizard_purple.png-711ea2febaec2232c9e913c8e4928731.ctex"
+uid="uid://cngn2xx0330ws"
+path="res://.godot/imported/village_windows.png-c4ac38c0c62e88d122b1bbab13601973.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/pixel_quest/wizard_purple.png"
-dest_files=["res://.godot/imported/wizard_purple.png-711ea2febaec2232c9e913c8e4928731.ctex"]
+source_file="res://assets/art/pixel_quest/wall_decorations/village_windows.png"
+dest_files=["res://.godot/imported/village_windows.png-c4ac38c0c62e88d122b1bbab13601973.ctex"]
 
 [params]
 

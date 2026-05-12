@@ -1,0 +1,41 @@
+[gd_resource type="TileSet" format=3 uid="uid://dua13nhypkxs6"]
+
+[ext_resource type="Texture2D" uid="uid://fdge3dy2l5gf" path="res://assets/art/pixel_quest/wall_bases/village_wall_bases.png" id="1_7cwom"]
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_ow3kn"]
+texture = ExtResource("1_7cwom")
+0:0/size_in_atlas = Vector2i(6, 4)
+0:0/0 = 0
+0:0/0/texture_origin = Vector2i(0, 8)
+0:0/0/y_sort_origin = 24
+0:0/0/physics_layer_0/polygon_0/points = PackedVector2Array(-48, -40, 48, -40, 48, 24, -48, 24)
+0:5/size_in_atlas = Vector2i(6, 4)
+0:5/0 = 0
+0:5/0/texture_origin = Vector2i(0, 8)
+0:5/0/y_sort_origin = 24
+0:5/0/physics_layer_0/polygon_0/points = PackedVector2Array(-48, -40, 48, -40, 48, 24, -48, 24)
+6:0/size_in_atlas = Vector2i(10, 4)
+6:0/0 = 0
+6:0/0/texture_origin = Vector2i(0, 8)
+6:0/0/y_sort_origin = 24
+6:0/0/physics_layer_0/polygon_0/points = PackedVector2Array(-80, -40, 80, -40, 80, 24, -80, 24)
+6:5/size_in_atlas = Vector2i(10, 4)
+6:5/0 = 0
+6:5/0/texture_origin = Vector2i(0, 8)
+6:5/0/y_sort_origin = 24
+6:5/0/physics_layer_0/polygon_0/points = PackedVector2Array(-80, -40, 80, -40, 80, 24, -80, 24)
+16:0/size_in_atlas = Vector2i(14, 4)
+16:0/0 = 0
+16:0/0/texture_origin = Vector2i(0, 8)
+16:0/0/y_sort_origin = 24
+16:0/0/physics_layer_0/polygon_0/points = PackedVector2Array(-112, -40, 112, -40, 112, 24, -112, 24)
+16:5/size_in_atlas = Vector2i(14, 4)
+16:5/0 = 0
+16:5/0/texture_origin = Vector2i(0, 8)
+16:5/0/y_sort_origin = 24
+16:5/0/physics_layer_0/polygon_0/points = PackedVector2Array(-112, -40, 112, -40, 112, 24, -112, 24)
+
+[resource]
+physics_layer_0/collision_layer = 1
+physics_layer_0/collision_mask = 0
+sources/0 = SubResource("TileSetAtlasSource_ow3kn")

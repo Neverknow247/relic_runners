@@ -4,6 +4,7 @@ var stats = Stats
 var rand = RandomNumberGenerator.new()
 
 @onready var sprite: Sprite2D = $sprite
+@onready var animation_player: AnimationPlayer = $animation_player
 
 var state = move_state
 var has_dash = true
@@ -16,7 +17,7 @@ var friction = 500
 var max_velocity = default_max_velocity
 var acceleration = default_acceleration
 
-var last_facing = 1
+var last_facing = Vector2.ZERO
 
 func _ready() -> void:
 	if is_multiplayer_authority():
@@ -53,7 +54,39 @@ func apply_friction(delta):
 	velocity = velocity.move_toward(Vector2.ZERO, friction * delta)
 
 func update_animations(input_vector):
-	var facing = input_vector.x
-	if facing != 0:
-		last_facing = facing
-		sprite.flip_h = facing != 1
+	var facing = input_vector
+	if facing != Vector2.ZERO:
+		last_facing = input_vector
+		sprite.flip_h = facing.x != 1
+	if input_vector != Vector2.ZERO:
+		if abs(input_vector.x) == 1:
+			if input_vector.y == 0.0:
+				animation_player.play("run_side")
+			elif input_vector.y == -1.0:
+				animation_player.play("run_up_side")
+			else:
+				animation_player.play("run_down_side")
+		else:
+			if input_vector.y == -1:
+				animation_player.play("run_up")
+			else:
+				animation_player.play("run_down")
+	else:
+		if abs(last_facing.x) == 1:
+			if last_facing.y == 0.0:
+				animation_player.play("idle_side")
+			elif last_facing.y == -1.0:
+				animation_player.play("idle_up_side")
+			else:
+				animation_player.play("idle_down_side")
+		else:
+			if last_facing.y == -1:
+				animation_player.play("idle_up")
+			else:
+				animation_player.play("idle_down")
+
+func _on_roof_sense_body_entered(body: Node2D) -> void:
+	body.make_translucent(true)
+
+func _on_roof_sense_body_exited(body: Node2D) -> void:
+	body.make_translucent(false)

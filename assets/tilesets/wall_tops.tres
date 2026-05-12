@@ -1,0 +1,29 @@
+[gd_resource type="TileSet" format=3 uid="uid://bc36pd3du2jlc"]
+
+[ext_resource type="Texture2D" uid="uid://dyvgy15e1d0p8" path="res://assets/art/pixel_quest/wall_tops/village_wall_tops.png" id="1_xk787"]
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_d5hc8"]
+texture = ExtResource("1_xk787")
+0:0/size_in_atlas = Vector2i(6, 3)
+0:0/0 = 0
+0:0/0/physics_layer_0/polygon_0/points = PackedVector2Array(-48, -24, 48, -24, 48, 24, -48, 24)
+0:4/size_in_atlas = Vector2i(6, 3)
+0:4/0 = 0
+0:4/0/physics_layer_0/polygon_0/points = PackedVector2Array(-48, -24, 48, -24, 48, 24, -48, 24)
+6:0/size_in_atlas = Vector2i(10, 3)
+6:0/0 = 0
+6:0/0/physics_layer_0/polygon_0/points = PackedVector2Array(-80, -24, 80, -24, 80, 24, -80, 24)
+6:4/size_in_atlas = Vector2i(10, 3)
+6:4/0 = 0
+6:4/0/physics_layer_0/polygon_0/points = PackedVector2Array(-80, -24, 80, -24, 80, 24, -80, 24)
+16:0/size_in_atlas = Vector2i(14, 3)
+16:0/0 = 0
+16:0/0/physics_layer_0/polygon_0/points = PackedVector2Array(-112, -24, 112, -24, 112, 24, -112, 24)
+16:4/size_in_atlas = Vector2i(14, 3)
+16:4/0 = 0
+16:4/0/physics_layer_0/polygon_0/points = PackedVector2Array(-112, -24, 112, -24, 112, 24, -112, 24)
+
+[resource]
+physics_layer_0/collision_layer = 1
+physics_layer_0/collision_mask = 0
+sources/0 = SubResource("TileSetAtlasSource_d5hc8")
