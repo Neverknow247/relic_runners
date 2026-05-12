@@ -130,14 +130,14 @@ func _connect_buttons():
 	$canvas_layer/go_dungeon_room2_button.pressed.connect(func():request_location_changes("dungeon","room_2","default"))
 
 func _connect_steam_client_signals():
-	if !GlobalSteam.add_player.is_connected(_on_add_player):
-		GlobalSteam.add_player.connect(_on_add_player)
+	#if !GlobalSteam.add_player.is_connected(_on_add_player):
+		#GlobalSteam.add_player.connect(_on_add_player)
 	if !GlobalSteam.remove_player.is_connected(_on_remove_player):
 		GlobalSteam.remove_player.connect(_on_remove_player)
 
-func _on_add_player(peer_id: int):
-	if !multiplayer.is_server():
-		return
+#func _on_add_player(peer_id: int):
+	#if !multiplayer.is_server():
+		#return
 
 func _on_remove_player(peer_id: int):
 	if !multiplayer.is_server():
@@ -149,16 +149,17 @@ func _on_remove_player(peer_id: int):
 func register_player(peer_id: int):
 	if !player_locations.has(peer_id):
 		player_locations[peer_id] = {
-			"zone":"hub",
-			"room":"main"
+			"zone": "hub",
+			"room": "main",
+			"spawn": "default",
 		}
 	if !player_cosmetics.has(peer_id) and player_steam_names.has(peer_id):
 		player_cosmetics[peer_id] = generate_player_cosmetics(peer_id)
 	if peer_id == multiplayer.get_unique_id():
-		client_change_location("hub", "main")
+		client_change_location("hub", "main", "default")
 		client_set_visible_players([peer_id])
 	else:
-		client_change_location.rpc_id(peer_id, "hub", "main")
+		client_change_location.rpc_id(peer_id, "hub", "main", "default")
 	refresh_visibility_for_all()
 
 @rpc("any_peer","call_remote","reliable")
@@ -179,22 +180,23 @@ func server_request_register_player(steam_id: int, steam_name: String):
 		player_locations[sender_id] = {
 			"zone": "hub",
 			"room": "main",
+			"spawn": "default",
 		}
 		client_change_location.rpc_id(sender_id, "hub", "main", "default")
 	else:
 		register_player(sender_id)
-		for viewer_id in player_locations.keys():
-			if viewer_id == sender_id:
+		var sender_loc = player_locations[sender_id]
+		for other_id in player_locations.keys():
+			if other_id == sender_id:
 				continue
-			if viewer_id == multiplayer.get_unique_id():
-				client_place_remote_player_at_spawn(sender_id, "hub", "main", "default")
-			else:
+			var other_loc = player_locations[other_id]
+			if other_loc["zone"] == sender_loc["zone"] and other_loc["room"] == sender_loc["room"]:
 				client_place_remote_player_at_spawn.rpc_id(
-					viewer_id,
 					sender_id,
-					"hub",
-					"main",
-					"default"
+					other_id,
+					other_loc["zone"],
+					other_loc["room"],
+					other_loc.get("spawn", "default")
 				)
 	broadcast_all_cosmetics()
 	await get_tree().physics_frame
@@ -268,6 +270,27 @@ func server_change_player_location(peer_id: int, zone: String, room: String, spa
 			client_place_remote_player_at_spawn(peer_id, zone, room, spawn_point)
 		else:
 			client_place_remote_player_at_spawn.rpc_id(viewer_id, peer_id, zone, room, spawn_point)
+	# Also place everyone already in the destination room for the entering player.
+	for other_id in player_locations.keys():
+		if other_id == peer_id:
+			continue
+		var other_loc = player_locations[other_id]
+		if other_loc["zone"] == zone and other_loc["room"] == room:
+			if peer_id == multiplayer.get_unique_id():
+				client_place_remote_player_at_spawn(
+					other_id,
+					other_loc["zone"],
+					other_loc["room"],
+					other_loc.get("spawn", "default")
+				)
+			else:
+				client_place_remote_player_at_spawn.rpc_id(
+					peer_id,
+					other_id,
+					other_loc["zone"],
+					other_loc["room"],
+					other_loc.get("spawn", "default")
+				)
 	await get_tree().physics_frame
 	refresh_visibility_for_all()
 
@@ -320,9 +343,15 @@ func move_my_player_to_spawn(spawn_point: String):
 			if viewer_id == my_id:
 				continue
 			if viewer_id == multiplayer.get_unique_id():
-				client_set_player_spawn_position(my_id, spawn_pos)
+				client_place_remote_player_at_spawn(my_id, my_zone, my_room, spawn_point)
 			else:
-				client_set_player_spawn_position.rpc_id(viewer_id, my_id, spawn_pos)
+				client_place_remote_player_at_spawn.rpc_id(
+					viewer_id,
+					my_id,
+					my_zone,
+					my_room,
+					spawn_point
+				)
 
 @rpc("any_peer", "call_remote", "reliable")
 func server_confirm_spawn_ready():
@@ -352,16 +381,6 @@ func server_confirm_spawn_ready():
 				loc.get("spawn", "default")
 			)
 	refresh_visibility_for_all()
-
-@rpc("authority", "call_local", "reliable")
-func client_set_player_spawn_position(peer_id: int, pos: Vector2):
-	if !players.has_node(str(peer_id)):
-		spawn_player_locally(peer_id)
-	var player = players.get_node(str(peer_id))
-	player.global_position = pos
-	player_initialized_positions[peer_id] = true
-	if current_visible_ids.has(peer_id):
-		set_player_active(player, true)
 
 func load_location_locally(zone: String, room: String):
 	for child in zone_container.get_children():
@@ -603,8 +622,8 @@ func _on_leave_pressed():
 
 func cleanup_world():
 	shutting_down = true
-	if GlobalSteam.add_player.is_connected(_on_add_player):
-		GlobalSteam.add_player.disconnect(_on_add_player)
+	#if GlobalSteam.add_player.is_connected(_on_add_player):
+		#GlobalSteam.add_player.disconnect(_on_add_player)
 	if GlobalSteam.remove_player.is_connected(_on_remove_player):
 		GlobalSteam.remove_player.disconnect(_on_remove_player)
 	for child in players.get_children():
