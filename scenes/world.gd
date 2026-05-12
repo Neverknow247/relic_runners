@@ -60,15 +60,10 @@ var player_steam_names = {}
 var registered_peers = {}
 var current_visible_ids = {}
 var player_initialized_positions = {}
-var player_visibility_locked = {}
 
 var has_registered_with_server = false
 var my_zone = "hub"
 var my_room = "main"
-
-func can_send_rpc() -> bool:
-	return multiplayer.multiplayer_peer != null \
-		and multiplayer.multiplayer_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED
 
 func _ready() -> void:
 	add_to_group("world")
@@ -94,6 +89,49 @@ func _ready() -> void:
 				spawn_player_locally(1)
 			start_client_registration()
 
+func can_send_rpc() -> bool:
+	return multiplayer.multiplayer_peer != null \
+		and multiplayer.multiplayer_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED
+
+func _connect_buttons():
+	$canvas_layer/go_hub_main_button.pressed.connect(func():request_location_changes("hub","main","default"))
+	$canvas_layer/go_hub_room1_button.pressed.connect(func():request_location_changes("hub","room_1","default"))
+	$canvas_layer/go_hub_room2_button.pressed.connect(func():request_location_changes("hub","room_2","default"))
+	$canvas_layer/go_dungeon_main_button.pressed.connect(func():request_location_changes("dungeon","main","default"))
+	$canvas_layer/go_dungeon_room1_button.pressed.connect(func():request_location_changes("dungeon","room_1","default"))
+	$canvas_layer/go_dungeon_room2_button.pressed.connect(func():request_location_changes("dungeon","room_2","default"))
+
+func _connect_steam_client_signals():
+	if !GlobalSteam.remove_player.is_connected(_on_remove_player):
+		GlobalSteam.remove_player.connect(_on_remove_player)
+
+func _on_leave_pressed():
+	cleanup_world()
+	GlobalSteam.leave_lobby()
+	get_tree().change_scene_to_file("res://scenes/menus/main_menu.tscn")
+
+func _on_server_disconnected():
+	cleanup_world()
+	GlobalSteam.leave_lobby()
+	get_tree().change_scene_to_file("res://scenes/menus/main_menu.tscn")
+
+func cleanup_world():
+	shutting_down = true
+	if GlobalSteam.remove_player.is_connected(_on_remove_player):
+		GlobalSteam.remove_player.disconnect(_on_remove_player)
+	for child in players.get_children():
+		child.set_process(false)
+		child.set_physics_process(false)
+		child.queue_free()
+	for child in zone_container.get_children():
+		child.queue_free()
+	player_locations.clear()
+	player_cosmetics.clear()
+	player_steam_ids.clear()
+	player_steam_names.clear()
+	registered_peers.clear()
+	has_registered_with_server = false
+
 func start_client_registration() -> void:
 	if shutting_down:
 		return
@@ -115,41 +153,6 @@ func start_client_registration() -> void:
 @rpc("authority", "call_remote", "reliable")
 func client_confirm_registration():
 	has_registered_with_server = true
-
-func _connect_buttons():
-	$canvas_layer/go_hub_main_button.pressed.connect(func():request_location_changes("hub","main","default"))
-	$canvas_layer/go_hub_room1_button.pressed.connect(func():request_location_changes("hub","room_1","default"))
-	$canvas_layer/go_hub_room2_button.pressed.connect(func():request_location_changes("hub","room_2","default"))
-	$canvas_layer/go_dungeon_main_button.pressed.connect(func():request_location_changes("dungeon","main","default"))
-	$canvas_layer/go_dungeon_room1_button.pressed.connect(func():request_location_changes("dungeon","room_1","default"))
-	$canvas_layer/go_dungeon_room2_button.pressed.connect(func():request_location_changes("dungeon","room_2","default"))
-
-func _connect_steam_client_signals():
-	if !GlobalSteam.remove_player.is_connected(_on_remove_player):
-		GlobalSteam.remove_player.connect(_on_remove_player)
-
-func _on_remove_player(peer_id: int):
-	if !multiplayer.is_server():
-		return
-	player_locations.erase(peer_id)
-	remove_player_locally(peer_id)
-	refresh_visibility_for_all()
-
-func register_player(peer_id: int):
-	if !player_locations.has(peer_id):
-		player_locations[peer_id] = {
-			"zone": "hub",
-			"room": "main",
-			"spawn": "default",
-		}
-	if !player_cosmetics.has(peer_id) and player_steam_names.has(peer_id):
-		player_cosmetics[peer_id] = generate_player_cosmetics(peer_id)
-	if peer_id == multiplayer.get_unique_id():
-		client_change_location("hub", "main", "default")
-		client_set_visible_players([peer_id])
-	else:
-		client_change_location.rpc_id(peer_id, "hub", "main", "default")
-	refresh_visibility_for_all()
 
 @rpc("any_peer","call_remote","reliable")
 func server_request_register_player(steam_id: int, steam_name: String):
@@ -191,30 +194,28 @@ func server_request_register_player(steam_id: int, steam_name: String):
 	await get_tree().physics_frame
 	refresh_visibility_for_all()
 
-func generate_player_cosmetics(peer_id: int):
-	var sprite_index = rng.randi_range(0, PLAYER_SPRITES.size()-1)
-	var color = Color(
-		rng.randf_range(0.6,1),
-		rng.randf_range(0.6,1),
-		rng.randf_range(0.6,1),
-		1
-	)
-	var player_name = player_steam_names.get(peer_id, "Player %s" % peer_id)
-	return {
-		"sprite_index": sprite_index,
-		"color": color,
-		"name": player_name,
-	}
+func register_player(peer_id: int):
+	if !player_locations.has(peer_id):
+		player_locations[peer_id] = {
+			"zone": "hub",
+			"room": "main",
+			"spawn": "default",
+		}
+	if !player_cosmetics.has(peer_id) and player_steam_names.has(peer_id):
+		player_cosmetics[peer_id] = generate_player_cosmetics(peer_id)
+	if peer_id == multiplayer.get_unique_id():
+		client_change_location("hub", "main", "default")
+		client_set_visible_players([peer_id])
+	else:
+		client_change_location.rpc_id(peer_id, "hub", "main", "default")
+	refresh_visibility_for_all()
 
-func broadcast_all_cosmetics():
+func _on_remove_player(peer_id: int):
 	if !multiplayer.is_server():
 		return
-	for viewer_id in player_locations.keys():
-		for target_id in player_cosmetics.keys():
-			if viewer_id == multiplayer.get_unique_id():
-				client_apply_player_cosmetics(target_id, player_cosmetics[target_id])
-			else:
-				client_apply_player_cosmetics.rpc_id(viewer_id, target_id, player_cosmetics[target_id])
+	player_locations.erase(peer_id)
+	remove_player_locally(peer_id)
+	refresh_visibility_for_all()
 
 func request_location_changes(zone: String, room: String, spawn_point:= "default"):
 	if !is_valid_location(zone,room):
@@ -282,26 +283,6 @@ func client_change_location(zone: String, room: String, spawn_point:= "default")
 	load_location_locally(zone, room)
 	await get_tree().process_frame
 	move_my_player_to_spawn(spawn_point)
-
-@rpc("authority", "call_local", "reliable")
-func client_prepare_player_room_change(peer_id: int):
-	player_initialized_positions[peer_id] = false
-	if players.has_node(str(peer_id)):
-		var player = players.get_node(str(peer_id))
-		set_player_active(player, false)
-		player.global_position = Vector2(-99999, -99999)
-
-@rpc("authority", "call_local", "reliable")
-func client_place_remote_player_at_spawn(peer_id: int, zone: String, room: String, spawn_point: String):
-	if !players.has_node(str(peer_id)):
-		spawn_player_locally(peer_id)
-	if my_zone == zone and my_room == room:
-		var spawn_pos = get_spawn_global_position(spawn_point)
-		var player = players.get_node(str(peer_id))
-		player.global_position = spawn_pos
-		player_initialized_positions[peer_id] = true
-	else:
-		player_initialized_positions[peer_id] = false
 
 func move_my_player_to_spawn(spawn_point: String):
 	var my_id = multiplayer.get_unique_id()
@@ -384,6 +365,19 @@ func load_location_locally(zone: String, room: String):
 		scene_instance.remove_child(objects)
 		zone_objects.add_child(objects)
 
+func is_valid_location(zone: String, room: String):
+	var key = "%s/%s" % [zone, room]
+	return ZONE_SCENES.has(key)
+
+func get_spawn_global_position(spawn_point: String) -> Vector2:
+	var spawn_path = "spawn_points/%s" % spawn_point
+	if zone_container.get_child_count() > 0:
+		var current_zone = zone_container.get_child(0)
+		if current_zone.has_node(spawn_path):
+			return current_zone.get_node(spawn_path).global_position
+	print("Missing spawn point: ", spawn_path)
+	return Vector2(100, 100)
+
 func refresh_visibility_for_all():
 	if !multiplayer.is_server():
 		return
@@ -426,6 +420,26 @@ func client_set_visible_players(visible_ids):
 			and player_initialized_positions.get(peer_id, false)
 		set_player_active(child, should_show)
 
+@rpc("authority", "call_local", "reliable")
+func client_prepare_player_room_change(peer_id: int):
+	player_initialized_positions[peer_id] = false
+	if players.has_node(str(peer_id)):
+		var player = players.get_node(str(peer_id))
+		set_player_active(player, false)
+		player.global_position = Vector2(-99999, -99999)
+
+@rpc("authority", "call_local", "reliable")
+func client_place_remote_player_at_spawn(peer_id: int, zone: String, room: String, spawn_point: String):
+	if !players.has_node(str(peer_id)):
+		spawn_player_locally(peer_id)
+	if my_zone == zone and my_room == room:
+		var spawn_pos = get_spawn_global_position(spawn_point)
+		var player = players.get_node(str(peer_id))
+		player.global_position = spawn_pos
+		player_initialized_positions[peer_id] = true
+	else:
+		player_initialized_positions[peer_id] = false
+
 func spawn_player_locally(peer_id: int):
 	if players.has_node(str(peer_id)):
 		return
@@ -451,6 +465,55 @@ func client_set_known_players(known_ids):
 	for peer_id in known_ids:
 		if !players.has_node(str(peer_id)):
 			spawn_player_locally(peer_id)
+
+func set_player_active(player: Node, active: bool):
+	var sprite = player.get_node_or_null("visual_root/sprite")
+	if sprite:
+		sprite.visible = active
+	var label = player.get_node_or_null("name_label")
+	if label:
+		label.visible = active
+	set_player_collision_active(player, active)
+
+func set_player_collision_active(player: Node, active: bool):
+	if player is CollisionObject2D:
+		if !player.has_meta("original_collision_layer"):
+			player.set_meta("original_collision_layer", player.collision_layer)
+			player.set_meta("original_collision_mask", player.collision_mask)
+		player.collision_layer = player.get_meta("original_collision_layer") if active else 0
+		player.collision_mask = player.get_meta("original_collision_mask") if active else 0
+	for child in player.get_children():
+		if child is CollisionObject2D:
+			if !child.has_meta("original_collision_layer"):
+				child.set_meta("original_collision_layer", child.collision_layer)
+				child.set_meta("original_collision_mask", child.collision_mask)
+			child.collision_layer = child.get_meta("original_collision_layer") if active else 0
+			child.collision_mask = child.get_meta("original_collision_mask") if active else 0
+
+func generate_player_cosmetics(peer_id: int):
+	var sprite_index = rng.randi_range(0, PLAYER_SPRITES.size()-1)
+	var color = Color(
+		rng.randf_range(0.6,1),
+		rng.randf_range(0.6,1),
+		rng.randf_range(0.6,1),
+		1
+	)
+	var player_name = player_steam_names.get(peer_id, "Player %s" % peer_id)
+	return {
+		"sprite_index": sprite_index,
+		"color": color,
+		"name": player_name,
+	}
+
+func broadcast_all_cosmetics():
+	if !multiplayer.is_server():
+		return
+	for viewer_id in player_locations.keys():
+		for target_id in player_cosmetics.keys():
+			if viewer_id == multiplayer.get_unique_id():
+				client_apply_player_cosmetics(target_id, player_cosmetics[target_id])
+			else:
+				client_apply_player_cosmetics.rpc_id(viewer_id, target_id, player_cosmetics[target_id])
 
 func request_player_cosmetics(peer_id: int):
 	if multiplayer.is_server():
@@ -492,43 +555,6 @@ func client_apply_player_cosmetics(peer_id: int, cosmetics: Dictionary) -> void:
 		player_initialized_positions[peer_id] = true
 		current_visible_ids[peer_id] = true
 		set_player_active(player, true)
-
-func set_player_active(player: Node, active: bool):
-	var sprite = player.get_node_or_null("visual_root/sprite")
-	if sprite:
-		sprite.visible = active
-	var label = player.get_node_or_null("name_label")
-	if label:
-		label.visible = active
-	set_player_collision_active(player, active)
-
-func set_player_collision_active(player: Node, active: bool):
-	if player is CollisionObject2D:
-		if !player.has_meta("original_collision_layer"):
-			player.set_meta("original_collision_layer", player.collision_layer)
-			player.set_meta("original_collision_mask", player.collision_mask)
-		player.collision_layer = player.get_meta("original_collision_layer") if active else 0
-		player.collision_mask = player.get_meta("original_collision_mask") if active else 0
-	for child in player.get_children():
-		if child is CollisionObject2D:
-			if !child.has_meta("original_collision_layer"):
-				child.set_meta("original_collision_layer", child.collision_layer)
-				child.set_meta("original_collision_mask", child.collision_mask)
-			child.collision_layer = child.get_meta("original_collision_layer") if active else 0
-			child.collision_mask = child.get_meta("original_collision_mask") if active else 0
-
-func is_valid_location(zone: String, room: String):
-	var key = "%s/%s" % [zone, room]
-	return ZONE_SCENES.has(key)
-
-func get_spawn_global_position(spawn_point: String) -> Vector2:
-	var spawn_path = "spawn_points/%s" % spawn_point
-	if zone_container.get_child_count() > 0:
-		var current_zone = zone_container.get_child(0)
-		if current_zone.has_node(spawn_path):
-			return current_zone.get_node(spawn_path).global_position
-	print("Missing spawn point: ", spawn_path)
-	return Vector2.ZERO
 
 func request_start_expedition(expedition_id: String):
 	if !multiplayer.is_server():
@@ -586,30 +612,3 @@ func return_party_to_hub():
 	for peer_id in player_locations.keys():
 		server_change_player_location(peer_id, "hub", "main", "default")
 	refresh_visibility_for_all()
-
-func _on_server_disconnected():
-	cleanup_world()
-	GlobalSteam.leave_lobby()
-	get_tree().change_scene_to_file("res://scenes/menus/main_menu.tscn")
-
-func _on_leave_pressed():
-	cleanup_world()
-	GlobalSteam.leave_lobby()
-	get_tree().change_scene_to_file("res://scenes/menus/main_menu.tscn")
-
-func cleanup_world():
-	shutting_down = true
-	if GlobalSteam.remove_player.is_connected(_on_remove_player):
-		GlobalSteam.remove_player.disconnect(_on_remove_player)
-	for child in players.get_children():
-		child.set_process(false)
-		child.set_physics_process(false)
-		child.queue_free()
-	for child in zone_container.get_children():
-		child.queue_free()
-	player_locations.clear()
-	player_cosmetics.clear()
-	player_steam_ids.clear()
-	player_steam_names.clear()
-	registered_peers.clear()
-	has_registered_with_server = false
