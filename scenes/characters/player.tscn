@@ -8,6 +8,12 @@
 properties/0/path = NodePath(".:position")
 properties/0/spawn = true
 properties/0/replication_mode = 1
+properties/1/path = NodePath("sprite:flip_h")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+properties/2/path = NodePath("sprite:frame")
+properties/2/spawn = true
+properties/2/replication_mode = 1
 
 [sub_resource type="Animation" id="Animation_76oj4"]
 length = 0.001
@@ -221,11 +227,11 @@ _data = {
 
 [sub_resource type="CapsuleShape2D" id="CapsuleShape2D_76oj4"]
 radius = 3.9999998
-height = 15.999999
+height = 12.0
 
 [sub_resource type="CapsuleShape2D" id="CapsuleShape2D_dyp2m"]
-radius = 8.0
-height = 32.0
+radius = 6.0
+height = 24.0
 
 [node name="player" type="CharacterBody2D" unique_id=736798270]
 collision_layer = 2
@@ -271,7 +277,7 @@ collision_layer = 0
 collision_mask = 4
 
 [node name="collision_shape_2d" type="CollisionShape2D" parent="roof_sense" unique_id=227315553]
-position = Vector2(0, -16)
+position = Vector2(0, -12)
 shape = SubResource("CapsuleShape2D_dyp2m")
 
 [connection signal="body_entered" from="roof_sense" to="." method="_on_roof_sense_body_entered"]

@@ -86,7 +86,7 @@ func update_animations(input_vector):
 				animation_player.play("idle_down")
 
 func _on_roof_sense_body_entered(body: Node2D) -> void:
-	body.make_translucent(true)
+	body.make_translucent(self, true)
 
 func _on_roof_sense_body_exited(body: Node2D) -> void:
-	body.make_translucent(false)
+	body.make_translucent(self, false)

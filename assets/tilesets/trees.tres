@@ -1,0 +1,88 @@
+[gd_resource type="TileSet" format=3 uid="uid://b68h56ag6ocj0"]
+
+[ext_resource type="Texture2D" uid="uid://dpjp5ch4smi8r" path="res://assets/art/pixel_quest/trees/cemetery_trees.png" id="1_ejbnb"]
+[ext_resource type="Texture2D" uid="uid://db311pkl88kd4" path="res://assets/art/pixel_quest/trees/village_trees.png" id="2_i8mvx"]
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_30urw"]
+texture = ExtResource("1_ejbnb")
+0:0/size_in_atlas = Vector2i(4, 6)
+0:0/0 = 0
+0:0/0/texture_origin = Vector2i(0, 40)
+0:0/0/y_sort_origin = 2
+4:0/size_in_atlas = Vector2i(4, 6)
+4:0/0 = 0
+4:0/0/texture_origin = Vector2i(0, 40)
+4:0/0/y_sort_origin = -8
+8:0/size_in_atlas = Vector2i(4, 6)
+8:0/0 = 0
+8:0/0/texture_origin = Vector2i(0, 40)
+8:0/0/y_sort_origin = 2
+12:0/size_in_atlas = Vector2i(4, 6)
+12:0/0 = 0
+12:0/0/texture_origin = Vector2i(0, 40)
+12:0/0/y_sort_origin = -8
+16:0/size_in_atlas = Vector2i(2, 2)
+16:0/0 = 0
+16:0/0/texture_origin = Vector2i(0, 8)
+16:0/0/y_sort_origin = 2
+16:2/size_in_atlas = Vector2i(3, 3)
+16:2/0 = 0
+16:2/0/texture_origin = Vector2i(0, 16)
+16:2/0/y_sort_origin = -8
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_ifjpj"]
+texture = ExtResource("2_i8mvx")
+0:0/size_in_atlas = Vector2i(5, 8)
+0:0/0 = 0
+0:0/0/texture_origin = Vector2i(0, 56)
+0:0/0/y_sort_origin = 8
+5:0/size_in_atlas = Vector2i(5, 8)
+5:0/0 = 0
+5:0/0/texture_origin = Vector2i(0, 56)
+5:0/0/y_sort_origin = 8
+10:0/size_in_atlas = Vector2i(5, 8)
+10:0/0 = 0
+10:0/0/texture_origin = Vector2i(0, 56)
+10:0/0/y_sort_origin = 8
+15:3/size_in_atlas = Vector2i(3, 5)
+15:3/0 = 0
+15:3/0/texture_origin = Vector2i(0, 32)
+15:3/0/y_sort_origin = 8
+18:0/size_in_atlas = Vector2i(3, 8)
+18:0/0 = 0
+18:0/0/texture_origin = Vector2i(0, 56)
+18:0/0/y_sort_origin = 8
+0:8/size_in_atlas = Vector2i(5, 8)
+0:8/0 = 0
+0:8/0/texture_origin = Vector2i(0, 56)
+0:8/0/y_sort_origin = 8
+5:8/size_in_atlas = Vector2i(5, 8)
+5:8/0 = 0
+5:8/0/texture_origin = Vector2i(0, 56)
+5:8/0/y_sort_origin = 8
+10:8/size_in_atlas = Vector2i(5, 8)
+10:8/0 = 0
+10:8/0/texture_origin = Vector2i(0, 56)
+10:8/0/y_sort_origin = 8
+15:11/size_in_atlas = Vector2i(3, 5)
+15:11/0 = 0
+15:11/0/texture_origin = Vector2i(0, 32)
+15:11/0/y_sort_origin = 8
+18:14/size_in_atlas = Vector2i(1, 2)
+18:14/0 = 0
+18:14/0/texture_origin = Vector2i(0, 8)
+18:14/0/y_sort_origin = 8
+19:15/0 = 0
+19:15/0/y_sort_origin = 8
+0:16/size_in_atlas = Vector2i(8, 9)
+0:16/0 = 0
+0:16/0/texture_origin = Vector2i(-6, 64)
+0:16/0/y_sort_origin = 8
+8:17/size_in_atlas = Vector2i(5, 8)
+8:17/0 = 0
+8:17/0/texture_origin = Vector2i(-8, 56)
+8:17/0/y_sort_origin = 8
+
+[resource]
+sources/0 = SubResource("TileSetAtlasSource_30urw")
+sources/1 = SubResource("TileSetAtlasSource_ifjpj")
