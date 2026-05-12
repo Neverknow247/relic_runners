@@ -17,10 +17,8 @@ func _on_body_exited(body):
 func _process(_delta):
 	if !can_use:
 		return
-
 	if Input.is_action_just_pressed("interact"):
 		var world = get_tree().get_first_node_in_group("world")
-
 		if world:
 			world.request_location_changes(
 				target_zone,

@@ -77,9 +77,9 @@ theme = ExtResource("2_rwgxs")
 text = "Dungeon 2"
 
 [node name="leave_button" type="Button" parent="canvas_layer" unique_id=887045908]
-offset_left = 3280.0
-offset_top = 56.0
-offset_right = 3792.0
-offset_bottom = 179.0
+offset_left = 3264.0
+offset_top = 64.0
+offset_right = 3776.0
+offset_bottom = 187.0
 theme = ExtResource("2_rwgxs")
 text = "Leave Lobby"

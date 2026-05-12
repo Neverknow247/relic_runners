@@ -8,7 +8,14 @@
 [ext_resource type="TileSet" uid="uid://bsc7eqpgx4mqv" path="res://assets/tilesets/roofs.tres" id="9_ik6cc"]
 [ext_resource type="TileSet" uid="uid://cfhpqedp8vlos" path="res://assets/tilesets/wall_decorations.tres" id="9_qu7j1"]
 [ext_resource type="TileSet" uid="uid://bbdo68j181ixe" path="res://assets/tilesets/roof_decorations.tres" id="10_qu7j1"]
+[ext_resource type="PackedScene" uid="uid://xuo7vq4nsbrj" path="res://scenes/items/expedition_door.tscn" id="10_vyhyc"]
 [ext_resource type="Script" uid="uid://c6d6yv6tgnx5d" path="res://scenes/levels/roofs.gd" id="11_x73cn"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_ik6cc"]
+size = Vector2(16, 16)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_qu7j1"]
+size = Vector2(16, 16)
 
 [node name="hub_main" type="Node2D" unique_id=379302950]
 
@@ -99,3 +106,16 @@ target_spawn = "hub_main"
 position = Vector2(120, 32)
 target_room = "room_2"
 target_spawn = "hub_main"
+
+[node name="expedition_door" parent="doors" unique_id=1733621152 instance=ExtResource("10_vyhyc")]
+position = Vector2(48, -128)
+
+[node name="collision_shape_2d" type="CollisionShape2D" parent="doors/expedition_door" unique_id=854466561]
+shape = SubResource("RectangleShape2D_ik6cc")
+
+[node name="expedition_door2" parent="doors" unique_id=1441269952 instance=ExtResource("10_vyhyc")]
+position = Vector2(-200, -152)
+expedition_id = "cemetery"
+
+[node name="collision_shape_2d" type="CollisionShape2D" parent="doors/expedition_door2" unique_id=424655663]
+shape = SubResource("RectangleShape2D_qu7j1")

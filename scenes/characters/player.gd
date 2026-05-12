@@ -3,8 +3,12 @@ extends CharacterBody2D
 var stats = Stats
 var rand = RandomNumberGenerator.new()
 
-@onready var sprite: Sprite2D = $sprite
+@onready var visual_root: Node2D = $visual_root
+@onready var sprite: Sprite2D = $visual_root/sprite
 @onready var animation_player: AnimationPlayer = $animation_player
+
+@export var network_anim := "idle_down"
+@export var network_flip_h := false
 
 var state = move_state
 var has_dash = true
@@ -19,12 +23,20 @@ var acceleration = default_acceleration
 
 var last_facing = Vector2.ZERO
 
+func _enter_tree() -> void:
+	set_multiplayer_authority(name.to_int())
+
 func _ready() -> void:
 	if is_multiplayer_authority():
 		$camera_2d.make_current()
 
-func _enter_tree() -> void:
-	set_multiplayer_authority(name.to_int())
+func _process(delta: float) -> void:
+	if is_multiplayer_authority():
+		visual_root.position = Vector2.ZERO
+		return
+	if animation_player.current_animation != network_anim:
+		animation_player.play(network_anim)
+		sprite.flip_h = network_flip_h
 
 func _physics_process(delta):
 	if multiplayer.multiplayer_peer == null:
@@ -61,29 +73,37 @@ func update_animations(input_vector):
 	if input_vector != Vector2.ZERO:
 		if abs(input_vector.x) == 1:
 			if input_vector.y == 0.0:
-				animation_player.play("run_side")
+				play_anim("run_side")
 			elif input_vector.y == -1.0:
-				animation_player.play("run_up_side")
+				play_anim("run_up_side")
 			else:
-				animation_player.play("run_down_side")
+				play_anim("run_down_side")
 		else:
 			if input_vector.y == -1:
-				animation_player.play("run_up")
+				play_anim("run_up")
 			else:
-				animation_player.play("run_down")
+				play_anim("run_down")
 	else:
 		if abs(last_facing.x) == 1:
 			if last_facing.y == 0.0:
-				animation_player.play("idle_side")
+				play_anim("idle_side")
 			elif last_facing.y == -1.0:
-				animation_player.play("idle_up_side")
+				play_anim("idle_up_side")
 			else:
-				animation_player.play("idle_down_side")
+				play_anim("idle_down_side")
 		else:
 			if last_facing.y == -1:
-				animation_player.play("idle_up")
+				play_anim("idle_up")
 			else:
-				animation_player.play("idle_down")
+				play_anim("idle_down")
+
+func play_anim(anim_name: String):
+	if animation_player.current_animation != anim_name:
+		animation_player.play(anim_name)
+
+	if is_multiplayer_authority():
+		network_anim = anim_name
+		network_flip_h = sprite.flip_h
 
 func _on_roof_sense_body_entered(body: Node2D) -> void:
 	body.make_translucent(self, true)
