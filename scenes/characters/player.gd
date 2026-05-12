@@ -100,10 +100,14 @@ func update_animations(input_vector):
 func play_anim(anim_name: String):
 	if animation_player.current_animation != anim_name:
 		animation_player.play(anim_name)
-
 	if is_multiplayer_authority():
 		network_anim = anim_name
 		network_flip_h = sprite.flip_h
+
+#func snap_visual_to_body():
+	#if has_node("visual_root"):
+		#$visual_root.position = Vector2.ZERO
+	#reset_physics_interpolation()
 
 func _on_roof_sense_body_entered(body: Node2D) -> void:
 	body.make_translucent(self, true)

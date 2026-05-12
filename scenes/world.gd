@@ -31,13 +31,7 @@ const EXPEDITION_TARGETS = {
 }
 
 const PLAYER_SPRITES = [
-	#preload("res://assets/art/pixel_quest/wizard/wizard_standard.png"),
-	#preload("res://assets/art/pixel_quest/wizard/wizard_red.png"),
-	#preload("res://assets/art/pixel_quest/wizard/wizard_yellow.png"),
-	#preload("res://assets/art/pixel_quest/wizard/wizard_green.png"),
 	preload("res://assets/art/pixel_quest/wizard/wizard_blue.png"),
-	#preload("res://assets/art/pixel_quest/wizard/wizard_purple.png"),
-	#preload(),
 ]
 
 @onready var floor_container: Node2D = $floor_container
@@ -66,6 +60,7 @@ var player_steam_names = {}
 var registered_peers = {}
 var current_visible_ids = {}
 var player_initialized_positions = {}
+var player_visibility_locked = {}
 
 var has_registered_with_server = false
 var my_zone = "hub"
@@ -130,14 +125,8 @@ func _connect_buttons():
 	$canvas_layer/go_dungeon_room2_button.pressed.connect(func():request_location_changes("dungeon","room_2","default"))
 
 func _connect_steam_client_signals():
-	#if !GlobalSteam.add_player.is_connected(_on_add_player):
-		#GlobalSteam.add_player.connect(_on_add_player)
 	if !GlobalSteam.remove_player.is_connected(_on_remove_player):
 		GlobalSteam.remove_player.connect(_on_remove_player)
-
-#func _on_add_player(peer_id: int):
-	#if !multiplayer.is_server():
-		#return
 
 func _on_remove_player(peer_id: int):
 	if !multiplayer.is_server():
@@ -263,14 +252,6 @@ func server_change_player_location(peer_id: int, zone: String, room: String, spa
 		client_change_location(zone, room, spawn_point)
 	else:
 		client_change_location.rpc_id(peer_id, zone, room, spawn_point)
-	for viewer_id in player_locations.keys():
-		if viewer_id == peer_id:
-			continue
-		if viewer_id == multiplayer.get_unique_id():
-			client_place_remote_player_at_spawn(peer_id, zone, room, spawn_point)
-		else:
-			client_place_remote_player_at_spawn.rpc_id(viewer_id, peer_id, zone, room, spawn_point)
-	# Also place everyone already in the destination room for the entering player.
 	for other_id in player_locations.keys():
 		if other_id == peer_id:
 			continue
@@ -318,13 +299,11 @@ func client_place_remote_player_at_spawn(peer_id: int, zone: String, room: Strin
 		var spawn_pos = get_spawn_global_position(spawn_point)
 		var player = players.get_node(str(peer_id))
 		player.global_position = spawn_pos
+		if player.has_method("snap_visual_to_body"):
+			player.snap_visual_to_body()
 		player_initialized_positions[peer_id] = true
-		current_visible_ids[peer_id] = true
-		set_player_active(player, true)
 	else:
 		player_initialized_positions[peer_id] = false
-		if players.has_node(str(peer_id)):
-			set_player_active(players.get_node(str(peer_id)), false)
 
 func move_my_player_to_spawn(spawn_point: String):
 	var my_id = multiplayer.get_unique_id()
@@ -504,7 +483,6 @@ func client_apply_player_cosmetics(peer_id: int, cosmetics: Dictionary) -> void:
 	if player_name.strip_edges() == "":
 		player_name = "Player %s" % peer_id
 	player.get_node("visual_root/sprite").texture = PLAYER_SPRITES[sprite_index]
-	#player.get_node("sprite").modulate = color
 	player.get_node("name_label").modulate = color
 	var label = player.get_node("name_label")
 	if label:
@@ -551,7 +529,8 @@ func get_spawn_global_position(spawn_point: String) -> Vector2:
 		var current_zone = zone_container.get_child(0)
 		if current_zone.has_node(spawn_path):
 			return current_zone.get_node(spawn_path).global_position
-	return Vector2(100, 100)
+	print("Missing spawn point: ", spawn_path)
+	return Vector2.ZERO
 
 func request_start_expedition(expedition_id: String):
 	if !multiplayer.is_server():
@@ -622,8 +601,6 @@ func _on_leave_pressed():
 
 func cleanup_world():
 	shutting_down = true
-	#if GlobalSteam.add_player.is_connected(_on_add_player):
-		#GlobalSteam.add_player.disconnect(_on_add_player)
 	if GlobalSteam.remove_player.is_connected(_on_remove_player):
 		GlobalSteam.remove_player.disconnect(_on_remove_player)
 	for child in players.get_children():
