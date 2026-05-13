@@ -1,11 +1,23 @@
 [gd_scene format=3 uid="uid://dj45pvishohso"]
 
 [ext_resource type="Script" uid="uid://di2ic8b7mdeg3" path="res://scenes/world.gd" id="1_nnsk1"]
+[ext_resource type="Script" uid="uid://0f4lxletqjo3" path="res://scenes/world_players.gd" id="2_71j4m"]
 [ext_resource type="Theme" uid="uid://dx7snotftebdm" path="res://ui/themes/menu_theme.tres" id="2_rwgxs"]
+[ext_resource type="Script" uid="uid://dmp44odb0fqbu" path="res://scenes/world_rooms.gd" id="3_qfnet"]
+[ext_resource type="Script" uid="uid://c2vrbey506jdm" path="res://scenes/world_expeditions.gd" id="4_i7141"]
 
 [node name="world" type="Node2D" unique_id=861009768 node_paths=PackedStringArray("zone_container")]
 script = ExtResource("1_nnsk1")
 zone_container = NodePath("zone_container")
+
+[node name="world_players" type="Node" parent="." unique_id=1964494852]
+script = ExtResource("2_71j4m")
+
+[node name="world_rooms" type="Node" parent="." unique_id=1825214601]
+script = ExtResource("3_qfnet")
+
+[node name="world_expeditions" type="Node" parent="." unique_id=218897192]
+script = ExtResource("4_i7141")
 
 [node name="floor_container" type="Node2D" parent="." unique_id=1405729617]
 

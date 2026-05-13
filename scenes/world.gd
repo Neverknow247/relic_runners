@@ -34,6 +34,10 @@ const PLAYER_SPRITES = [
 	preload("res://assets/art/pixel_quest/wizard/wizard_blue.png"),
 ]
 
+@onready var world_players: Node2D = $world_players
+@onready var world_rooms: Node2D = $world_rooms
+@onready var world_expeditions: Node2D = $world_expeditions
+
 @onready var floor_container: Node2D = $floor_container
 @onready var zone_objects: Node2D = $y_sort_root/zone_objects
 @onready var players: Node2D = $y_sort_root/players
@@ -66,6 +70,9 @@ var my_zone = "hub"
 var my_room = "main"
 
 func _ready() -> void:
+	world_players.setup(self)
+	world_rooms.setup(self)
+	world_expeditions.setup(self)
 	add_to_group("world")
 	shutting_down = false
 	leave_button.pressed.connect(_on_leave_pressed)
