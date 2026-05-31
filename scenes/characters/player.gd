@@ -54,6 +54,7 @@ func move_state(delta):
 	else:
 		apply_friction(delta)
 	update_animations(input_axis)
+	attack_check()
 	move_and_slide()
 
 func is_moving(_input_axis):
@@ -103,6 +104,28 @@ func play_anim(anim_name: String):
 	if is_multiplayer_authority():
 		network_anim = anim_name
 		network_flip_h = sprite.flip_h
+
+func attack_check():
+	if (Input.is_action_pressed("attack_1")):
+		if abs(last_facing.x) == 1:
+			if last_facing.y == 0.0:
+				play_anim("attack_1_side")
+			elif last_facing.y == -1.0:
+				play_anim("attack_1_up_side")
+			else:
+				play_anim("attack_1_down_side")
+		else:
+			if last_facing.y == -1:
+				play_anim("attack_1_up")
+			else:
+				play_anim("attack_1_down")
+		state = attack_state
+
+func attack_state(delta):
+	apply_friction(delta)
+	move_and_slide()
+	if not animation_player.is_playing() or !animation_player.current_animation.contains("attack"):
+		state = move_state
 
 #func snap_visual_to_body():
 	#if has_node("visual_root"):

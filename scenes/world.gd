@@ -34,9 +34,9 @@ const PLAYER_SPRITES = [
 	preload("res://assets/art/pixel_quest/wizard/wizard_blue.png"),
 ]
 
-@onready var world_players: Node2D = $world_players
-@onready var world_rooms: Node2D = $world_rooms
-@onready var world_expeditions: Node2D = $world_expeditions
+@onready var world_players: Node = $world_players
+@onready var world_rooms: Node = $world_rooms
+@onready var world_expeditions: Node = $world_expeditions
 
 @onready var floor_container: Node2D = $floor_container
 @onready var zone_objects: Node2D = $y_sort_root/zone_objects
@@ -348,42 +348,51 @@ func server_confirm_spawn_ready():
 	refresh_visibility_for_all()
 
 func load_location_locally(zone: String, room: String):
-	for child in zone_container.get_children():
-		zone_container.remove_child(child)
-		child.queue_free()
-	for child in floor_container.get_children():
-		floor_container.remove_child(child)
-		child.queue_free()
-	for child in zone_objects.get_children():
-		zone_objects.remove_child(child)
-		child.queue_free()
-	var key = "%s/%s" % [zone, room]
-	if !ZONE_SCENES.has(key):
-		return
-	var packed_scene = load(ZONE_SCENES[key])
-	var scene_instance = packed_scene.instantiate()
-	zone_container.add_child(scene_instance)
-	var floor = scene_instance.get_node_or_null("floor_tiles")
-	if floor:
-		scene_instance.remove_child(floor)
-		floor_container.add_child(floor)
-	var objects = scene_instance.get_node_or_null("y_sort_objects")
-	if objects:
-		scene_instance.remove_child(objects)
-		zone_objects.add_child(objects)
+	world_rooms.load_location_locally(zone, room)
 
 func is_valid_location(zone: String, room: String):
-	var key = "%s/%s" % [zone, room]
-	return ZONE_SCENES.has(key)
+	return world_rooms.is_valid_location(zone, room)
 
 func get_spawn_global_position(spawn_point: String) -> Vector2:
-	var spawn_path = "spawn_points/%s" % spawn_point
-	if zone_container.get_child_count() > 0:
-		var current_zone = zone_container.get_child(0)
-		if current_zone.has_node(spawn_path):
-			return current_zone.get_node(spawn_path).global_position
-	print("Missing spawn point: ", spawn_path)
-	return Vector2(100, 100)
+	return world_rooms.get_spawn_global_position(spawn_point)
+
+#func load_location_locally(zone: String, room: String):
+	#for child in zone_container.get_children():
+		#zone_container.remove_child(child)
+		#child.queue_free()
+	#for child in floor_container.get_children():
+		#floor_container.remove_child(child)
+		#child.queue_free()
+	#for child in zone_objects.get_children():
+		#zone_objects.remove_child(child)
+		#child.queue_free()
+	#var key = "%s/%s" % [zone, room]
+	#if !ZONE_SCENES.has(key):
+		#return
+	#var packed_scene = load(ZONE_SCENES[key])
+	#var scene_instance = packed_scene.instantiate()
+	#zone_container.add_child(scene_instance)
+	#var floor = scene_instance.get_node_or_null("floor_tiles")
+	#if floor:
+		#scene_instance.remove_child(floor)
+		#floor_container.add_child(floor)
+	#var objects = scene_instance.get_node_or_null("y_sort_objects")
+	#if objects:
+		#scene_instance.remove_child(objects)
+		#zone_objects.add_child(objects)
+#
+#func is_valid_location(zone: String, room: String):
+	#var key = "%s/%s" % [zone, room]
+	#return ZONE_SCENES.has(key)
+#
+#func get_spawn_global_position(spawn_point: String) -> Vector2:
+	#var spawn_path = "spawn_points/%s" % spawn_point
+	#if zone_container.get_child_count() > 0:
+		#var current_zone = zone_container.get_child(0)
+		#if current_zone.has_node(spawn_path):
+			#return current_zone.get_node(spawn_path).global_position
+	#print("Missing spawn point: ", spawn_path)
+	#return Vector2(100, 100)
 
 func refresh_visibility_for_all():
 	if !multiplayer.is_server():
@@ -448,24 +457,36 @@ func client_place_remote_player_at_spawn(peer_id: int, zone: String, room: Strin
 		player_initialized_positions[peer_id] = false
 
 func spawn_player_locally(peer_id: int):
-	if players.has_node(str(peer_id)):
-		return
-	var player = PLAYER_SCENE.instantiate()
-	player.name = str(peer_id)
-	player.set_multiplayer_authority(peer_id)
-	players.add_child(player)
-	set_player_active(player, false)
-	player_initialized_positions[peer_id] = false
-	var sync = player.get_node_or_null("multiplayer_synchronizer")
-	if sync:
-		sync.public_visibility = true
-		sync.set_visibility_for(1, true)
-	request_player_cosmetics(peer_id)
+	world_players.spawn_player_locally(peer_id)
 
 func remove_player_locally(peer_id: int):
-	var node_name = str(peer_id)
-	if players.has_node(node_name):
-		players.get_node(node_name).queue_free()
+	world_players.remove_player_locally(peer_id)
+
+func set_player_active(player: Node, active: bool):
+	world_players.set_player_active(player, active)
+
+func set_player_collision_active(player: Node, active: bool):
+	world_players.set_player_collision_active(player, active)
+
+#func spawn_player_locally(peer_id: int):
+	#if players.has_node(str(peer_id)):
+		#return
+	#var player = PLAYER_SCENE.instantiate()
+	#player.name = str(peer_id)
+	#player.set_multiplayer_authority(peer_id)
+	#players.add_child(player)
+	#set_player_active(player, false)
+	#player_initialized_positions[peer_id] = false
+	#var sync = player.get_node_or_null("multiplayer_synchronizer")
+	#if sync:
+		#sync.public_visibility = true
+		#sync.set_visibility_for(1, true)
+	#request_player_cosmetics(peer_id)
+#
+#func remove_player_locally(peer_id: int):
+	#var node_name = str(peer_id)
+	#if players.has_node(node_name):
+		#players.get_node(node_name).queue_free()
 
 @rpc("authority", "call_remote", "reliable")
 func client_set_known_players(known_ids):
@@ -473,63 +494,72 @@ func client_set_known_players(known_ids):
 		if !players.has_node(str(peer_id)):
 			spawn_player_locally(peer_id)
 
-func set_player_active(player: Node, active: bool):
-	var sprite = player.get_node_or_null("visual_root/sprite")
-	if sprite:
-		sprite.visible = active
-	var label = player.get_node_or_null("name_label")
-	if label:
-		label.visible = active
-	set_player_collision_active(player, active)
-
-func set_player_collision_active(player: Node, active: bool):
-	if player is CollisionObject2D:
-		if !player.has_meta("original_collision_layer"):
-			player.set_meta("original_collision_layer", player.collision_layer)
-			player.set_meta("original_collision_mask", player.collision_mask)
-		player.collision_layer = player.get_meta("original_collision_layer") if active else 0
-		player.collision_mask = player.get_meta("original_collision_mask") if active else 0
-	for child in player.get_children():
-		if child is CollisionObject2D:
-			if !child.has_meta("original_collision_layer"):
-				child.set_meta("original_collision_layer", child.collision_layer)
-				child.set_meta("original_collision_mask", child.collision_mask)
-			child.collision_layer = child.get_meta("original_collision_layer") if active else 0
-			child.collision_mask = child.get_meta("original_collision_mask") if active else 0
+#func set_player_active(player: Node, active: bool):
+	#var sprite = player.get_node_or_null("visual_root/sprite")
+	#if sprite:
+		#sprite.visible = active
+	#var label = player.get_node_or_null("name_label")
+	#if label:
+		#label.visible = active
+	#set_player_collision_active(player, active)
+#
+#func set_player_collision_active(player: Node, active: bool):
+	#if player is CollisionObject2D:
+		#if !player.has_meta("original_collision_layer"):
+			#player.set_meta("original_collision_layer", player.collision_layer)
+			#player.set_meta("original_collision_mask", player.collision_mask)
+		#player.collision_layer = player.get_meta("original_collision_layer") if active else 0
+		#player.collision_mask = player.get_meta("original_collision_mask") if active else 0
+	#for child in player.get_children():
+		#if child is CollisionObject2D:
+			#if !child.has_meta("original_collision_layer"):
+				#child.set_meta("original_collision_layer", child.collision_layer)
+				#child.set_meta("original_collision_mask", child.collision_mask)
+			#child.collision_layer = child.get_meta("original_collision_layer") if active else 0
+			#child.collision_mask = child.get_meta("original_collision_mask") if active else 0
 
 func generate_player_cosmetics(peer_id: int):
-	var sprite_index = rng.randi_range(0, PLAYER_SPRITES.size()-1)
-	var color = Color(
-		rng.randf_range(0.6,1),
-		rng.randf_range(0.6,1),
-		rng.randf_range(0.6,1),
-		1
-	)
-	var player_name = player_steam_names.get(peer_id, "Player %s" % peer_id)
-	return {
-		"sprite_index": sprite_index,
-		"color": color,
-		"name": player_name,
-	}
+	return world_players.generate_player_cosmetics(peer_id)
 
 func broadcast_all_cosmetics():
-	if !multiplayer.is_server():
-		return
-	for viewer_id in player_locations.keys():
-		for target_id in player_cosmetics.keys():
-			if viewer_id == multiplayer.get_unique_id():
-				client_apply_player_cosmetics(target_id, player_cosmetics[target_id])
-			else:
-				client_apply_player_cosmetics.rpc_id(viewer_id, target_id, player_cosmetics[target_id])
+	world_players.broadcast_all_cosmetics()
 
 func request_player_cosmetics(peer_id: int):
-	if multiplayer.is_server():
-		if player_cosmetics.has(peer_id):
-			client_apply_player_cosmetics(peer_id, player_cosmetics[peer_id])
-		return
-	if !can_send_rpc():
-		return
-	server_request_player_cosmetics.rpc(peer_id)
+	world_players.request_player_cosmetics(peer_id)
+
+#func generate_player_cosmetics(peer_id: int):
+	#var sprite_index = rng.randi_range(0, PLAYER_SPRITES.size()-1)
+	#var color = Color(
+		#rng.randf_range(0.6,1),
+		#rng.randf_range(0.6,1),
+		#rng.randf_range(0.6,1),
+		#1
+	#)
+	#var player_name = player_steam_names.get(peer_id, "Player %s" % peer_id)
+	#return {
+		#"sprite_index": sprite_index,
+		#"color": color,
+		#"name": player_name,
+	#}
+#
+#func broadcast_all_cosmetics():
+	#if !multiplayer.is_server():
+		#return
+	#for viewer_id in player_locations.keys():
+		#for target_id in player_cosmetics.keys():
+			#if viewer_id == multiplayer.get_unique_id():
+				#client_apply_player_cosmetics(target_id, player_cosmetics[target_id])
+			#else:
+				#client_apply_player_cosmetics.rpc_id(viewer_id, target_id, player_cosmetics[target_id])
+#
+#func request_player_cosmetics(peer_id: int):
+	#if multiplayer.is_server():
+		#if player_cosmetics.has(peer_id):
+			#client_apply_player_cosmetics(peer_id, player_cosmetics[peer_id])
+		#return
+	#if !can_send_rpc():
+		#return
+	#server_request_player_cosmetics.rpc(peer_id)
 
 @rpc("any_peer", "call_remote", "reliable")
 func server_request_player_cosmetics(peer_id: int) -> void:
@@ -563,59 +593,78 @@ func client_apply_player_cosmetics(peer_id: int, cosmetics: Dictionary) -> void:
 		current_visible_ids[peer_id] = true
 		set_player_active(player, true)
 
+#func request_start_expedition(expedition_id: String):
+	#if !multiplayer.is_server():
+		#server_request_start_expedition.rpc(expedition_id)
+		#return
+	#start_expedition_countdown(expedition_id)
+
+#@rpc("any_peer", "call_remote", "reliable")
+#func server_request_start_expedition(expedition_id: String):
+	#if !multiplayer.is_server():
+		#return
+	#start_expedition_countdown(expedition_id)
+
+#func start_expedition_countdown(expedition_id: String):
+	#if party_state != PartyState.HUB:
+		#return
+	#if !EXPEDITION_TARGETS.has(expedition_id):
+		#return
+	#party_state = PartyState.COUNTDOWN
+	#var target = EXPEDITION_TARGETS[expedition_id]
+	#expedition_zone = target["zone"]
+	#expedition_room = target["room"]
+	#broadcast_countdown_started.rpc(expedition_id, expedition_countdown_time)
+	#await get_tree().create_timer(expedition_countdown_time).timeout
+	#if party_state != PartyState.COUNTDOWN:
+		#return
+	#launch_expedition(expedition_id)
+
+#@rpc("authority", "call_local", "reliable")
+#func broadcast_countdown_started(expedition_id: String, seconds: int):
+	#print("Leaving for ", expedition_id, " in ", seconds, " seconds")
+
+#func launch_expedition(expedition_id: String):
+	#if !multiplayer.is_server():
+		#return
+	#var target = EXPEDITION_TARGETS[expedition_id]
+	#party_state = PartyState.EXPEDITION
+	#expedition_zone = target["zone"]
+	#expedition_room = target["room"]
+	#for peer_id in player_locations.keys():
+		#server_change_player_location(
+			#peer_id,
+			#target["zone"],
+			#target["room"],
+			#target["spawn"]
+		#)
+	#refresh_visibility_for_all()
+
+#func return_party_to_hub():
+	#if !multiplayer.is_server():
+		#return
+	#party_state = PartyState.HUB
+	#expedition_zone = "hub"
+	#expedition_room = "main"
+	#for peer_id in player_locations.keys():
+		#server_change_player_location(peer_id, "hub", "main", "default")
+	#refresh_visibility_for_all()
+
 func request_start_expedition(expedition_id: String):
-	if !multiplayer.is_server():
-		server_request_start_expedition.rpc(expedition_id)
-		return
-	start_expedition_countdown(expedition_id)
+	world_expeditions.request_start_expedition(expedition_id)
 
 @rpc("any_peer", "call_remote", "reliable")
 func server_request_start_expedition(expedition_id: String):
 	if !multiplayer.is_server():
 		return
-	start_expedition_countdown(expedition_id)
-
-func start_expedition_countdown(expedition_id: String):
-	if party_state != PartyState.HUB:
-		return
-	if !EXPEDITION_TARGETS.has(expedition_id):
-		return
-	party_state = PartyState.COUNTDOWN
-	var target = EXPEDITION_TARGETS[expedition_id]
-	expedition_zone = target["zone"]
-	expedition_room = target["room"]
-	broadcast_countdown_started.rpc(expedition_id, expedition_countdown_time)
-	await get_tree().create_timer(expedition_countdown_time).timeout
-	if party_state != PartyState.COUNTDOWN:
-		return
-	launch_expedition(expedition_id)
+	world_expeditions.start_expedition_countdown(expedition_id)
 
 @rpc("authority", "call_local", "reliable")
 func broadcast_countdown_started(expedition_id: String, seconds: int):
 	print("Leaving for ", expedition_id, " in ", seconds, " seconds")
 
 func launch_expedition(expedition_id: String):
-	if !multiplayer.is_server():
-		return
-	var target = EXPEDITION_TARGETS[expedition_id]
-	party_state = PartyState.EXPEDITION
-	expedition_zone = target["zone"]
-	expedition_room = target["room"]
-	for peer_id in player_locations.keys():
-		server_change_player_location(
-			peer_id,
-			target["zone"],
-			target["room"],
-			target["spawn"]
-		)
-	refresh_visibility_for_all()
+	world_expeditions.launch_expedition(expedition_id)
 
 func return_party_to_hub():
-	if !multiplayer.is_server():
-		return
-	party_state = PartyState.HUB
-	expedition_zone = "hub"
-	expedition_room = "main"
-	for peer_id in player_locations.keys():
-		server_change_player_location(peer_id, "hub", "main", "default")
-	refresh_visibility_for_all()
+	world_expeditions.return_party_to_hub()

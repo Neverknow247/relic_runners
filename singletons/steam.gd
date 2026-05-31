@@ -12,8 +12,11 @@ signal remove_player(id)
 signal show_lobbies(lobbies)
 signal multiplayer_ready
 
-#var AppID = "4710080"
-var AppID = "2802410"
+#Relic Runners
+var AppID = "4710080"
+#Doggo
+#var AppID = "2802410"
+#Space War
 #var AppID = "480"
 var lobby_id = 0
 var peer : SteamMultiplayerPeer

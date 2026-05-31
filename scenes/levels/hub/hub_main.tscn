@@ -108,13 +108,13 @@ target_room = "room_2"
 target_spawn = "hub_main"
 
 [node name="expedition_door" parent="doors" unique_id=1733621152 instance=ExtResource("10_vyhyc")]
-position = Vector2(48, -128)
+position = Vector2(-200, -160)
 
 [node name="collision_shape_2d" type="CollisionShape2D" parent="doors/expedition_door" unique_id=854466561]
 shape = SubResource("RectangleShape2D_ik6cc")
 
 [node name="expedition_door2" parent="doors" unique_id=1441269952 instance=ExtResource("10_vyhyc")]
-position = Vector2(-200, -152)
+position = Vector2(136, -800)
 expedition_id = "cemetery"
 
 [node name="collision_shape_2d" type="CollisionShape2D" parent="doors/expedition_door2" unique_id=424655663]
