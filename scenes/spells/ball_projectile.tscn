@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://c2kq535ac136s"]
+
+[ext_resource type="PackedScene" uid="uid://bg8kikir621sv" path="res://scenes/spells/projectile.tscn" id="1_yqjqg"]
+[ext_resource type="Script" uid="uid://tafedg5g5aca" path="res://scenes/spells/ball_projectile.gd" id="2_8p8vq"]
+
+[node name="ball_projectile" unique_id=1555628361 instance=ExtResource("1_yqjqg")]
+script = ExtResource("2_8p8vq")

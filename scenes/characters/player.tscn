@@ -376,5 +376,8 @@ collision_mask = 4
 position = Vector2(0, -12)
 shape = SubResource("CapsuleShape2D_dyp2m")
 
+[node name="spell_origin" type="Marker2D" parent="." unique_id=1231839781]
+position = Vector2(0, -4)
+
 [connection signal="body_entered" from="roof_sense" to="." method="_on_roof_sense_body_entered"]
 [connection signal="body_exited" from="roof_sense" to="." method="_on_roof_sense_body_exited"]

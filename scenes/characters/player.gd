@@ -3,9 +3,16 @@ extends CharacterBody2D
 var stats = Stats
 var rand = RandomNumberGenerator.new()
 
+const BASIC_ATTACK_SCENE = preload("res://scenes/spells/basic_attack.tscn")
+const BOLT_PROJECTILE_SCENE = preload("res://scenes/spells/bolt_projectile.tscn")
+const BALL_PROJECTILE_SCENE = preload("res://scenes/spells/ball_projectile.tscn")
+
+var spell_input_sequence: Array[int] = []
+
 @onready var visual_root: Node2D = $visual_root
 @onready var sprite: Sprite2D = $visual_root/sprite
 @onready var animation_player: AnimationPlayer = $animation_player
+@onready var spell_origin: Marker2D = $spell_origin
 
 @export var network_anim := "idle_down"
 @export var network_flip_h := false
@@ -47,6 +54,9 @@ func _physics_process(delta):
 		return
 	state.call(delta)
 
+func record_attack_direction(input_num: int):
+	spell_input_sequence.append(input_num)
+
 func move_state(delta):
 	var input_axis = Vector2(Input.get_axis("left","right"),Input.get_axis("up","down"))
 	if is_moving(input_axis):
@@ -54,6 +64,7 @@ func move_state(delta):
 	else:
 		apply_friction(delta)
 	update_animations(input_axis)
+	check_spell_input()
 	attack_check()
 	move_and_slide()
 
@@ -105,8 +116,58 @@ func play_anim(anim_name: String):
 		network_anim = anim_name
 		network_flip_h = sprite.flip_h
 
+func check_spell_input():
+	if Input.is_action_just_pressed("spell_up"):
+		record_attack_direction(1)
+	if Input.is_action_just_pressed("spell_right"):
+		record_attack_direction(2)
+	if Input.is_action_just_pressed("spell_down"):
+		record_attack_direction(3)
+	if Input.is_action_just_pressed("spell_left"):
+		record_attack_direction(4)
+
+func get_spell_data():
+	print(spell_input_sequence)
+	match spell_input_sequence:
+		[2,1,4,3]:
+			return {
+				"scene": BOLT_PROJECTILE_SCENE,
+				"type": "fire"
+			}
+		[1,1,3]:
+			return {
+				"scene": BOLT_PROJECTILE_SCENE,
+				"type": "lighting"
+			}
+		[4,2,4,2]:
+			return {
+				"scene": BOLT_PROJECTILE_SCENE,
+				"type": "ice"
+			}
+		_:
+			return {
+				"scene": BASIC_ATTACK_SCENE,
+				"type": "basic"
+			}
+
+func cast_spell():
+	var spell_data = get_spell_data()
+	var direction = get_facing_direction()
+	var projectile = spell_data["scene"].instantiate()
+	print(spell_input_sequence)
+	get_tree().current_scene.add_child(projectile)
+	projectile.global_position = spell_origin.global_position + direction * 18
+	projectile.setup(direction, spell_data["type"])
+	spell_input_sequence.clear()
+
+func get_facing_direction():
+	if last_facing == Vector2.ZERO:
+		return Vector2.DOWN
+	return last_facing.normalized()
+
 func attack_check():
 	if (Input.is_action_pressed("attack_1")):
+		cast_spell()
 		if abs(last_facing.x) == 1:
 			if last_facing.y == 0.0:
 				play_anim("attack_1_side")

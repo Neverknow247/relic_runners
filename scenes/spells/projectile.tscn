@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://bg8kikir621sv"]
 
-[ext_resource type="Script" uid="uid://0ea0o42co3ra" path="res://scenes/items/projectile.gd" id="1_m3ct3"]
+[ext_resource type="Script" uid="uid://0ea0o42co3ra" path="res://scenes/spells/projectile.gd" id="1_m3ct3"]
 [ext_resource type="PackedScene" uid="uid://di62f4y61ndr" path="res://scenes/characters/hitbox.tscn" id="2_oo15e"]
 
 [node name="projectile" type="Node2D" unique_id=1555628361]
@@ -9,6 +9,12 @@ script = ExtResource("1_m3ct3")
 [node name="visible_on_screen_notifier_2d" type="VisibleOnScreenNotifier2D" parent="." unique_id=1332524545]
 
 [node name="hitbox" parent="." unique_id=52087126 instance=ExtResource("2_oo15e")]
+
+[node name="color_rect" type="ColorRect" parent="." unique_id=462454781]
+offset_left = -8.0
+offset_top = -8.0
+offset_right = 8.0
+offset_bottom = 8.0
 
 [connection signal="screen_exited" from="visible_on_screen_notifier_2d" to="." method="_on_visible_on_screen_notifier_2d_screen_exited"]
 [connection signal="area_entered" from="hitbox" to="." method="_on_hitbox_area_entered"]

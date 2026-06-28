@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://hdpcys62bohn"]
+
+[ext_resource type="PackedScene" uid="uid://bg8kikir621sv" path="res://scenes/spells/projectile.tscn" id="1_cg8tb"]
+[ext_resource type="Script" uid="uid://dabuf5ncu8bbk" path="res://scenes/spells/basic_attack.gd" id="2_v5gop"]
+
+[node name="basic_attack" unique_id=1555628361 instance=ExtResource("1_cg8tb")]
+script = ExtResource("2_v5gop")
