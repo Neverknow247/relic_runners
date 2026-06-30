@@ -56,6 +56,8 @@ func _physics_process(delta):
 
 func record_attack_direction(input_num: int):
 	spell_input_sequence.append(input_num)
+	if spell_input_sequence.size() > 5:
+		spell_input_sequence.pop_front()
 
 func move_state(delta):
 	var input_axis = Vector2(Input.get_axis("left","right"),Input.get_axis("up","down"))
@@ -137,7 +139,7 @@ func get_spell_data():
 		[1,1,3]:
 			return {
 				"scene": BOLT_PROJECTILE_SCENE,
-				"type": "lighting"
+				"type": "lightning"
 			}
 		[4,2,4,2]:
 			return {
