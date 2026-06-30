@@ -22,7 +22,6 @@ func _physics_process(delta: float) -> void:
 
 func setup_spell(_direction: Vector2, spell_data: Dictionary):
 	setup(_direction, spell_data["element"])
-
 	speed = spell_data["speed"]
 	damage = spell_data["damage"]
 	lifetime = spell_data["lifetime"]

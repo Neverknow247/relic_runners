@@ -1,6 +1,21 @@
 extends Node
 class_name SpellData
 
+const EQUIPPABLE_WEAPONS = {
+	"tome": {
+		"element": "fire",
+		"forms": ["ball", "rain", "beam"],
+	},
+	"orb": {
+		"element": "fire",
+		"forms": ["bolt", "beam", "burst"],
+	},
+	"wand": {
+		"element": "fire",
+		"forms": ["bolt", "ball", "cone"],
+	},
+}
+
 const WEAPONS = {
 	"default": {
 		"damage": 1.0,
@@ -118,3 +133,11 @@ func build_spell_data(weapon: String, element: String, form: String) -> Dictiona
 		"lifetime": 2.0 * weapon_data.get("lifetime", 1.0) * form_data.get("lifetime", 1.0),
 		"color": element_data["color"]
 	}
+
+func build_weapon_spell_data(weapon_id: String, form_index: int) -> Dictionary:
+	var weapon = EQUIPPABLE_WEAPONS.get(weapon_id, EQUIPPABLE_WEAPONS["tome"])
+	var element: String = weapon["element"]
+	var forms: Array = weapon["forms"]
+	form_index = clamp(form_index, 0, forms.size() - 1)
+	var form: String = forms[form_index]
+	return build_spell_data(weapon_id, element, form)
