@@ -74,11 +74,32 @@ const FORMS = {
 		"lifetime": 0.85
 	},
 	"rain": {
-		"scene": preload("res://scenes/spells/projectile.tscn"),
+		"scene": preload("res://scenes/spells/rain_projectile.tscn"),
 		"damage": 0.75,
 		"speed": 1.2,
 		"size": 0.9,
 		"lifetime": 1.0
+	},
+	"beam": {
+		"scene": preload("res://scenes/spells/beam_projectile.tscn"),
+		"damage": 0.8,
+		"speed": 2.0,
+		"size": 0.7,
+		"lifetime": 0.55
+	},
+	"burst": {
+		"scene": preload("res://scenes/spells/burst_projectile.tscn"),
+		"damage": 1.1,
+		"speed": 0.0,
+		"size": 1.8,
+		"lifetime": 0.35
+	},
+	"cone": {
+		"scene": preload("res://scenes/spells/cone_projectile.tscn"),
+		"damage": 0.95,
+		"speed": 0.75,
+		"size": 1.5,
+		"lifetime": 0.45
 	},
 }
 

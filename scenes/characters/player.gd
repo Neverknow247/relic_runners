@@ -2,10 +2,7 @@ extends CharacterBody2D
 
 var stats = Stats
 var rand = RandomNumberGenerator.new()
-
-const BASIC_ATTACK_SCENE = preload("res://scenes/spells/basic_attack.tscn")
-const BOLT_PROJECTILE_SCENE = preload("res://scenes/spells/bolt_projectile.tscn")
-const BALL_PROJECTILE_SCENE = preload("res://scenes/spells/ball_projectile.tscn")
+var all_spell_data = SpellData.new()
 
 var spell_input_sequence: Array[int] = []
 
@@ -16,6 +13,9 @@ var spell_input_sequence: Array[int] = []
 
 @export var network_anim := "idle_down"
 @export var network_flip_h := false
+@export var equipped_weapon := "tome"
+@export var equipped_element := "fire"
+@export var equipped_forms := ["ball", "rain", "beam"]
 
 var state = move_state
 var has_dash = true
@@ -130,27 +130,17 @@ func check_spell_input():
 
 func get_spell_data():
 	print(spell_input_sequence)
+	var form := "default"
 	match spell_input_sequence:
-		[2,1,4,3]:
-			return {
-				"scene": BOLT_PROJECTILE_SCENE,
-				"type": "fire"
-			}
-		[1,1,3]:
-			return {
-				"scene": BOLT_PROJECTILE_SCENE,
-				"type": "lightning"
-			}
-		[4,2,4,2]:
-			return {
-				"scene": BOLT_PROJECTILE_SCENE,
-				"type": "ice"
-			}
+		[1, 1, 3]:
+			form = equipped_forms[0] # ball
+		[2, 1, 4, 3]:
+			form = equipped_forms[1] # rain
+		[4, 2, 4, 2]:
+			form = equipped_forms[2] # beam
 		_:
-			return {
-				"scene": BASIC_ATTACK_SCENE,
-				"type": "basic"
-			}
+			form = "default" # default
+	return all_spell_data.build_spell_data(equipped_weapon, equipped_element, form)
 
 func cast_spell():
 	var spell_data = get_spell_data()
@@ -159,7 +149,7 @@ func cast_spell():
 	print(spell_input_sequence)
 	get_tree().current_scene.add_child(projectile)
 	projectile.global_position = spell_origin.global_position + direction * 18
-	projectile.setup(direction, spell_data["type"])
+	projectile.setup_spell(direction, spell_data)
 	spell_input_sequence.clear()
 
 func get_facing_direction():
