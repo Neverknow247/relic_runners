@@ -3,6 +3,7 @@ extends CharacterBody2D
 var stats = Stats
 var rand = RandomNumberGenerator.new()
 var all_spell_data = SpellData.new()
+var all_spell_recipes = SpellRecipes.new()
 
 var spell_input_sequence: Array[int] = []
 
@@ -154,21 +155,33 @@ func check_spell_input():
 	if Input.is_action_just_pressed("spell_left"):
 		record_attack_direction(4)
 
-func get_spell_data():
+func get_spell_data() -> Dictionary:
 	print(spell_input_sequence)
-	var form := "default"
-	match spell_input_sequence:
-		[1, 1, 3]:
-			form = equipped_weapon_data["forms"][0]
-		[2, 1, 4, 3]:
-			form = equipped_weapon_data["forms"][1]
-		[4, 2, 4, 2]:
-			form = equipped_weapon_data["forms"][2]
-		_:
-			form = "default"
+	var weapon_id: String = equipped_weapon_data["id"]
+	if spell_input_sequence.is_empty():
+		return all_spell_data.build_spell_data(
+			weapon_id,
+			equipped_weapon_data["element"],
+			"default"
+		)
+	var spell_recipe := all_spell_recipes.get_spell_recipe_from_sequence(spell_input_sequence)
+	if spell_recipe.is_empty():
+		return all_spell_data.build_spell_data(
+			weapon_id,
+			equipped_weapon_data["element"],
+			"default"
+		)
+	var element: String = spell_recipe["element"]
+	var form: String = spell_recipe["form"]
+	if !equipped_weapon_data["forms"].has(form):
+		return all_spell_data.build_spell_data(
+			weapon_id,
+			equipped_weapon_data["element"],
+			"default"
+		)
 	return all_spell_data.build_spell_data(
-		equipped_weapon_data["id"],
-		equipped_weapon_data["element"],
+		weapon_id,
+		element,
 		form
 	)
 
@@ -176,7 +189,8 @@ func cast_spell():
 	var spell_data = get_spell_data()
 	var direction = get_facing_direction()
 	var projectile = spell_data["scene"].instantiate()
-	print(spell_input_sequence)
+	#print(spell_input_sequence)
+	print(spell_data["element"], " ", spell_data["form"])
 	get_tree().current_scene.add_child(projectile)
 	projectile.global_position = spell_origin.global_position + direction * 18
 	projectile.setup_spell(direction, spell_data)
