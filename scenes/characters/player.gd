@@ -13,9 +13,32 @@ var spell_input_sequence: Array[int] = []
 
 @export var network_anim := "idle_down"
 @export var network_flip_h := false
-@export var equipped_weapon := "tome"
-@export var equipped_element := "fire"
-@export var equipped_forms := ["ball", "rain", "beam"]
+@export var equipped_weapon_data := {
+	"id": "tome",
+	"element": "fire",
+	"forms": ["ball", "rain", "beam"]
+}
+
+func equip_tome():
+	equip_weapon({
+		"id": "tome",
+		"element": "fire",
+		"forms": ["ball", "rain", "beam"],
+	})
+
+func equip_orb():
+	equip_weapon({
+		"id": "orb",
+		"element": "fire",
+		"forms": ["bolt", "beam", "burst"],
+	})
+
+func equip_wand():
+	equip_weapon({
+		"id": "wand",
+		"element": "fire",
+		"forms": ["bolt", "ball", "cone"],
+	})
 
 var state = move_state
 var has_dash = true
@@ -118,6 +141,9 @@ func play_anim(anim_name: String):
 		network_anim = anim_name
 		network_flip_h = sprite.flip_h
 
+func equip_weapon(weapon_data: Dictionary):
+	equipped_weapon_data = weapon_data
+
 func check_spell_input():
 	if Input.is_action_just_pressed("spell_up"):
 		record_attack_direction(1)
@@ -133,14 +159,18 @@ func get_spell_data():
 	var form := "default"
 	match spell_input_sequence:
 		[1, 1, 3]:
-			form = equipped_forms[0] # ball
+			form = equipped_weapon_data["forms"][0]
 		[2, 1, 4, 3]:
-			form = equipped_forms[1] # rain
+			form = equipped_weapon_data["forms"][1]
 		[4, 2, 4, 2]:
-			form = equipped_forms[2] # beam
+			form = equipped_weapon_data["forms"][2]
 		_:
-			form = "default" # default
-	return all_spell_data.build_spell_data(equipped_weapon, equipped_element, form)
+			form = "default"
+	return all_spell_data.build_spell_data(
+		equipped_weapon_data["id"],
+		equipped_weapon_data["element"],
+		form
+	)
 
 func cast_spell():
 	var spell_data = get_spell_data()
