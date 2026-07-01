@@ -8,6 +8,7 @@ var all_spell_recipes = SpellRecipes.new()
 var spell_input_sequence: Array[int] = []
 
 @onready var player_camera: Camera2D = $player_camera
+@onready var spell_list_ui = $player_camera/spell_list_ui
 @onready var visual_root: Node2D = $visual_root
 @onready var sprite: Sprite2D = $visual_root/sprite
 @onready var animation_player: AnimationPlayer = $animation_player
@@ -35,21 +36,30 @@ var acceleration = default_acceleration
 var last_facing = Vector2.ZERO
 
 func check_weapon_switch():
+	var changed := false
 	if Input.is_action_just_pressed("1"):
 		equipped_weapon_data["id"] = "tome"
 		equipped_weapon_data["forms"] = ["ball", "rain", "beam"]
+		changed = true
 	if Input.is_action_just_pressed("2"):
 		equipped_weapon_data["id"] = "orb"
 		equipped_weapon_data["forms"] = ["bolt", "beam", "burst"]
+		changed = true
 	if Input.is_action_just_pressed("3"):
 		equipped_weapon_data["id"] = "wand"
 		equipped_weapon_data["forms"] = ["bolt", "ball", "cone"]
+		changed = true
 	if Input.is_action_just_pressed("4"):
 		equipped_weapon_data["element"] = "fire"
+		changed = true
 	if Input.is_action_just_pressed("5"):
 		equipped_weapon_data["element"] = "holy"
+		changed = true
 	if Input.is_action_just_pressed("6"):
 		equipped_weapon_data["element"] = "air"
+		changed = true
+	if changed:
+		spell_list_ui.refresh()
 
 func _enter_tree() -> void:
 	set_multiplayer_authority(name.to_int())

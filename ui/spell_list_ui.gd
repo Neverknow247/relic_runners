@@ -1,13 +1,13 @@
 extends CanvasLayer
 
-@onready var spell_list: VBoxContainer = $panel_container/margin_container/v_box_container
-@onready var title_label: Label = $panel_container/margin_container/v_box_container/label
+@onready var title_label: Label = $panel_container/margin_container/v_box_container/title_label
+@onready var spell_list: VBoxContainer = $panel_container/margin_container/v_box_container/spell_list
 
 const INPUT_NAMES := {
-	1: "↑",
-	2: "→",
-	3: "↓",
-	4: "←"
+	0: preload("res://assets/art/ui/keyboard_arrow_left.png"),
+	1: preload("res://assets/art/ui/keyboard_arrow_up.png"),
+	2: preload("res://assets/art/ui/keyboard_arrow_right.png"),
+	3: preload("res://assets/art/ui/keyboard_arrow_down.png"),
 }
 
 var player: Node = null
@@ -24,14 +24,17 @@ func refresh() -> void:
 	var weapon_id: String = player.equipped_weapon_data["id"]
 	var element: String = player.equipped_weapon_data["element"]
 	var forms: Array = player.equipped_weapon_data["forms"]
+	print(weapon_id.capitalize())
 	title_label.text = "%s / %s" % [weapon_id.capitalize(), element.capitalize()]
+	#title_label.add_theme_font_size_override("font_size", 64)
 	var recipes: Array = player.all_spell_recipes.get_available_recipes(element, forms)
 	for recipe in recipes:
 		var label := Label.new()
-		label.text = "%s  -  %s" % [
-			sequence_to_text(recipe["sequence"]),
-			recipe["form"].capitalize()
+		label.text = "%s  :  %s" % [
+			recipe["form"].capitalize(),
+			sequence_to_text(recipe["sequence"])
 		]
+		label.add_theme_font_size_override("font_size", 64)
 		spell_list.add_child(label)
 
 func sequence_to_text(sequence: Array) -> String:

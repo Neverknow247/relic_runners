@@ -10,23 +10,36 @@ anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = 3223.0
-offset_top = 1853.0
+offset_top = 1774.0
 grow_horizontal = 2
 grow_vertical = 2
 
 [node name="margin_container" type="MarginContainer" parent="panel_container" unique_id=793715372]
 layout_mode = 2
 
-[node name="v_box_container" type="VBoxContainer" parent="panel_container/margin_container" unique_id=1877634432]
+[node name="v_box_container" type="VBoxContainer" parent="panel_container/margin_container" unique_id=2001946709]
 layout_mode = 2
 
-[node name="label" type="Label" parent="panel_container/margin_container/v_box_container" unique_id=38597742]
+[node name="title_label" type="Label" parent="panel_container/margin_container/v_box_container" unique_id=38597742]
 layout_mode = 2
 theme_override_font_sizes/font_size = 64
 text = "Spells"
 horizontal_alignment = 1
 
-[node name="label2" type="Label" parent="panel_container/margin_container/v_box_container" unique_id=954104456]
+[node name="spell_list" type="VBoxContainer" parent="panel_container/margin_container/v_box_container" unique_id=1877634432]
+layout_mode = 2
+
+[node name="label2" type="Label" parent="panel_container/margin_container/v_box_container/spell_list" unique_id=954104456]
+layout_mode = 2
+theme_override_font_sizes/font_size = 64
+text = "Fire-Ball: ⬆️"
+
+[node name="label3" type="Label" parent="panel_container/margin_container/v_box_container/spell_list" unique_id=1569691033]
+layout_mode = 2
+theme_override_font_sizes/font_size = 64
+text = "Fire-Ball: ⬆️"
+
+[node name="label4" type="Label" parent="panel_container/margin_container/v_box_container/spell_list" unique_id=2127287449]
 layout_mode = 2
 theme_override_font_sizes/font_size = 64
 text = "Fire-Ball: ⬆️"

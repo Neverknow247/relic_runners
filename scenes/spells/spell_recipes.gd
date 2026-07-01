@@ -3,11 +3,11 @@ class_name SpellRecipes
 
 const RECIPES := {
 	# Fire
-	[2, 1, 1, 3, 4]: {
+	[2, 1, 1, 3, 0]: {
 		"element": "fire",
 		"form": "ball",
 	},
-	[2, 1, 4]: {
+	[2, 1, 0]: {
 		"element": "fire",
 		"form": "bolt",
 	},
@@ -15,7 +15,7 @@ const RECIPES := {
 		"element": "fire",
 		"form": "rain",
 	},
-	[2, 4, 1, 2]: {
+	[2, 0, 1, 2]: {
 		"element": "fire",
 		"form": "beam",
 	},
@@ -23,39 +23,39 @@ const RECIPES := {
 		"element": "fire",
 		"form": "burst",
 	},
-	[2, 4, 3, 2]: {
+	[2, 0, 3, 2]: {
 		"element": "fire",
 		"form": "cone",
 	},
 
 	# Holy
-	[4, 1, 1, 3, 2]: {
+	[0, 1, 1, 3, 2]: {
 		"element": "holy",
 		"form": "ball",
 	},
-	[4, 1, 2]: {
+	[0, 1, 2]: {
 		"element": "holy",
 		"form": "bolt",
 	},
-	[4, 1, 3, 1]: {
+	[0, 1, 3, 1]: {
 		"element": "holy",
 		"form": "rain",
 	},
-	[4, 2, 1, 4]: {
+	[0, 2, 1, 0]: {
 		"element": "holy",
 		"form": "beam",
 	},
-	[4, 3, 3, 1]: {
+	[0, 3, 3, 1]: {
 		"element": "holy",
 		"form": "burst",
 	},
-	[4, 2, 3, 4]: {
+	[0, 2, 3, 0]: {
 		"element": "holy",
 		"form": "cone",
 	},
 
 	# Air
-	[1, 3, 4, 1, 2]: {
+	[1, 3, 0, 1, 2]: {
 		"element": "air",
 		"form": "ball",
 	},
@@ -71,7 +71,7 @@ const RECIPES := {
 		"element": "air",
 		"form": "beam",
 	},
-	[1, 4, 4, 3]: {
+	[1, 0, 0, 3]: {
 		"element": "air",
 		"form": "burst",
 	},
@@ -81,15 +81,22 @@ const RECIPES := {
 	},
 }
 
-func get_spell_recipe_from_sequence(sequence: Array[int]) -> Dictionary:
-	return RECIPES.get(sequence, {})
+func get_spell_recipe_from_sequence(sequence: Array) -> Dictionary:
+	if RECIPES.has(sequence):
+		var recipe: Dictionary = RECIPES[sequence].duplicate()
+		recipe["sequence"] = sequence
+		return recipe
+	return {}
 
 func get_available_recipes(element: String, forms: Array) -> Array:
 	var available: Array = []
-	for recipe in RECIPES:
+	for sequence in RECIPES.keys():
+		var recipe: Dictionary = RECIPES[sequence]
 		if recipe["element"] != element:
 			continue
 		if !forms.has(recipe["form"]):
 			continue
-		available.append(recipe)
+		var recipe_with_sequence := recipe.duplicate()
+		recipe_with_sequence["sequence"] = sequence
+		available.append(recipe_with_sequence)
 	return available
