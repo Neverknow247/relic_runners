@@ -10,6 +10,13 @@ const INPUT_NAMES := {
 	3: preload("res://assets/art/ui/keyboard_arrow_down.png"),
 }
 
+const PRESSED_INPUT_NAMES := {
+	0: preload("res://assets/art/ui/keyboard_arrow_left_outline.png"),
+	1: preload("res://assets/art/ui/keyboard_arrow_up_outline.png"),
+	2: preload("res://assets/art/ui/keyboard_arrow_right_outline.png"),
+	3: preload("res://assets/art/ui/keyboard_arrow_down_outline.png"),
+}
+
 var player: Node = null
 
 func setup(target_player: Node) -> void:
