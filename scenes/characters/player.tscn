@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://br5760pq51hcv" path="res://scenes/characters/player.gd" id="1_rp718"]
 [ext_resource type="Theme" uid="uid://dx7snotftebdm" path="res://ui/themes/menu_theme.tres" id="2_76oj4"]
+[ext_resource type="PackedScene" uid="uid://ctukarabqgugx" path="res://scenes/items/player_camera.tscn" id="2_atpat"]
 [ext_resource type="Texture2D" uid="uid://m8yujbmnxf6q" path="res://assets/art/pixel_quest/wizard/wizard_blue.png" id="3_76oj4"]
 [ext_resource type="Texture2D" uid="uid://b5k5eu8q7e6os" path="res://assets/art/pixel_quest/wizard/shadow.png" id="3_dyp2m"]
 
@@ -331,8 +332,7 @@ script = ExtResource("1_rp718")
 [node name="multiplayer_synchronizer" type="MultiplayerSynchronizer" parent="." unique_id=1479303565]
 replication_config = SubResource("SceneReplicationConfig_yewv4")
 
-[node name="camera_2d" type="Camera2D" parent="." unique_id=968866298]
-zoom = Vector2(6, 6)
+[node name="player_camera" parent="." unique_id=563461302 instance=ExtResource("2_atpat")]
 
 [node name="name_label" type="Label" parent="." unique_id=1362109846]
 offset_left = -32.0

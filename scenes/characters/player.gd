@@ -7,6 +7,7 @@ var all_spell_recipes = SpellRecipes.new()
 
 var spell_input_sequence: Array[int] = []
 
+@onready var player_camera: Camera2D = $player_camera
 @onready var visual_root: Node2D = $visual_root
 @onready var sprite: Sprite2D = $visual_root/sprite
 @onready var animation_player: AnimationPlayer = $animation_player
@@ -34,20 +35,20 @@ var acceleration = default_acceleration
 var last_facing = Vector2.ZERO
 
 func check_weapon_switch():
-	if Input.is_action_pressed("1"):
+	if Input.is_action_just_pressed("1"):
 		equipped_weapon_data["id"] = "tome"
 		equipped_weapon_data["forms"] = ["ball", "rain", "beam"]
-	if Input.is_action_pressed("2"):
+	if Input.is_action_just_pressed("2"):
 		equipped_weapon_data["id"] = "orb"
 		equipped_weapon_data["forms"] = ["bolt", "beam", "burst"]
-	if Input.is_action_pressed("3"):
+	if Input.is_action_just_pressed("3"):
 		equipped_weapon_data["id"] = "wand"
 		equipped_weapon_data["forms"] = ["bolt", "ball", "cone"]
-	if Input.is_action_pressed("4"):
+	if Input.is_action_just_pressed("4"):
 		equipped_weapon_data["element"] = "fire"
-	if Input.is_action_pressed("5"):
+	if Input.is_action_just_pressed("5"):
 		equipped_weapon_data["element"] = "holy"
-	if Input.is_action_pressed("6"):
+	if Input.is_action_just_pressed("6"):
 		equipped_weapon_data["element"] = "air"
 
 func _enter_tree() -> void:
@@ -55,7 +56,7 @@ func _enter_tree() -> void:
 
 func _ready() -> void:
 	if is_multiplayer_authority():
-		$camera_2d.make_current()
+		player_camera.make_current()
 
 func _process(delta: float) -> void:
 	if is_multiplayer_authority():
@@ -66,13 +67,13 @@ func _process(delta: float) -> void:
 		sprite.flip_h = network_flip_h
 
 func _physics_process(delta):
-	check_weapon_switch()
 	if multiplayer.multiplayer_peer == null:
 		return
 	if multiplayer.multiplayer_peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
 		return
 	if !is_multiplayer_authority():
 		return
+	check_weapon_switch()
 	state.call(delta)
 
 func record_attack_direction(input_num: int):
