@@ -57,6 +57,7 @@ func _enter_tree() -> void:
 func _ready() -> void:
 	if is_multiplayer_authority():
 		player_camera.make_current()
+		$player_camera/spell_list_ui.setup(self)
 
 func _process(delta: float) -> void:
 	if is_multiplayer_authority():

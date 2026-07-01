@@ -83,3 +83,13 @@ const RECIPES := {
 
 func get_spell_recipe_from_sequence(sequence: Array[int]) -> Dictionary:
 	return RECIPES.get(sequence, {})
+
+func get_available_recipes(element: String, forms: Array) -> Array:
+	var available: Array = []
+	for recipe in RECIPES:
+		if recipe["element"] != element:
+			continue
+		if !forms.has(recipe["form"]):
+			continue
+		available.append(recipe)
+	return available

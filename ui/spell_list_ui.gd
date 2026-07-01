@@ -1,7 +1,7 @@
 extends CanvasLayer
 
-@onready var spell_list: VBoxContainer = $PanelContainer/MarginContainer/VBoxContainer/SpellList
-@onready var title_label: Label = $PanelContainer/MarginContainer/VBoxContainer/TitleLabel
+@onready var spell_list: VBoxContainer = $panel_container/margin_container/v_box_container
+@onready var title_label: Label = $panel_container/margin_container/v_box_container/label
 
 const INPUT_NAMES := {
 	1: "↑",
