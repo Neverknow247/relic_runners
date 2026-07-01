@@ -35,6 +35,8 @@ var acceleration = default_acceleration
 
 var last_facing = Vector2.ZERO
 
+var attack_locked := false
+
 func check_weapon_switch():
 	var changed := false
 	if Input.is_action_just_pressed("1"):
@@ -59,7 +61,8 @@ func check_weapon_switch():
 		equipped_weapon_data["element"] = "air"
 		changed = true
 	if changed:
-		spell_list_ui.refresh()
+		spell_input_sequence.clear()
+		refresh_spell_ui()
 
 func _enter_tree() -> void:
 	set_multiplayer_authority(name.to_int())
@@ -67,7 +70,10 @@ func _enter_tree() -> void:
 func _ready() -> void:
 	if is_multiplayer_authority():
 		player_camera.make_current()
-		$player_camera/spell_list_ui.setup(self)
+		spell_list_ui.visible = true
+		spell_list_ui.setup(self)
+	else:
+		spell_list_ui.visible = false
 
 func _process(delta: float) -> void:
 	if is_multiplayer_authority():
@@ -90,7 +96,12 @@ func _physics_process(delta):
 func record_attack_direction(input_num: int):
 	spell_input_sequence.append(input_num)
 	if spell_input_sequence.size() > 6:
-		spell_input_sequence.pop_front()
+		spell_input_sequence.clear()
+		refresh_spell_ui()
+		return
+	if !has_relevant_spell_prefix(spell_input_sequence):
+		spell_input_sequence.clear()
+	refresh_spell_ui()
 
 func move_state(delta):
 	var input_axis = Vector2(Input.get_axis("left","right"),Input.get_axis("up","down"))
@@ -155,14 +166,14 @@ func equip_weapon(weapon_data: Dictionary):
 	equipped_weapon_data = weapon_data
 
 func check_spell_input():
+	if Input.is_action_just_pressed("spell_left"):
+		record_attack_direction(0)
 	if Input.is_action_just_pressed("spell_up"):
 		record_attack_direction(1)
 	if Input.is_action_just_pressed("spell_right"):
 		record_attack_direction(2)
 	if Input.is_action_just_pressed("spell_down"):
 		record_attack_direction(3)
-	if Input.is_action_just_pressed("spell_left"):
-		record_attack_direction(4)
 
 func get_spell_data():
 	print(spell_input_sequence)
@@ -205,13 +216,58 @@ func get_spell_data():
 func cast_spell():
 	var spell_data = get_spell_data()
 	var direction = get_facing_direction()
-	var projectile = spell_data["scene"].instantiate()
-	#print(spell_input_sequence)
-	print(spell_data["weapon"], ": ", spell_data["element"], " ", spell_data["form"])
-	get_tree().current_scene.add_child(projectile)
-	projectile.global_position = spell_origin.global_position + direction * 18
-	projectile.setup_spell(direction, spell_data)
+	spawn_spell.rpc(
+		global_position,
+		spell_origin.global_position,
+		direction,
+		spell_data["weapon"],
+		spell_data["element"],
+		spell_data["form"]
+	)
 	spell_input_sequence.clear()
+	refresh_spell_ui()
+
+@rpc("any_peer", "call_local", "reliable")
+func spawn_spell(
+	player_position: Vector2,
+	origin_position: Vector2,
+	direction: Vector2,
+	weapon: String,
+	element: String,
+	form: String
+) -> void:
+	var spell_data = all_spell_data.build_spell_data(
+		weapon,
+		element,
+		form
+	)
+	var projectile = spell_data["scene"].instantiate()
+	get_tree().current_scene.add_child(projectile)
+	projectile.global_position = origin_position + direction * 18
+	projectile.setup_spell(direction, spell_data)
+
+func refresh_spell_ui() -> void:
+	if !is_multiplayer_authority():
+		return
+	if has_node("player_camera/spell_list_ui"):
+		spell_list_ui.refresh()
+
+func has_relevant_spell_prefix(sequence: Array) -> bool:
+	var element: String = equipped_weapon_data["element"]
+	var forms: Array = equipped_weapon_data["forms"]
+	var recipes: Array = all_spell_recipes.get_available_recipes(element, forms)
+	for recipe in recipes:
+		var recipe_sequence: Array = recipe["sequence"]
+		if sequence.size() > recipe_sequence.size():
+			continue
+		var matches := true
+		for i in sequence.size():
+			if sequence[i] != recipe_sequence[i]:
+				matches = false
+				break
+		if matches:
+			return true
+	return false
 
 func get_facing_direction():
 	if last_facing == Vector2.ZERO:
@@ -219,7 +275,8 @@ func get_facing_direction():
 	return last_facing.normalized()
 
 func attack_check():
-	if (Input.is_action_pressed("attack_1")):
+	if Input.is_action_pressed("attack_1") and !attack_locked:
+		attack_locked = true
 		cast_spell()
 		if abs(last_facing.x) == 1:
 			if last_facing.y == 0.0:
@@ -236,10 +293,13 @@ func attack_check():
 		state = attack_state
 
 func attack_state(delta):
+	check_spell_input()
 	apply_friction(delta)
 	move_and_slide()
-	if not animation_player.is_playing() or !animation_player.current_animation.contains("attack"):
-		state = move_state
+	if animation_player.is_playing() and animation_player.current_animation.contains("attack"):
+		return
+	attack_locked = false
+	state = move_state
 
 #func snap_visual_to_body():
 	#if has_node("visual_root"):
