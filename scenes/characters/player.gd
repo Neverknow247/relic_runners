@@ -20,27 +20,6 @@ var spell_input_sequence: Array[int] = []
 	"forms": ["ball", "rain", "beam"]
 }
 
-func equip_tome():
-	equip_weapon({
-		"id": "tome",
-		"element": "fire",
-		"forms": ["ball", "rain", "beam"],
-	})
-
-func equip_orb():
-	equip_weapon({
-		"id": "orb",
-		"element": "fire",
-		"forms": ["bolt", "beam", "burst"],
-	})
-
-func equip_wand():
-	equip_weapon({
-		"id": "wand",
-		"element": "fire",
-		"forms": ["bolt", "ball", "cone"],
-	})
-
 var state = move_state
 var has_dash = true
 var dash_input_axis
@@ -53,6 +32,23 @@ var max_velocity = default_max_velocity
 var acceleration = default_acceleration
 
 var last_facing = Vector2.ZERO
+
+func check_event():
+	if Input.is_action_pressed("1"):
+		equipped_weapon_data["id"] = "tome"
+		equipped_weapon_data["forms"] = ["ball", "rain", "beam"]
+	if Input.is_action_pressed("2"):
+		equipped_weapon_data["id"] = "orb"
+		equipped_weapon_data["forms"] = ["ball", "rain", "beam"]
+	if Input.is_action_pressed("3"):
+		equipped_weapon_data["id"] = "wand"
+		equipped_weapon_data["forms"] = ["ball", "rain", "beam"]
+	if Input.is_action_pressed("4"):
+		equipped_weapon_data["element"] = "fire"
+	if Input.is_action_pressed("5"):
+		equipped_weapon_data["element"] = "holy"
+	if Input.is_action_pressed("6"):
+		equipped_weapon_data["element"] = "air"
 
 func _enter_tree() -> void:
 	set_multiplayer_authority(name.to_int())
@@ -70,6 +66,7 @@ func _process(delta: float) -> void:
 		sprite.flip_h = network_flip_h
 
 func _physics_process(delta):
+	check_event()
 	if multiplayer.multiplayer_peer == null:
 		return
 	if multiplayer.multiplayer_peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
@@ -80,7 +77,7 @@ func _physics_process(delta):
 
 func record_attack_direction(input_num: int):
 	spell_input_sequence.append(input_num)
-	if spell_input_sequence.size() > 5:
+	if spell_input_sequence.size() > 6:
 		spell_input_sequence.pop_front()
 
 func move_state(delta):
@@ -155,34 +152,42 @@ func check_spell_input():
 	if Input.is_action_just_pressed("spell_left"):
 		record_attack_direction(4)
 
-func get_spell_data() -> Dictionary:
+func get_spell_data():
 	print(spell_input_sequence)
 	var weapon_id: String = equipped_weapon_data["id"]
+	var weapon_element: String = equipped_weapon_data["element"]
+	var weapon_forms: Array = equipped_weapon_data["forms"]
 	if spell_input_sequence.is_empty():
 		return all_spell_data.build_spell_data(
 			weapon_id,
-			equipped_weapon_data["element"],
+			weapon_element,
 			"default"
 		)
-	var spell_recipe := all_spell_recipes.get_spell_recipe_from_sequence(spell_input_sequence)
-	if spell_recipe.is_empty():
+	var recipe := all_spell_recipes.get_spell_recipe_from_sequence(spell_input_sequence)
+	if recipe.is_empty():
 		return all_spell_data.build_spell_data(
 			weapon_id,
-			equipped_weapon_data["element"],
+			weapon_element,
 			"default"
 		)
-	var element: String = spell_recipe["element"]
-	var form: String = spell_recipe["form"]
-	if !equipped_weapon_data["forms"].has(form):
+	var recipe_element: String = recipe["element"]
+	var recipe_form: String = recipe["form"]
+	if recipe_element != weapon_element:
 		return all_spell_data.build_spell_data(
 			weapon_id,
-			equipped_weapon_data["element"],
+			weapon_element,
+			"default"
+		)
+	if !weapon_forms.has(recipe_form):
+		return all_spell_data.build_spell_data(
+			weapon_id,
+			weapon_element,
 			"default"
 		)
 	return all_spell_data.build_spell_data(
 		weapon_id,
-		element,
-		form
+		recipe_element,
+		recipe_form
 	)
 
 func cast_spell():
@@ -190,7 +195,7 @@ func cast_spell():
 	var direction = get_facing_direction()
 	var projectile = spell_data["scene"].instantiate()
 	#print(spell_input_sequence)
-	print(spell_data["element"], " ", spell_data["form"])
+	print(spell_data["weapon"], ": ", spell_data["element"], " ", spell_data["form"])
 	get_tree().current_scene.add_child(projectile)
 	projectile.global_position = spell_origin.global_position + direction * 18
 	projectile.setup_spell(direction, spell_data)
