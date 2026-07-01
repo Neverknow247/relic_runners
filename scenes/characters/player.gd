@@ -123,37 +123,33 @@ func apply_acceleration(delta, _input_axis):
 func apply_friction(delta):
 	velocity = velocity.move_toward(Vector2.ZERO, friction * delta)
 
-func update_animations(input_vector):
-	var facing = input_vector
-	if facing != Vector2.ZERO:
-		last_facing = input_vector
-		sprite.flip_h = facing.x != 1
-	if input_vector != Vector2.ZERO:
-		if abs(input_vector.x) == 1:
-			if input_vector.y == 0.0:
-				play_anim("run_side")
-			elif input_vector.y == -1.0:
-				play_anim("run_up_side")
-			else:
-				play_anim("run_down_side")
-		else:
-			if input_vector.y == -1:
-				play_anim("run_up")
-			else:
-				play_anim("run_down")
+func update_animations(input_vector: Vector2):
+	if input_vector.length() < 0.2:
+		play_idle_animation()
+		return
+	var facing := input_vector.normalized()
+	last_facing = facing
+	if abs(facing.x) > abs(facing.y):
+		sprite.flip_h = facing.x < 0
+		play_anim("run_side")
 	else:
-		if abs(last_facing.x) == 1:
-			if last_facing.y == 0.0:
-				play_anim("idle_side")
-			elif last_facing.y == -1.0:
-				play_anim("idle_up_side")
-			else:
-				play_anim("idle_down_side")
+		if facing.y < 0:
+			play_anim("run_up")
 		else:
-			if last_facing.y == -1:
-				play_anim("idle_up")
-			else:
-				play_anim("idle_down")
+			play_anim("run_down")
+
+func play_idle_animation():
+	if last_facing == Vector2.ZERO:
+		play_anim("idle_down")
+		return
+	if abs(last_facing.x) > abs(last_facing.y):
+		sprite.flip_h = last_facing.x < 0
+		play_anim("idle_side")
+	else:
+		if last_facing.y < 0:
+			play_anim("idle_up")
+		else:
+			play_anim("idle_down")
 
 func play_anim(anim_name: String):
 	if animation_player.current_animation != anim_name:
@@ -217,7 +213,6 @@ func cast_spell():
 	var spell_data = get_spell_data()
 	var direction = get_facing_direction()
 	spawn_spell.rpc(
-		global_position,
 		spell_origin.global_position,
 		direction,
 		spell_data["weapon"],
@@ -229,13 +224,15 @@ func cast_spell():
 
 @rpc("any_peer", "call_local", "reliable")
 func spawn_spell(
-	player_position: Vector2,
 	origin_position: Vector2,
 	direction: Vector2,
 	weapon: String,
 	element: String,
 	form: String
 ) -> void:
+	# If this caster player is hidden on this client, their spell should also be hidden.
+	if !is_visible_in_tree() or !visual_root.visible:
+		return
 	var spell_data = all_spell_data.build_spell_data(
 		weapon,
 		element,
