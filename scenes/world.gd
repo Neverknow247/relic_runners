@@ -398,6 +398,7 @@ func refresh_visibility_for_all():
 	if !multiplayer.is_server():
 		return
 	var known_ids = player_locations.keys()
+	world_players.update_all_synchronizer_visibility(known_ids)
 	for viewer_id in player_locations.keys():
 		if viewer_id == multiplayer.get_unique_id():
 			client_set_known_players(known_ids)
