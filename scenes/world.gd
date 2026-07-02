@@ -86,6 +86,7 @@ func _ready() -> void:
 	if multiplayer.multiplayer_peer != null:
 		var my_id = multiplayer.get_unique_id()
 		if multiplayer.is_server():
+			sync_ready_peers[my_id] = true # this line added
 			player_steam_ids[my_id] = Steam.getSteamID()
 			player_steam_names[my_id] = Steam.getFriendPersonaName(Steam.getSteamID())
 			player_cosmetics[my_id] = generate_player_cosmetics(my_id)
@@ -212,8 +213,13 @@ func register_player(peer_id: int):
 		player_cosmetics[peer_id] = generate_player_cosmetics(peer_id)
 	if peer_id == multiplayer.get_unique_id():
 		client_change_location("hub", "main", "default")
-		client_refresh_players(player_locations.keys(), get_visible_ids_for(peer_id))
-		#client_set_visible_players([peer_id])
+		#HERE
+		#client_refresh_players(player_locations.keys(), get_visible_ids_for(peer_id))
+		client_refresh_players(
+			player_locations.keys(),
+			get_visible_ids_for(peer_id),
+			sync_ready_peers.keys()
+		)
 	else:
 		client_change_location.rpc_id(peer_id, "hub", "main", "default")
 	refresh_visibility_for_all()
@@ -414,37 +420,41 @@ func get_spawn_global_position(spawn_point: String) -> Vector2:
 		#else:
 			#client_set_visible_players.rpc_id(viewer_id, visible_ids)
 
-func refresh_visibility_for_all():
-	if !multiplayer.is_server():
-		return
-	var known_ids = player_locations.keys()
-	for viewer_id in player_locations.keys():
-		var visible_ids = get_visible_ids_for(viewer_id)
-		if viewer_id == multiplayer.get_unique_id():
-			client_refresh_players(known_ids, visible_ids)
-		else:
-			client_refresh_players.rpc_id(viewer_id, known_ids, visible_ids)
 
-@rpc("authority", "call_remote", "reliable")
-func client_refresh_players(known_ids, visible_ids):
-	for peer_id in known_ids:
-		if !players.has_node(str(peer_id)):
-			spawn_player_locally(peer_id)
-	await get_tree().process_frame
-	await get_tree().process_frame
-	world_players.update_all_synchronizer_visibility(known_ids)
-	current_visible_ids.clear()
-	var visible_lookup = {}
-	for peer_id in visible_ids:
-		visible_lookup[peer_id] = true
-		current_visible_ids[peer_id] = true
-		if !players.has_node(str(peer_id)):
-			spawn_player_locally(peer_id)
-	for child in players.get_children():
-		var peer_id = int(child.name)
-		var should_show = visible_lookup.has(peer_id) \
-			and player_initialized_positions.get(peer_id, false)
-		set_player_active(child, should_show)
+
+#HERE
+#func refresh_visibility_for_all():
+	#if !multiplayer.is_server():
+		#return
+	#var known_ids = player_locations.keys()
+	#for viewer_id in player_locations.keys():
+		#var visible_ids = get_visible_ids_for(viewer_id)
+		#if viewer_id == multiplayer.get_unique_id():
+			#client_refresh_players(known_ids, visible_ids)
+		#else:
+			#client_refresh_players.rpc_id(viewer_id, known_ids, visible_ids)
+
+#HERE
+#@rpc("authority", "call_remote", "reliable")
+#func client_refresh_players(known_ids, visible_ids):
+	#for peer_id in known_ids:
+		#if !players.has_node(str(peer_id)):
+			#spawn_player_locally(peer_id)
+	#await get_tree().process_frame
+	#await get_tree().process_frame
+	#world_players.update_all_synchronizer_visibility(known_ids)
+	#current_visible_ids.clear()
+	#var visible_lookup = {}
+	#for peer_id in visible_ids:
+		#visible_lookup[peer_id] = true
+		#current_visible_ids[peer_id] = true
+		#if !players.has_node(str(peer_id)):
+			#spawn_player_locally(peer_id)
+	#for child in players.get_children():
+		#var peer_id = int(child.name)
+		#var should_show = visible_lookup.has(peer_id) \
+			#and player_initialized_positions.get(peer_id, false)
+		#set_player_active(child, should_show)
 
 func get_visible_ids_for(viewer_id: int) -> Array:
 	var visible_ids := []
@@ -811,3 +821,52 @@ func client_receive_player_state(peer_id: int, pos: Vector2, anim: String, flip:
 	player.global_position = pos
 	player.network_anim = anim
 	player.network_flip_h = flip
+
+
+
+
+#test area:
+var sync_ready_peers := {}
+var has_confirmed_sync_ready := false
+
+@rpc("any_peer", "call_remote", "reliable")
+func server_confirm_sync_ready():
+	if !multiplayer.is_server():
+		return
+	var sender_id := multiplayer.get_remote_sender_id()
+	sync_ready_peers[sender_id] = true
+	refresh_visibility_for_all()
+
+@rpc("authority", "call_remote", "reliable")
+func client_refresh_players(known_ids, visible_ids, sync_ready_ids):
+	for peer_id in known_ids:
+		if !players.has_node(str(peer_id)):
+			spawn_player_locally(peer_id)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	world_players.update_all_synchronizer_visibility(sync_ready_ids)
+	current_visible_ids.clear()
+	var visible_lookup = {}
+	for peer_id in visible_ids:
+		visible_lookup[peer_id] = true
+		current_visible_ids[peer_id] = true
+	for child in players.get_children():
+		var peer_id = int(child.name)
+		var should_show = visible_lookup.has(peer_id) \
+			and player_initialized_positions.get(peer_id, false)
+		set_player_active(child, should_show)
+	if !multiplayer.is_server() and !has_confirmed_sync_ready:
+		has_confirmed_sync_ready = true
+		server_confirm_sync_ready.rpc()
+
+func refresh_visibility_for_all():
+	if !multiplayer.is_server():
+		return
+	var known_ids = player_locations.keys()
+	var sync_ready_ids = sync_ready_peers.keys()
+	for viewer_id in player_locations.keys():
+		var visible_ids = get_visible_ids_for(viewer_id)
+		if viewer_id == multiplayer.get_unique_id():
+			client_refresh_players(known_ids, visible_ids, sync_ready_ids)
+		else:
+			client_refresh_players.rpc_id(viewer_id, known_ids, visible_ids, sync_ready_ids)

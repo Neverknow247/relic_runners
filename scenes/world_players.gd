@@ -65,14 +65,42 @@ func apply_player_cosmetics(peer_id: int, cosmetics: Dictionary) -> void:
 		world.current_visible_ids[peer_id] = true
 		world.set_player_active(player, true)
 
+#func spawn_player_locally(peer_id: int) -> void:
+	#if world.players.has_node(str(peer_id)):
+		#return
+	#var player = world.PLAYER_SCENE.instantiate()
+	#player.name = str(peer_id)
+	#player.set_multiplayer_authority(peer_id, false)
+	#world.players.add_child(player)
+	#call_deferred("_finish_spawn_player_locally", peer_id)
+
 func spawn_player_locally(peer_id: int) -> void:
 	if world.players.has_node(str(peer_id)):
 		return
 	var player = world.PLAYER_SCENE.instantiate()
 	player.name = str(peer_id)
 	player.set_multiplayer_authority(peer_id, false)
+	var sync = player.get_node_or_null("multiplayer_synchronizer")
+	if sync:
+		sync.root_path = NodePath("..")
+		sync.set_multiplayer_authority(peer_id)
+		sync.public_visibility = false
 	world.players.add_child(player)
 	call_deferred("_finish_spawn_player_locally", peer_id)
+
+#func _finish_spawn_player_locally(peer_id: int) -> void:
+	#if !world.players.has_node(str(peer_id)):
+		#return
+	#var player = world.players.get_node(str(peer_id))
+	#if !world.player_initialized_positions.get(peer_id, false):
+		#set_player_active(player, false)
+	#var sync = player.get_node_or_null("multiplayer_synchronizer")
+	#if sync:
+		#sync.root_path = NodePath("..")
+		#sync.set_multiplayer_authority(peer_id)
+		#sync.public_visibility = false
+		#sync.update_visibility()
+	#world.request_player_cosmetics(peer_id)
 
 func _finish_spawn_player_locally(peer_id: int) -> void:
 	if !world.players.has_node(str(peer_id)):
@@ -82,8 +110,6 @@ func _finish_spawn_player_locally(peer_id: int) -> void:
 		set_player_active(player, false)
 	var sync = player.get_node_or_null("multiplayer_synchronizer")
 	if sync:
-		sync.root_path = NodePath("..")
-		sync.set_multiplayer_authority(peer_id)
 		sync.public_visibility = false
 		sync.update_visibility()
 	world.request_player_cosmetics(peer_id)
@@ -93,15 +119,35 @@ func remove_player_locally(peer_id: int):
 	if world.players.has_node(node_name):
 		world.players.get_node(node_name).queue_free()
 
+#func update_all_synchronizer_visibility(peer_ids: Array) -> void:
+	#var my_id = world.multiplayer.get_unique_id()
+	#for player in world.players.get_children():
+		#var sync = player.get_node_or_null("multiplayer_synchronizer")
+		#if sync == null:
+			#continue
+		#sync.public_visibility = true
+		#for peer_id in peer_ids:
+			#if peer_id == my_id:
+				#continue
+			#if !world.player_locations.has(peer_id):
+				#continue
+			#sync.set_visibility_for(peer_id, true)
+		#sync.update_visibility()
+
 func update_all_synchronizer_visibility(peer_ids: Array) -> void:
+	var my_id = world.multiplayer.get_unique_id()
 	for player in world.players.get_children():
 		var sync = player.get_node_or_null("multiplayer_synchronizer")
 		if sync == null:
 			continue
-		sync.public_visibility = true
+		sync.public_visibility = false
+		for connected_id in world.multiplayer.get_peers():
+			if connected_id != my_id:
+				sync.set_visibility_for(connected_id, false)
 		for peer_id in peer_ids:
+			if peer_id == my_id:
+				continue
 			sync.set_visibility_for(peer_id, true)
-		sync.set_visibility_for(world.multiplayer.get_unique_id(), true)
 		sync.update_visibility()
 
 func set_player_active(player: Node, active: bool):
