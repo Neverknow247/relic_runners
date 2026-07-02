@@ -15,7 +15,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="Relic Runners"
-config/version="0.000.017"
+config/version="0.000.018"
 run/main_scene="uid://b5kwhn0svfexu"
 config/use_custom_user_dir=true
 config/custom_user_dir_name="relic_runners"
