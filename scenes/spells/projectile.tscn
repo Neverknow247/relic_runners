@@ -3,12 +3,19 @@
 [ext_resource type="Script" uid="uid://0ea0o42co3ra" path="res://scenes/spells/projectile.gd" id="1_m3ct3"]
 [ext_resource type="PackedScene" uid="uid://di62f4y61ndr" path="res://scenes/characters/hitbox.tscn" id="2_oo15e"]
 
+[sub_resource type="CircleShape2D" id="CircleShape2D_tir8i"]
+radius = 8.0
+
 [node name="projectile" type="Node2D" unique_id=1555628361]
 script = ExtResource("1_m3ct3")
 
 [node name="visible_on_screen_notifier_2d" type="VisibleOnScreenNotifier2D" parent="." unique_id=1332524545]
 
 [node name="hitbox" parent="." unique_id=52087126 instance=ExtResource("2_oo15e")]
+collision_mask = 1
+
+[node name="collision_shape_2d" type="CollisionShape2D" parent="hitbox" unique_id=1897228535]
+shape = SubResource("CircleShape2D_tir8i")
 
 [node name="color_rect" type="ColorRect" parent="." unique_id=462454781]
 offset_left = -8.0

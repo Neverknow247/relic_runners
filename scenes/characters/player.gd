@@ -104,15 +104,29 @@ func record_attack_direction(input_num: int):
 	refresh_spell_ui()
 
 func move_state(delta):
-	var input_axis = Vector2(Input.get_axis("left","right"),Input.get_axis("up","down"))
+	var raw_input = Vector2(Input.get_axis("left","right"), Input.get_axis("up","down"))
+	var input_axis = snap_to_8_directions(raw_input)
 	if is_moving(input_axis):
-		apply_acceleration(delta,input_axis)
+		apply_acceleration(delta, input_axis)
 	else:
 		apply_friction(delta)
 	update_animations(input_axis)
 	check_spell_input()
 	attack_check()
 	move_and_slide()
+
+func snap_to_8_directions(direction: Vector2) -> Vector2:
+	if direction.length() < 0.2:
+		return Vector2.ZERO
+	var x := direction.x
+	var y := direction.y
+	if abs(x) < 0.35:
+		x = 0.0
+	if abs(y) < 0.35:
+		y = 0.0
+	if x == 0.0 and y == 0.0:
+		return Vector2.ZERO
+	return Vector2(sign(x), sign(y)).normalized()
 
 func is_moving(_input_axis):
 	return _input_axis != Vector2.ZERO
@@ -124,32 +138,43 @@ func apply_friction(delta):
 	velocity = velocity.move_toward(Vector2.ZERO, friction * delta)
 
 func update_animations(input_vector: Vector2):
-	if input_vector.length() < 0.2:
+	if input_vector == Vector2.ZERO:
 		play_idle_animation()
 		return
-	var facing := input_vector.normalized()
-	last_facing = facing
-	if abs(facing.x) > abs(facing.y):
-		sprite.flip_h = facing.x < 0
+	last_facing = input_vector
+	if input_vector.x < 0:
+		sprite.flip_h = true
+	elif input_vector.x > 0:
+		sprite.flip_h = false
+	if input_vector.x != 0 and input_vector.y < 0:
+		play_anim("run_up_side")
+	elif input_vector.x != 0 and input_vector.y > 0:
+		play_anim("run_down_side")
+	elif input_vector.x != 0:
 		play_anim("run_side")
+	elif input_vector.y < 0:
+		play_anim("run_up")
 	else:
-		if facing.y < 0:
-			play_anim("run_up")
-		else:
-			play_anim("run_down")
+		play_anim("run_down")
 
 func play_idle_animation():
 	if last_facing == Vector2.ZERO:
 		play_anim("idle_down")
 		return
-	if abs(last_facing.x) > abs(last_facing.y):
-		sprite.flip_h = last_facing.x < 0
+	if last_facing.x < 0:
+		sprite.flip_h = true
+	elif last_facing.x > 0:
+		sprite.flip_h = false
+	if last_facing.x != 0 and last_facing.y < 0:
+		play_anim("idle_up_side")
+	elif last_facing.x != 0 and last_facing.y > 0:
+		play_anim("idle_down_side")
+	elif last_facing.x != 0:
 		play_anim("idle_side")
+	elif last_facing.y < 0:
+		play_anim("idle_up")
 	else:
-		if last_facing.y < 0:
-			play_anim("idle_up")
-		else:
-			play_anim("idle_down")
+		play_anim("idle_down")
 
 func play_anim(anim_name: String):
 	if animation_player.current_animation != anim_name:
@@ -275,19 +300,27 @@ func attack_check():
 	if Input.is_action_pressed("attack_1") and !attack_locked:
 		attack_locked = true
 		cast_spell()
-		if abs(last_facing.x) == 1:
-			if last_facing.y == 0.0:
-				play_anim("attack_1_side")
-			elif last_facing.y == -1.0:
-				play_anim("attack_1_up_side")
-			else:
-				play_anim("attack_1_down_side")
-		else:
-			if last_facing.y == -1:
-				play_anim("attack_1_up")
-			else:
-				play_anim("attack_1_down")
+		play_attack_animation()
 		state = attack_state
+
+func play_attack_animation():
+	if last_facing == Vector2.ZERO:
+		play_anim("attack_1_down")
+		return
+	if last_facing.x < 0:
+		sprite.flip_h = true
+	elif last_facing.x > 0:
+		sprite.flip_h = false
+	if last_facing.x != 0 and last_facing.y < 0:
+		play_anim("attack_1_up_side")
+	elif last_facing.x != 0 and last_facing.y > 0:
+		play_anim("attack_1_down_side")
+	elif last_facing.x != 0:
+		play_anim("attack_1_side")
+	elif last_facing.y < 0:
+		play_anim("attack_1_up")
+	else:
+		play_anim("attack_1_down")
 
 func attack_state(delta):
 	check_spell_input()

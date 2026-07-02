@@ -4,9 +4,6 @@
 [ext_resource type="Script" uid="uid://baodoljxoki0f" path="res://scenes/items/ice_bomb.gd" id="2_61xfx"]
 [ext_resource type="Texture2D" uid="uid://baodp78jrvpqj" path="res://assets/art/pixel_quest/attacks/ice_bomb.png" id="3_qrf8b"]
 
-[sub_resource type="CircleShape2D" id="CircleShape2D_f0uyf"]
-radius = 4.0
-
 [sub_resource type="Animation" id="Animation_qrf8b"]
 length = 0.001
 tracks/0/type = "value"
@@ -63,9 +60,6 @@ _data = {
 
 [node name="ice_bomb" unique_id=1555628361 instance=ExtResource("1_qnnjh")]
 script = ExtResource("2_61xfx")
-
-[node name="collision_shape_2d" type="CollisionShape2D" parent="hitbox" parent_id_path=PackedInt32Array(52087126) index="0" unique_id=339991378]
-shape = SubResource("CircleShape2D_f0uyf")
 
 [node name="sprite_2d" type="Sprite2D" parent="." index="2" unique_id=1025261406]
 position = Vector2(0, -21)
