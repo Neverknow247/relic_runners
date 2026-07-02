@@ -422,6 +422,13 @@ func can_players_see_each_other(a: int, b: int):
 	return loc_a["zone"] == loc_b["zone"] and loc_a["room"] == loc_b["room"]
 
 @rpc("authority", "call_remote", "reliable")
+func client_set_known_players(known_ids):
+	for peer_id in known_ids:
+		if !players.has_node(str(peer_id)):
+			spawn_player_locally(peer_id)
+	world_players.update_all_synchronizer_visibility(known_ids)
+
+@rpc("authority", "call_remote", "reliable")
 func client_set_visible_players(visible_ids):
 	current_visible_ids.clear()
 	var visible_lookup = {}
@@ -488,11 +495,11 @@ func set_player_collision_active(player: Node, active: bool):
 	#if players.has_node(node_name):
 		#players.get_node(node_name).queue_free()
 
-@rpc("authority", "call_remote", "reliable")
-func client_set_known_players(known_ids):
-	for peer_id in known_ids:
-		if !players.has_node(str(peer_id)):
-			spawn_player_locally(peer_id)
+#@rpc("authority", "call_remote", "reliable")
+#func client_set_known_players(known_ids):
+	#for peer_id in known_ids:
+		#if !players.has_node(str(peer_id)):
+			#spawn_player_locally(peer_id)
 
 #func set_player_active(player: Node, active: bool):
 	#var sprite = player.get_node_or_null("visual_root/sprite")
