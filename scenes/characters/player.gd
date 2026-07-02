@@ -75,7 +75,11 @@ func _ready() -> void:
 	else:
 		spell_list_ui.visible = false
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
+	if multiplayer.multiplayer_peer == null:
+		return
+	if multiplayer.multiplayer_peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
+		return
 	if is_multiplayer_authority():
 		visual_root.position = Vector2.ZERO
 		return
@@ -93,9 +97,17 @@ func _physics_process(delta):
 	check_weapon_switch()
 	state.call(delta)
 	if is_multiplayer_authority():
+		#var world = get_tree().get_first_node_in_group("world")
 		var world = get_tree().get_first_node_in_group("world")
-		if world and world.can_send_rpc():
-			world.server_send_player_state.rpc(global_position, network_anim, network_flip_h)
+		if world == null:
+			return
+		if world.shutting_down:
+			return
+		if !world.can_send_rpc():
+			return
+		world.server_send_player_state.rpc(global_position, network_anim, network_flip_h)
+		#if world and world.can_send_rpc():
+			#world.server_send_player_state.rpc(global_position, network_anim, network_flip_h)
 
 func record_attack_direction(input_num: int):
 	spell_input_sequence.append(input_num)

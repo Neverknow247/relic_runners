@@ -509,11 +509,11 @@ func can_players_see_each_other(a: int, b: int):
 	#world_players.update_all_synchronizer_visibility(known_ids)
 
 @rpc("authority", "call_remote", "reliable")
-func client_set_known_players(known_ids):
+func client_set_known_players(_known_ids):
 	push_warning("client_set_known_players is deprecated")
 
 @rpc("authority", "call_remote", "reliable")
-func client_set_visible_players(visible_ids):
+func client_set_visible_players(_visible_ids):
 	push_warning("client_set_visible_players is deprecated")
 
 #@rpc("authority", "call_remote", "reliable")

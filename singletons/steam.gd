@@ -145,13 +145,13 @@ func host_lobby():
 	#Steam.createLobby(Steam.LobbyType.LOBBY_TYPE_FRIENDS_ONLY, 16)
 	is_host = true
 
-func _on_lobby_created(result: int, lobby_id: int):
+func _on_lobby_created(result: int, _lobby_id: int):
 	print("Steam lobby created")
 	if result == Steam.Result.RESULT_OK:
-		self.lobby_id = lobby_id
+		self.lobby_id = _lobby_id
 		
-		Steam.setLobbyJoinable(lobby_id,true)
-		Steam.setLobbyData(lobby_id, "name", logged_in_user)
+		Steam.setLobbyJoinable(_lobby_id,true)
+		Steam.setLobbyData(_lobby_id, "name", logged_in_user)
 		
 		peer = SteamMultiplayerPeer.new()
 		peer.create_host(0)
@@ -163,11 +163,11 @@ func _on_lobby_created(result: int, lobby_id: int):
 		#multiplayer.peer_disconnected.connect(_remove_player)
 		_add_player(multiplayer.get_unique_id())
 		multiplayer_ready.emit()
-		print("Lobby Created, lobby id: ",lobby_id)
+		print("Lobby Created, lobby id: ",_lobby_id)
 
-func join_lobby(lobby_id : int):
+func join_lobby(_lobby_id : int):
 	is_joining = true
-	Steam.joinLobby(lobby_id)
+	Steam.joinLobby(_lobby_id)
 
 #func _on_lobby_joined(lobby_id : int, permissions : int, locked : bool, response : int):
 	#if !is_joining:
@@ -178,15 +178,15 @@ func join_lobby(lobby_id : int):
 	#multiplayer.multiplayer_peer = peer
 	#is_joining = false
 
-func _on_lobby_joined(lobby_id: int, permissions: int, locked: bool, response: int):
+func _on_lobby_joined(_lobby_id: int, _permissions: int, _locked: bool, response: int):
 	if !is_joining:
 		return
 	if response != Steam.CHAT_ROOM_ENTER_RESPONSE_SUCCESS:
 		print("failed to join lobby. Response: ",response)
 		is_joining = false
 		return
-	self.lobby_id = lobby_id
-	var host_id = Steam.getLobbyOwner(lobby_id)
+	self.lobby_id = _lobby_id
+	var host_id = Steam.getLobbyOwner(_lobby_id)
 	if host_id == Steam.getSteamID():
 		print("Cannot join your own lobby with the same Steam account")
 		is_joining = false

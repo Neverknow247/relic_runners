@@ -21,10 +21,10 @@ func load_location_locally(zone: String, room: String):
 	var packed_scene = load(world.ZONE_SCENES[key])
 	var scene_instance = packed_scene.instantiate()
 	world.zone_container.add_child(scene_instance)
-	var floor = scene_instance.get_node_or_null("floor_tiles")
-	if floor:
-		scene_instance.remove_child(floor)
-		world.floor_container.add_child(floor)
+	var _floor = scene_instance.get_node_or_null("floor_tiles")
+	if _floor:
+		scene_instance.remove_child(_floor)
+		world.floor_container.add_child(_floor)
 	var objects = scene_instance.get_node_or_null("y_sort_objects")
 	if objects:
 		scene_instance.remove_child(objects)
