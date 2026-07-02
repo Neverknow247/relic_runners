@@ -157,6 +157,7 @@ func _on_lobby_created(result: int, lobby_id: int):
 		peer.create_host(0)
 		
 		multiplayer.multiplayer_peer = peer
+		multiplayer.server_relay = true
 		_connect_multiplayer_signals_once()
 		#multiplayer.peer_connected.connect(_add_player)
 		#multiplayer.peer_disconnected.connect(_remove_player)
@@ -197,6 +198,7 @@ func _on_lobby_joined(lobby_id: int, permissions: int, locked: bool, response: i
 		is_joining = false
 		return
 	multiplayer.multiplayer_peer = peer
+	multiplayer.server_relay = true
 	_connect_multiplayer_signals_once()
 	is_joining = false
 	multiplayer_ready.emit()
