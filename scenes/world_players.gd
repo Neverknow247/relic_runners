@@ -78,17 +78,16 @@ func _finish_spawn_player_locally(peer_id: int) -> void:
 	if !world.players.has_node(str(peer_id)):
 		return
 	var player = world.players.get_node(str(peer_id))
-	set_player_active(player, false)
-	world.player_initialized_positions[peer_id] = false
+	# Only hide if this player has not already been placed.
+	if !world.player_initialized_positions.get(peer_id, false):
+		set_player_active(player, false)
 	var sync = player.get_node_or_null("multiplayer_synchronizer")
 	if sync:
 		sync.root_path = NodePath("..")
 		sync.set_multiplayer_authority(peer_id)
-		sync.public_visibility = true
-		for id in world.current_visible_ids.keys():
-			sync.set_visibility_for(id, true)
-		sync.set_visibility_for(world.multiplayer.get_unique_id(), true)
-		sync.update_visibility()
+		# Do NOT make this true immediately during spawn.
+		# Let update_all_synchronizer_visibility handle it.
+		sync.public_visibility = false
 	world.request_player_cosmetics(peer_id)
 
 func remove_player_locally(peer_id: int):

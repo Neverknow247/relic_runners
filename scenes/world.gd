@@ -398,7 +398,7 @@ func refresh_visibility_for_all():
 	if !multiplayer.is_server():
 		return
 	var known_ids = player_locations.keys()
-	world_players.update_all_synchronizer_visibility(known_ids)
+	#world_players.update_all_synchronizer_visibility(known_ids)
 	for viewer_id in player_locations.keys():
 		if viewer_id == multiplayer.get_unique_id():
 			client_set_known_players(known_ids)
@@ -427,7 +427,13 @@ func client_set_known_players(known_ids):
 	for peer_id in known_ids:
 		if !players.has_node(str(peer_id)):
 			spawn_player_locally(peer_id)
-	call_deferred("_finish_client_set_known_players", known_ids)
+	await get_tree().process_frame
+	world_players.update_all_synchronizer_visibility(known_ids)
+	for peer_id in known_ids:
+		if players.has_node(str(peer_id)):
+			var player = players.get_node(str(peer_id))
+			if current_visible_ids.has(peer_id) and player_initialized_positions.get(peer_id, false):
+				set_player_active(player, true)
 
 func _finish_client_set_known_players(known_ids):
 	world_players.update_all_synchronizer_visibility(known_ids)
@@ -459,7 +465,6 @@ func client_prepare_player_room_change(peer_id: int):
 func client_place_remote_player_at_spawn(peer_id: int, zone: String, room: String, spawn_point: String):
 	if !players.has_node(str(peer_id)):
 		spawn_player_locally(peer_id)
-	# Wait one frame so the spawned player actually exists.
 	await get_tree().process_frame
 	if !players.has_node(str(peer_id)):
 		return
