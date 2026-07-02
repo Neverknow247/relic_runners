@@ -459,13 +459,21 @@ func client_prepare_player_room_change(peer_id: int):
 func client_place_remote_player_at_spawn(peer_id: int, zone: String, room: String, spawn_point: String):
 	if !players.has_node(str(peer_id)):
 		spawn_player_locally(peer_id)
+	# Wait one frame so the spawned player actually exists.
+	await get_tree().process_frame
+	if !players.has_node(str(peer_id)):
+		return
+	var player = players.get_node(str(peer_id))
 	if my_zone == zone and my_room == room:
 		var spawn_pos = get_spawn_global_position(spawn_point)
-		var player = players.get_node(str(peer_id))
 		player.global_position = spawn_pos
 		player_initialized_positions[peer_id] = true
+		current_visible_ids[peer_id] = true
+		set_player_active(player, true)
 	else:
 		player_initialized_positions[peer_id] = false
+		current_visible_ids.erase(peer_id)
+		set_player_active(player, false)
 
 func spawn_player_locally(peer_id: int):
 	world_players.spawn_player_locally(peer_id)
