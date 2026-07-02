@@ -427,6 +427,9 @@ func client_set_known_players(known_ids):
 	for peer_id in known_ids:
 		if !players.has_node(str(peer_id)):
 			spawn_player_locally(peer_id)
+	call_deferred("_finish_client_set_known_players", known_ids)
+
+func _finish_client_set_known_players(known_ids):
 	world_players.update_all_synchronizer_visibility(known_ids)
 
 @rpc("authority", "call_remote", "reliable")
@@ -676,3 +679,28 @@ func launch_expedition(expedition_id: String):
 
 func return_party_to_hub():
 	world_expeditions.return_party_to_hub()
+
+
+
+
+
+@rpc("any_peer", "unreliable")
+func server_send_player_state(pos: Vector2, anim: String, flip: bool):
+	if !multiplayer.is_server():
+		return
+	var sender_id = multiplayer.get_remote_sender_id()
+	for viewer_id in player_locations.keys():
+		if viewer_id == sender_id:
+			continue
+		if !can_players_see_each_other(viewer_id, sender_id):
+			continue
+		client_receive_player_state.rpc_id(viewer_id, sender_id, pos, anim, flip)
+
+@rpc("authority", "unreliable")
+func client_receive_player_state(peer_id: int, pos: Vector2, anim: String, flip: bool):
+	if !players.has_node(str(peer_id)):
+		return
+	var player = players.get_node(str(peer_id))
+	player.global_position = pos
+	player.network_anim = anim
+	player.network_flip_h = flip

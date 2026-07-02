@@ -65,7 +65,7 @@ func check_weapon_switch():
 		refresh_spell_ui()
 
 func _enter_tree() -> void:
-	set_multiplayer_authority(name.to_int())
+	set_multiplayer_authority(name.to_int(), false)
 
 func _ready() -> void:
 	if is_multiplayer_authority():
@@ -92,6 +92,10 @@ func _physics_process(delta):
 		return
 	check_weapon_switch()
 	state.call(delta)
+	if is_multiplayer_authority():
+		var world = get_tree().get_first_node_in_group("world")
+		if world and world.can_send_rpc():
+			world.server_send_player_state.rpc(global_position, network_anim, network_flip_h)
 
 func record_attack_direction(input_num: int):
 	spell_input_sequence.append(input_num)

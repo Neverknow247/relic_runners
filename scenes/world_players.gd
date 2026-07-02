@@ -65,35 +65,47 @@ func apply_player_cosmetics(peer_id: int, cosmetics: Dictionary) -> void:
 		world.current_visible_ids[peer_id] = true
 		world.set_player_active(player, true)
 
-func spawn_player_locally(peer_id: int):
+func spawn_player_locally(peer_id: int) -> void:
 	if world.players.has_node(str(peer_id)):
 		return
 	var player = world.PLAYER_SCENE.instantiate()
 	player.name = str(peer_id)
-	player.set_multiplayer_authority(peer_id)
+	player.set_multiplayer_authority(peer_id, false)
 	world.players.add_child(player)
+	call_deferred("_finish_spawn_player_locally", peer_id)
+
+func _finish_spawn_player_locally(peer_id: int) -> void:
+	if !world.players.has_node(str(peer_id)):
+		return
+	var player = world.players.get_node(str(peer_id))
 	set_player_active(player, false)
 	world.player_initialized_positions[peer_id] = false
 	var sync = player.get_node_or_null("multiplayer_synchronizer")
 	if sync:
+		sync.root_path = NodePath("..")
+		sync.set_multiplayer_authority(peer_id)
 		sync.public_visibility = true
+		for id in world.current_visible_ids.keys():
+			sync.set_visibility_for(id, true)
+		sync.set_visibility_for(world.multiplayer.get_unique_id(), true)
+		sync.update_visibility()
 	world.request_player_cosmetics(peer_id)
-	update_all_synchronizer_visibility(world.player_locations.keys())
 
 func remove_player_locally(peer_id: int):
 	var node_name = str(peer_id)
 	if world.players.has_node(node_name):
 		world.players.get_node(node_name).queue_free()
 
-func update_all_synchronizer_visibility(peer_ids) -> void:
+func update_all_synchronizer_visibility(peer_ids: Array) -> void:
 	for player in world.players.get_children():
 		var sync = player.get_node_or_null("multiplayer_synchronizer")
 		if sync == null:
 			continue
 		sync.public_visibility = true
 		for peer_id in peer_ids:
-			sync.set_visibility_for(int(peer_id), true)
+			sync.set_visibility_for(peer_id, true)
 		sync.set_visibility_for(world.multiplayer.get_unique_id(), true)
+		sync.update_visibility()
 
 func set_player_active(player: Node, active: bool):
 	var visual_root = player.get_node_or_null("visual_root")
