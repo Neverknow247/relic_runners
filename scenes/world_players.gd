@@ -77,9 +77,6 @@ func spawn_player_locally(peer_id: int):
 	var sync = player.get_node_or_null("multiplayer_synchronizer")
 	if sync:
 		sync.public_visibility = true
-		for id in world.player_locations.keys():
-			sync.set_visibility_for(id, true)
-		sync.set_visibility_for(world.multiplayer.get_unique_id(), true)
 	world.request_player_cosmetics(peer_id)
 
 func remove_player_locally(peer_id: int):
@@ -88,14 +85,7 @@ func remove_player_locally(peer_id: int):
 		world.players.get_node(node_name).queue_free()
 
 func update_all_synchronizer_visibility(peer_ids: Array) -> void:
-	for player in world.players.get_children():
-		var sync = player.get_node_or_null("multiplayer_synchronizer")
-		if sync == null:
-			continue
-		sync.public_visibility = true
-		for peer_id in peer_ids:
-			sync.set_visibility_for(peer_id, true)
-		sync.set_visibility_for(world.multiplayer.get_unique_id(), true)
+	pass
 
 func set_player_active(player: Node, active: bool):
 	var visual_root = player.get_node_or_null("visual_root")
