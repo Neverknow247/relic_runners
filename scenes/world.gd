@@ -30,9 +30,9 @@ const EXPEDITION_TARGETS = {
 	},
 }
 
-const PLAYER_SPRITES = [
-	preload("res://assets/art/pixel_quest/wizard/wizard_blue.png"),
-]
+#const PLAYER_SPRITES = [
+	#preload("res://assets/art/pixel_quest/wizard/wizard_blue.png"),
+#]
 
 @onready var world_players: Node = $world_players
 @onready var world_rooms: Node = $world_rooms
@@ -687,12 +687,12 @@ func client_apply_player_cosmetics(peer_id: int, cosmetics: Dictionary) -> void:
 	if !players.has_node(str(peer_id)):
 		return
 	var player = players.get_node(str(peer_id))
-	var sprite_index: int = cosmetics["sprite_index"]
+	#var sprite_index: int = cosmetics["sprite_index"]
 	var color: Color = cosmetics["color"]
 	var player_name: String = cosmetics.get("name","")
 	if player_name.strip_edges() == "":
 		player_name = "Player %s" % peer_id
-	player.get_node("visual_root/sprite").texture = PLAYER_SPRITES[sprite_index]
+	#player.get_node("visual_root/sprite").texture = PLAYER_SPRITES[sprite_index]
 	player.get_node("name_label").modulate = color
 	var label = player.get_node("name_label")
 	if label:

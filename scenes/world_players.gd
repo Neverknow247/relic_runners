@@ -6,7 +6,7 @@ func setup(_world):
 	world = _world
 
 func generate_player_cosmetics(peer_id: int):
-	var sprite_index = world.rng.randi_range(0, world.PLAYER_SPRITES.size() - 1)
+	#var sprite_index = world.rng.randi_range(0, world.PLAYER_SPRITES.size() - 1)
 	var color = Color(
 		world.rng.randf_range(0.6, 1),
 		world.rng.randf_range(0.6, 1),
@@ -15,7 +15,7 @@ func generate_player_cosmetics(peer_id: int):
 	)
 	var player_name = world.player_steam_names.get(peer_id, "Player %s" % peer_id)
 	return {
-		"sprite_index": sprite_index,
+		#"sprite_index": sprite_index,
 		"color": color,
 		"name": player_name,
 	}

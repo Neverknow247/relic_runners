@@ -126,7 +126,7 @@ func move_state(delta):
 		apply_acceleration(delta, input_axis)
 	else:
 		apply_friction(delta)
-	update_animations(input_axis)
+	#update_animations(input_axis)
 	check_spell_input()
 	attack_check()
 	move_and_slide()
@@ -316,7 +316,7 @@ func attack_check():
 	if Input.is_action_pressed("attack_1") and !attack_locked:
 		attack_locked = true
 		cast_spell()
-		play_attack_animation()
+		#play_attack_animation()
 		state = attack_state
 
 func play_attack_animation():
