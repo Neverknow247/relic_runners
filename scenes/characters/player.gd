@@ -10,12 +10,13 @@ var spell_input_sequence: Array[int] = []
 @onready var player_camera: Camera2D = $player_camera
 @onready var spell_list_ui = $player_camera/spell_list_ui
 @onready var visual_root: Node2D = $visual_root
-@onready var sprite: Sprite2D = $visual_root/sprite
 @onready var animation_player: AnimationPlayer = $animation_player
-@onready var spell_origin: Marker2D = $spell_origin
 
-@export var network_anim := "idle_down"
-@export var network_flip_h := false
+@export var network_anim := "idle"
+@export var network_rotation := 0.0
+var aim_direction := Vector2.DOWN
+var is_attacking := false
+
 @export var equipped_weapon_data := {
 	"id": "tome",
 	"element": "fire",
@@ -33,9 +34,12 @@ var friction = 500
 var max_velocity = default_max_velocity
 var acceleration = default_acceleration
 
-var last_facing = Vector2.ZERO
-
 var attack_locked := false
+@export var attack_cooldown := 0.35
+var attack_timer := 0.0
+
+@export var controller_aim_deadzone := 0.25
+var using_controller_aim := false
 
 func check_weapon_switch():
 	var changed := false
@@ -75,17 +79,14 @@ func _ready() -> void:
 	else:
 		spell_list_ui.visible = false
 
-func _process(_delta: float) -> void:
-	if multiplayer.multiplayer_peer == null:
-		return
-	if multiplayer.multiplayer_peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
-		return
+func _process(delta: float) -> void:
 	if is_multiplayer_authority():
-		visual_root.position = Vector2.ZERO
+		update_aim()
+		network_rotation = visual_root.rotation
 		return
 	if animation_player.current_animation != network_anim:
 		animation_player.play(network_anim)
-		sprite.flip_h = network_flip_h
+	visual_root.rotation = network_rotation
 
 func _physics_process(delta):
 	if multiplayer.multiplayer_peer == null:
@@ -95,9 +96,9 @@ func _physics_process(delta):
 	if !is_multiplayer_authority():
 		return
 	check_weapon_switch()
+	attack_timer = max(attack_timer - delta, 0.0)
 	state.call(delta)
 	if is_multiplayer_authority():
-		#var world = get_tree().get_first_node_in_group("world")
 		var world = get_tree().get_first_node_in_group("world")
 		if world == null:
 			return
@@ -105,9 +106,30 @@ func _physics_process(delta):
 			return
 		if !world.can_send_rpc():
 			return
-		world.server_send_player_state.rpc(global_position, network_anim, network_flip_h)
-		#if world and world.can_send_rpc():
-			#world.server_send_player_state.rpc(global_position, network_anim, network_flip_h)
+		world.server_send_player_state.rpc(global_position, network_anim, network_rotation)
+
+func update_aim() -> void:
+	var controller_aim := get_controller_aim_direction()
+	if controller_aim != Vector2.ZERO:
+		aim_direction = controller_aim
+		using_controller_aim = true
+	else:
+		var mouse_pos := get_global_mouse_position()
+		var mouse_direction := global_position.direction_to(mouse_pos)
+		if mouse_direction.length() <= 0.01:
+			return
+		aim_direction = mouse_direction
+		using_controller_aim = false
+	visual_root.rotation = aim_direction.angle() + PI / 2
+
+func get_controller_aim_direction() -> Vector2:
+	var aim_vector := Vector2(
+		Input.get_axis("aim_left", "aim_right"),
+		Input.get_axis("aim_up", "aim_down")
+	)
+	if aim_vector.length() < controller_aim_deadzone:
+		return Vector2.ZERO
+	return aim_vector.normalized()
 
 func record_attack_direction(input_num: int):
 	spell_input_sequence.append(input_num)
@@ -120,14 +142,20 @@ func record_attack_direction(input_num: int):
 	refresh_spell_ui()
 
 func move_state(delta):
+	if Input.is_action_pressed("spell_mode"):
+		apply_friction(delta)
+		check_spell_mode_input()
+		update_animations(Vector2.ZERO)
+		attack_check()
+		move_and_slide()
+		return
 	var raw_input = Vector2(Input.get_axis("left","right"), Input.get_axis("up","down"))
 	var input_axis = snap_to_8_directions(raw_input)
 	if is_moving(input_axis):
 		apply_acceleration(delta, input_axis)
 	else:
 		apply_friction(delta)
-	#update_animations(input_axis)
-	check_spell_input()
+	update_animations(input_axis)
 	attack_check()
 	move_and_slide()
 
@@ -153,63 +181,32 @@ func apply_acceleration(delta, _input_axis):
 func apply_friction(delta):
 	velocity = velocity.move_toward(Vector2.ZERO, friction * delta)
 
-func update_animations(input_vector: Vector2):
-	if input_vector == Vector2.ZERO:
-		play_idle_animation()
+func update_animations(input_vector: Vector2) -> void:
+	if is_attacking:
 		return
-	last_facing = input_vector
-	if input_vector.x < 0:
-		sprite.flip_h = true
-	elif input_vector.x > 0:
-		sprite.flip_h = false
-	if input_vector.x != 0 and input_vector.y < 0:
-		play_anim("run_up_side")
-	elif input_vector.x != 0 and input_vector.y > 0:
-		play_anim("run_down_side")
-	elif input_vector.x != 0:
-		play_anim("run_side")
-	elif input_vector.y < 0:
-		play_anim("run_up")
+	if input_vector != Vector2.ZERO:
+		play_anim("walk")
 	else:
-		play_anim("run_down")
-
-func play_idle_animation():
-	if last_facing == Vector2.ZERO:
-		play_anim("idle_down")
-		return
-	if last_facing.x < 0:
-		sprite.flip_h = true
-	elif last_facing.x > 0:
-		sprite.flip_h = false
-	if last_facing.x != 0 and last_facing.y < 0:
-		play_anim("idle_up_side")
-	elif last_facing.x != 0 and last_facing.y > 0:
-		play_anim("idle_down_side")
-	elif last_facing.x != 0:
-		play_anim("idle_side")
-	elif last_facing.y < 0:
-		play_anim("idle_up")
-	else:
-		play_anim("idle_down")
+		play_anim("idle")
 
 func play_anim(anim_name: String):
 	if animation_player.current_animation != anim_name:
 		animation_player.play(anim_name)
 	if is_multiplayer_authority():
 		network_anim = anim_name
-		network_flip_h = sprite.flip_h
+		network_rotation = visual_root.rotation
 
 func equip_weapon(weapon_data: Dictionary):
 	equipped_weapon_data = weapon_data
 
-func check_spell_input():
-	if Input.is_action_just_pressed("spell_left"):
+func check_spell_mode_input():
+	if Input.is_action_just_pressed("left"):
 		record_attack_direction(0)
-	if Input.is_action_just_pressed("spell_up"):
+	if Input.is_action_just_pressed("up"):
 		record_attack_direction(1)
-	if Input.is_action_just_pressed("spell_right"):
+	if Input.is_action_just_pressed("right"):
 		record_attack_direction(2)
-	if Input.is_action_just_pressed("spell_down"):
+	if Input.is_action_just_pressed("down"):
 		record_attack_direction(3)
 
 func get_spell_data():
@@ -250,11 +247,11 @@ func get_spell_data():
 		recipe_form
 	)
 
-func cast_spell():
-	var spell_data = get_spell_data()
+func cast_spell(spell_data: Dictionary):
 	var direction = get_facing_direction()
+	var spawn_position = global_position + direction * spell_data["spawn_offset"]
 	spawn_spell.rpc(
-		spell_origin.global_position,
+		spawn_position,
 		direction,
 		spell_data["weapon"],
 		spell_data["element"],
@@ -271,7 +268,6 @@ func spawn_spell(
 	element: String,
 	form: String
 ) -> void:
-	# If this caster player is hidden on this client, their spell should also be hidden.
 	if !is_visible_in_tree() or !visual_root.visible:
 		return
 	var spell_data = all_spell_data.build_spell_data(
@@ -281,8 +277,8 @@ func spawn_spell(
 	)
 	var projectile = spell_data["scene"].instantiate()
 	get_tree().current_scene.add_child(projectile)
-	projectile.global_position = origin_position + direction * 18
-	projectile.setup_spell(direction, spell_data)
+	projectile.global_position = origin_position
+	projectile.setup_spell(direction.normalized(), spell_data)
 
 func refresh_spell_ui() -> void:
 	if !is_multiplayer_authority():
@@ -307,50 +303,35 @@ func has_relevant_spell_prefix(sequence: Array) -> bool:
 			return true
 	return false
 
-func get_facing_direction():
-	if last_facing == Vector2.ZERO:
-		return Vector2.DOWN
-	return last_facing.normalized()
+func get_facing_direction() -> Vector2:
+	return aim_direction.normalized()
 
 func attack_check():
-	if Input.is_action_pressed("attack_1") and !attack_locked:
-		attack_locked = true
-		cast_spell()
-		#play_attack_animation()
+	if Input.is_action_pressed("attack") and attack_timer <= 0.0:
+		var spell_data = get_spell_data()
+		cast_spell(spell_data)
+		attack_timer = spell_data["attack_cooldown"]
+		is_attacking = true
+		play_anim("attack")
 		state = attack_state
 
-func play_attack_animation():
-	if last_facing == Vector2.ZERO:
-		play_anim("attack_1_down")
-		return
-	if last_facing.x < 0:
-		sprite.flip_h = true
-	elif last_facing.x > 0:
-		sprite.flip_h = false
-	if last_facing.x != 0 and last_facing.y < 0:
-		play_anim("attack_1_up_side")
-	elif last_facing.x != 0 and last_facing.y > 0:
-		play_anim("attack_1_down_side")
-	elif last_facing.x != 0:
-		play_anim("attack_1_side")
-	elif last_facing.y < 0:
-		play_anim("attack_1_up")
-	else:
-		play_anim("attack_1_down")
-
 func attack_state(delta):
-	check_spell_input()
-	apply_friction(delta)
+	if Input.is_action_pressed("spell_mode"):
+		apply_friction(delta)
+		check_spell_mode_input()
+	else:
+		var raw_input = Vector2(Input.get_axis("left", "right"), Input.get_axis("up", "down"))
+		var input_axis = snap_to_8_directions(raw_input)
+		if is_moving(input_axis):
+			apply_acceleration(delta, input_axis)
+		else:
+			apply_friction(delta)
+	update_aim()
+	attack_check()
 	move_and_slide()
-	if animation_player.is_playing() and animation_player.current_animation.contains("attack"):
-		return
-	attack_locked = false
-	state = move_state
-
-#func snap_visual_to_body():
-	#if has_node("visual_root"):
-		#$visual_root.position = Vector2.ZERO
-	#reset_physics_interpolation()
+	if !Input.is_action_pressed("attack"):
+		is_attacking = false
+		state = move_state
 
 func _on_roof_sense_body_entered(body: Node2D) -> void:
 	body.make_translucent(self, true)

@@ -72,49 +72,63 @@ const FORMS = {
 		"damage": 1.0,
 		"speed": 1.0,
 		"size": 1.0,
-		"lifetime": 1.0
+		"lifetime": 1.0,
+		"attack_cooldown": 0.35,
+		"spawn_offset": 18.0
 	},
 	"ball": {
 		"scene": preload("res://scenes/spells/ball_projectile.tscn"),
 		"damage": 1.25,
 		"speed": 0.65,
 		"size": 1.4,
-		"lifetime": 1.1
+		"lifetime": 1.1,
+		"attack_cooldown": 0.5,
+		"spawn_offset": 22.0
 	},
 	"bolt": {
 		"scene": preload("res://scenes/spells/bolt_projectile.tscn"),
 		"damage": 0.9,
 		"speed": 1.5,
 		"size": 0.8,
-		"lifetime": 0.85
+		"lifetime": 0.85,
+		"attack_cooldown": 0.22,
+		"spawn_offset": 18.0
 	},
 	"rain": {
 		"scene": preload("res://scenes/spells/rain_projectile.tscn"),
 		"damage": 0.75,
 		"speed": 1.2,
 		"size": 0.9,
-		"lifetime": 1.0
+		"lifetime": 1.0,
+		"attack_cooldown": 0.4,
+		"spawn_offset": 20.0
 	},
 	"beam": {
 		"scene": preload("res://scenes/spells/beam_projectile.tscn"),
 		"damage": 0.8,
 		"speed": 2.0,
 		"size": 0.7,
-		"lifetime": 0.55
+		"lifetime": 0.55,
+		"attack_cooldown": 0.15,
+		"spawn_offset": 20.0
 	},
 	"burst": {
 		"scene": preload("res://scenes/spells/burst_projectile.tscn"),
 		"damage": 1.1,
 		"speed": 0.0,
 		"size": 1.8,
-		"lifetime": 0.35
+		"lifetime": 0.35,
+		"attack_cooldown": 0.65,
+		"spawn_offset": 0.0
 	},
 	"cone": {
 		"scene": preload("res://scenes/spells/cone_projectile.tscn"),
 		"damage": 0.95,
 		"speed": 0.75,
 		"size": 1.5,
-		"lifetime": 0.45
+		"lifetime": 0.45,
+		"attack_cooldown": 0.35,
+		"spawn_offset": 18.0
 	},
 }
 
@@ -131,7 +145,9 @@ func build_spell_data(weapon: String, element: String, form: String) -> Dictiona
 		"speed": 250.0 * weapon_data["speed"] * element_data["speed"] * form_data["speed"],
 		"size": 1.0 * weapon_data.get("size", 1.0) * form_data.get("size", 1.0),
 		"lifetime": 2.0 * weapon_data.get("lifetime", 1.0) * form_data.get("lifetime", 1.0),
-		"color": element_data["color"]
+		"attack_cooldown": form_data.get("attack_cooldown", 0.35),
+		"spawn_offset": form_data.get("spawn_offset", 18.0),
+		"color": element_data["color"],
 	}
 
 func build_weapon_spell_data(weapon_id: String, form_index: int) -> Dictionary:
