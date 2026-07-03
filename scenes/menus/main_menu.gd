@@ -7,17 +7,41 @@ const WORLD_SCENE = "res://scenes/world.tscn"
 @onready var refresh_button: Button = $margin_container/v_box_container/margin_container/v_box_container/v_box_container/refresh_button
 @onready var lobby_v_box: VBoxContainer = $margin_container/v_box_container/server_list_background/margin_container2/scroll_container/lobby_v_box
 
+@onready var private_host_name_line_edit: LineEdit = $margin_container/v_box_container/margin_container/v_box_container/h_box_container2/private_host_name_line_edit
+@onready var private_host_password_line_edit: LineEdit = $margin_container/v_box_container/margin_container/v_box_container/h_box_container2/private_host_password_line_edit
+@onready var private_join_name_line_edit: LineEdit = $margin_container/v_box_container/margin_container/v_box_container/h_box_container2/private_host_name_line_edit
+@onready var private_join_password_line_edit: LineEdit = $margin_container/v_box_container/margin_container/v_box_container/h_box_container2/private_host_password_line_edit
+
 func _ready() -> void:
 	if !GlobalSteam.show_lobbies.is_connected(_show_lobbies):
 		GlobalSteam.show_lobbies.connect(_show_lobbies)
 	if !GlobalSteam.multiplayer_ready.is_connected(_on_multiplayer_ready):
 		GlobalSteam.multiplayer_ready.connect(_on_multiplayer_ready)
 
-func _on_host_button_pressed() -> void:
-	DiscordPresence.set_host_presence()
-	print("Host Button Pressed")
-	host_button.disabled = true
-	GlobalSteam.host_lobby()
+#func _on_host_button_pressed() -> void:
+	#DiscordPresence.set_host_presence()
+	#print("Host Button Pressed")
+	#host_button.disabled = true
+	#GlobalSteam.host_lobby()
+
+func _on_host_public_button_pressed() -> void:
+	GlobalSteam.host_lobby("public", "", "")
+
+func _on_host_private_button_pressed() -> void:
+	var server_name = private_host_name_line_edit.text
+	var password = private_host_password_line_edit.text
+	if server_name.strip_edges() == "" or password.strip_edges() == "":
+		print("Private games need a server name and password.")
+		return
+	GlobalSteam.host_lobby("private", server_name, password)
+
+func _on_join_private_button_pressed() -> void:
+	GlobalSteam.requestLobbyList()
+	await get_tree().create_timer(0.5).timeout
+	GlobalSteam.join_private_lobby(
+		private_join_name_line_edit.text,
+		private_join_password_line_edit.text
+	)
 
 func _on_refresh_button_pressed() -> void:
 	GlobalSteam.requestLobbyList()

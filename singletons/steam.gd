@@ -24,6 +24,10 @@ var is_host = false
 var is_joining = false
 var multiplayer_signals_connected = false
 
+var pending_lobby_visibility := "public"
+var pending_lobby_name := ""
+var pending_lobby_password := ""
+
 var logged_in_id
 var logged_in_user
 var leaderboard_handle
@@ -139,10 +143,13 @@ func get_lobby_owner_peer_id() -> int:
 		return 1
 	return Steam.getLobbyOwner(lobby_id)
 
-func host_lobby():
+func host_lobby(visibility := "public", server_name := "", password := ""):
 	print("Attempting to host")
-	Steam.createLobby(Steam.LobbyType.LOBBY_TYPE_PUBLIC, 16)
-	#Steam.createLobby(Steam.LobbyType.LOBBY_TYPE_FRIENDS_ONLY, 16)
+	pending_lobby_visibility = visibility
+	pending_lobby_name = server_name.strip_edges()
+	pending_lobby_password = password.strip_edges()
+	var lobby_type = Steam.LobbyType.LOBBY_TYPE_PUBLIC
+	Steam.createLobby(lobby_type, 16)
 	is_host = true
 
 func _on_lobby_created(result: int, _lobby_id: int):
@@ -151,7 +158,14 @@ func _on_lobby_created(result: int, _lobby_id: int):
 		self.lobby_id = _lobby_id
 		
 		Steam.setLobbyJoinable(_lobby_id,true)
-		Steam.setLobbyData(_lobby_id, "name", logged_in_user)
+		
+		var final_name = pending_lobby_name
+		if final_name == "":
+			final_name = "%s's Game" % logged_in_user
+		Steam.setLobbyData(_lobby_id, "name", final_name)
+		Steam.setLobbyData(_lobby_id, "host_name", logged_in_user)
+		Steam.setLobbyData(_lobby_id, "visibility", pending_lobby_visibility)
+		Steam.setLobbyData(_lobby_id, "password", pending_lobby_password)
 		
 		peer = SteamMultiplayerPeer.new()
 		peer.create_host(0)
@@ -224,7 +238,10 @@ func _remove_player(id : int):
 func requestLobbyList():
 	Steam.requestLobbyList()
 
+var cached_lobby_list := []
+
 func _on_lobby_match_list(_lobby_list : Array):
+	cached_lobby_list = _lobby_list
 	show_lobbies.emit(_lobby_list)
 
 func steam_set_stat_int(stat_name,value):
@@ -238,3 +255,20 @@ func steam_get_stat_int(stat_name):
 func steam_get_global_stat_int(stat_name):
 	var get_stat = Steam.getGlobalStatInt(stat_name)
 	return get_stat
+
+func join_public_lobby(_lobby_id: int):
+	if Steam.getLobbyData(_lobby_id, "visibility") != "public":
+		return
+	join_lobby(_lobby_id)
+
+func join_private_lobby(server_name: String, password: String):
+	var wanted_name = server_name.strip_edges()
+	var wanted_password = password.strip_edges()
+	for lobby in cached_lobby_list:
+		var lobby_name = Steam.getLobbyData(lobby, "name")
+		var visibility = Steam.getLobbyData(lobby, "visibility")
+		var lobby_password = Steam.getLobbyData(lobby, "password")
+		if visibility == "private" and lobby_name == wanted_name and lobby_password == wanted_password:
+			join_lobby(lobby)
+			return
+	print("No matching private lobby found.")

@@ -134,18 +134,37 @@ func remove_player_locally(peer_id: int):
 			#sync.set_visibility_for(peer_id, true)
 		#sync.update_visibility()
 
+#func update_all_synchronizer_visibility(peer_ids: Array) -> void:
+	#if !world.multiplayer.is_server():
+		#return
+	#var my_id = world.multiplayer.get_unique_id()
+	#for player in world.players.get_children():
+		#var sync = player.get_node_or_null("multiplayer_synchronizer")
+		#if sync == null:
+			#continue
+		#sync.public_visibility = false
+		#for connected_id in world.multiplayer.get_peers():
+			#if connected_id != my_id:
+				#sync.set_visibility_for(connected_id, false)
+		#for peer_id in peer_ids:
+			#if peer_id == my_id:
+				#continue
+			#sync.set_visibility_for(peer_id, true)
+		#sync.update_visibility()
+
 func update_all_synchronizer_visibility(peer_ids: Array) -> void:
-	var my_id = world.multiplayer.get_unique_id()
+	if !world.multiplayer.is_server():
+		return
+	var connected_peers = world.multiplayer.get_peers()
 	for player in world.players.get_children():
 		var sync = player.get_node_or_null("multiplayer_synchronizer")
 		if sync == null:
 			continue
 		sync.public_visibility = false
-		for connected_id in world.multiplayer.get_peers():
-			if connected_id != my_id:
-				sync.set_visibility_for(connected_id, false)
+		for connected_id in connected_peers:
+			sync.set_visibility_for(connected_id, false)
 		for peer_id in peer_ids:
-			if peer_id == my_id:
+			if !connected_peers.has(peer_id):
 				continue
 			sync.set_visibility_for(peer_id, true)
 		sync.update_visibility()

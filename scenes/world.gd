@@ -844,7 +844,8 @@ func client_refresh_players(known_ids, visible_ids, sync_ready_ids):
 			spawn_player_locally(peer_id)
 	await get_tree().process_frame
 	await get_tree().process_frame
-	world_players.update_all_synchronizer_visibility(sync_ready_ids)
+	if multiplayer.is_server():
+		world_players.update_all_synchronizer_visibility(sync_ready_ids)
 	current_visible_ids.clear()
 	var visible_lookup = {}
 	for peer_id in visible_ids:
