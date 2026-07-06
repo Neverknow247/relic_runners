@@ -1,0 +1,79 @@
+[gd_scene format=3 uid="uid://3xnwhv20phk6"]
+
+[ext_resource type="Theme" uid="uid://bwnv8b362a2w7" path="res://menus/menu_theme.tres" id="1_8nx1o"]
+[ext_resource type="Script" uid="uid://dhbmqta80mq4p" path="res://menus/new_version_screen.gd" id="2_jltg0"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_2u4hi"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_5xa20"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_yo40b"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_ebbfc"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_dbgml"]
+
+[node name="new_version_screen" type="Control" unique_id=1539831339]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("1_8nx1o")
+script = ExtResource("2_jltg0")
+
+[node name="TextureRect" type="TextureRect" parent="." unique_id=737368898]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="CenterContainer" type="CenterContainer" parent="." unique_id=1873757431]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer" unique_id=239943035]
+layout_mode = 2
+
+[node name="warning" type="Label" parent="CenterContainer/VBoxContainer" unique_id=1166786434]
+layout_mode = 2
+text = "I'm sorry.
+The version of your save is newer than
+this version of the game. Please update
+your game and restart. Thank you!"
+horizontal_alignment = 1
+
+[node name="exit_button" type="Button" parent="CenterContainer/VBoxContainer" unique_id=1743381140]
+layout_mode = 2
+text = "Exit Game"
+
+[node name="Button" type="Button" parent="." unique_id=501341879]
+layout_mode = 0
+offset_left = 1456.0
+offset_top = 504.0
+offset_right = 1680.0
+offset_bottom = 576.0
+theme_override_styles/normal = SubResource("StyleBoxEmpty_2u4hi")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_5xa20")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_yo40b")
+theme_override_styles/disabled = SubResource("StyleBoxEmpty_ebbfc")
+theme_override_styles/focus = SubResource("StyleBoxEmpty_dbgml")
+
+[node name="TextEdit" type="TextEdit" parent="." unique_id=1206566288]
+visible = false
+layout_mode = 0
+offset_left = 1408.0
+offset_top = 968.0
+offset_right = 1920.0
+offset_bottom = 1080.0
+
+[connection signal="pressed" from="CenterContainer/VBoxContainer/exit_button" to="." method="_on_exit_button_pressed"]
+[connection signal="pressed" from="Button" to="." method="_on_button_pressed"]
+[connection signal="text_changed" from="TextEdit" to="." method="_on_text_edit_text_changed"]

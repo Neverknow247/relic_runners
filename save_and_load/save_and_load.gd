@@ -59,7 +59,7 @@ func load_data_from_file():
 		file.close()
 		return save_data
 	elif str(save_data.version) > str(default_save_data.version):
-		get_tree().change_scene_to_file("res://menus/new_version_screen.tscn")
+		get_tree().change_scene_to_file("res://scenes/menus/new_version_screen.tscn")
 		file.close()
 		return false
 
