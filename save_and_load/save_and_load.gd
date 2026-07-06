@@ -65,7 +65,7 @@ func load_data_from_file():
 
 func check_backups(save_data):
 	var versions = []
-	for i in 3:
+	for i in backup_num:
 		if FileAccess.file_exists(BACKUP_SAVE_DATA_PATH+str(i+1)+".dat"):
 			var file = FileAccess.open(BACKUP_SAVE_DATA_PATH+str(i+1)+".dat", FileAccess.READ)
 			var data = file.get_var()
