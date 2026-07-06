@@ -559,3 +559,27 @@ func refresh_visibility_for_all():
 			client_refresh_players(known_ids, visible_ids, sync_ready_ids)
 		else:
 			client_refresh_players.rpc_id(viewer_id, known_ids, visible_ids, sync_ready_ids)
+
+@rpc("any_peer", "call_remote", "reliable")
+func server_request_spawn_spell(origin_position: Vector2, direction: Vector2, weapon: String, element: String, form: String) -> void:
+	if !multiplayer.is_server():
+		return
+	var caster_id := multiplayer.get_remote_sender_id()
+	if caster_id == 0:
+		caster_id = multiplayer.get_unique_id()
+	var server_id := multiplayer.get_unique_id()
+	for viewer_id in player_locations.keys():
+		if !can_players_see_each_other(viewer_id, caster_id):
+			continue
+		if viewer_id == server_id:
+			client_spawn_spell(caster_id, origin_position, direction, weapon, element, form)
+		else:
+			client_spawn_spell.rpc_id(viewer_id, caster_id, origin_position, direction, weapon, element, form)
+
+@rpc("authority", "call_remote", "reliable")
+func client_spawn_spell(caster_id: int, origin_position: Vector2, direction: Vector2, weapon: String, element: String, form: String) -> void:
+	if !players.has_node(str(caster_id)):
+		return
+	var caster = players.get_node(str(caster_id))
+	if caster.has_method("spawn_spell_local"):
+		caster.spawn_spell_local(origin_position, direction, weapon, element, form)

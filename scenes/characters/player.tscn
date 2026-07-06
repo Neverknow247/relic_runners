@@ -12,12 +12,12 @@ properties/0/replication_mode = 1
 properties/1/path = NodePath(".:network_anim")
 properties/1/spawn = true
 properties/1/replication_mode = 1
-properties/2/path = NodePath(".:network_flip_h")
+properties/2/path = NodePath(".:network_rotation")
 properties/2/spawn = true
 properties/2/replication_mode = 1
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_dyp2m"]
-radius = 8.0
+radius = 7.0
 
 [sub_resource type="Animation" id="Animation_dyp2m"]
 resource_name = "attack"

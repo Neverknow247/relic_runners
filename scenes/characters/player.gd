@@ -79,7 +79,11 @@ func _ready() -> void:
 	else:
 		spell_list_ui.visible = false
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
+	if multiplayer.multiplayer_peer == null:
+		return
+	if multiplayer.multiplayer_peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
+		return
 	if is_multiplayer_authority():
 		update_aim()
 		network_rotation = visual_root.rotation
@@ -247,29 +251,56 @@ func get_spell_data():
 		recipe_form
 	)
 
+#func cast_spell(spell_data: Dictionary):
+	#var direction = get_facing_direction()
+	#var spawn_position = global_position + direction * spell_data["spawn_offset"]
+	#spawn_spell.rpc(
+		#spawn_position,
+		#direction,
+		#spell_data["weapon"],
+		#spell_data["element"],
+		#spell_data["form"]
+	#)
+	#spell_input_sequence.clear()
+	#refresh_spell_ui()
+
 func cast_spell(spell_data: Dictionary):
 	var direction = get_facing_direction()
 	var spawn_position = global_position + direction * spell_data["spawn_offset"]
-	spawn_spell.rpc(
-		spawn_position,
-		direction,
-		spell_data["weapon"],
-		spell_data["element"],
-		spell_data["form"]
-	)
+	var world = get_tree().get_first_node_in_group("world")
+	if world == null:
+		return
+	if world.shutting_down:
+		return
+	if !world.can_send_rpc():
+		return
+	if multiplayer.is_server():
+		world.server_request_spawn_spell(
+			spawn_position,
+			direction,
+			spell_data["weapon"],
+			spell_data["element"],
+			spell_data["form"]
+		)
+	else:
+		world.server_request_spawn_spell.rpc(
+			spawn_position,
+			direction,
+			spell_data["weapon"],
+			spell_data["element"],
+			spell_data["form"]
+		)
 	spell_input_sequence.clear()
 	refresh_spell_ui()
 
-@rpc("any_peer", "call_local", "reliable")
-func spawn_spell(
+#@rpc("any_peer", "call_local", "reliable")
+func spawn_spell_local(
 	origin_position: Vector2,
 	direction: Vector2,
 	weapon: String,
 	element: String,
 	form: String
 ) -> void:
-	if !is_visible_in_tree() or !visual_root.visible:
-		return
 	var spell_data = all_spell_data.build_spell_data(
 		weapon,
 		element,

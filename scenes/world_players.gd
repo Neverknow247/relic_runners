@@ -45,19 +45,16 @@ func apply_player_cosmetics(peer_id: int, cosmetics: Dictionary) -> void:
 	if !world.players.has_node(str(peer_id)):
 		return
 	var player = world.players.get_node(str(peer_id))
-	var sprite_index: int = cosmetics["sprite_index"]
 	var color: Color = cosmetics["color"]
 	var player_name: String = cosmetics.get("name", "")
 	if player_name.strip_edges() == "":
 		player_name = "Player %s" % peer_id
-	player.get_node("visual_root/sprite").texture = world.PLAYER_SPRITES[sprite_index]
 	player.get_node("name_label").modulate = color
+	player.get_node("visual_root").modulate = color
 	var label = player.get_node("name_label")
 	if label:
 		label.text = player_name
 		label.z_index = 100
-	else:
-		print("Missing name label on player: ", peer_id)
 	if peer_id == world.multiplayer.get_unique_id():
 		world.player_initialized_positions[peer_id] = true
 		world.current_visible_ids[peer_id] = true
