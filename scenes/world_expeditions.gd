@@ -46,6 +46,12 @@ func launch_expedition(expedition_id: String):
 	world.expedition_zone = target["zone"]
 	world.expedition_room = target["room"]
 
+	# Fresh seed every launch so the room's enemy layout (enemy_spawner.gd)
+	# is actually different each time, not just different-per-room. Sent
+	# before the location-change RPCs below so it lands before any peer's
+	# copy of the room scene finishes loading and reads it.
+	world.broadcast_expedition_seed.rpc(randi())
+
 	for peer_id in world.player_locations.keys():
 		world.server_change_player_location(
 			peer_id,

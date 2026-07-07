@@ -74,7 +74,7 @@ const FORMS = {
 		"size": 1.0,
 		"lifetime": 1.0,
 		"attack_cooldown": 0.35,
-		"spawn_offset": 18.0
+		"spawn_offset": 72.0
 	},
 	"ball": {
 		"scene": preload("res://scenes/spells/ball_projectile.tscn"),
@@ -83,7 +83,7 @@ const FORMS = {
 		"size": 1.4,
 		"lifetime": 1.1,
 		"attack_cooldown": 0.5,
-		"spawn_offset": 22.0
+		"spawn_offset": 88.0
 	},
 	"bolt": {
 		"scene": preload("res://scenes/spells/bolt_projectile.tscn"),
@@ -92,7 +92,7 @@ const FORMS = {
 		"size": 0.8,
 		"lifetime": 0.85,
 		"attack_cooldown": 0.22,
-		"spawn_offset": 18.0
+		"spawn_offset": 72.0
 	},
 	"rain": {
 		"scene": preload("res://scenes/spells/rain_projectile.tscn"),
@@ -101,7 +101,7 @@ const FORMS = {
 		"size": 0.9,
 		"lifetime": 1.0,
 		"attack_cooldown": 0.4,
-		"spawn_offset": 20.0
+		"spawn_offset": 80.0
 	},
 	"beam": {
 		"scene": preload("res://scenes/spells/beam_projectile.tscn"),
@@ -110,7 +110,7 @@ const FORMS = {
 		"size": 0.7,
 		"lifetime": 0.55,
 		"attack_cooldown": 0.15,
-		"spawn_offset": 20.0
+		"spawn_offset": 80.0
 	},
 	"burst": {
 		"scene": preload("res://scenes/spells/burst_projectile.tscn"),
@@ -128,9 +128,63 @@ const FORMS = {
 		"size": 1.5,
 		"lifetime": 0.45,
 		"attack_cooldown": 0.35,
-		"spawn_offset": 18.0
+		"spawn_offset": 72.0
 	},
 }
+
+# "Paradox tournament" type matchups. Full future roster (7 weapons, 7
+# elements), keyed by real name — letters below match the reference table:
+#   A: tome/fire        B: totem/earth        C: instrument/lightning
+#   D: lantern/water    E: orb/holy           F: staff/necrotic
+#   G: wand/air
+# Only tome/orb/wand and fire/holy/air have real stats (WEAPONS/ELEMENTS)
+# right now, but the full beats-table is defined up front so adding the
+# other 4 of each later is just adding their WEAPONS/ELEMENTS/FORMS entries
+# — no matchup logic changes needed.
+const WEAPON_BEATS := {
+	"tome": ["totem", "instrument", "orb"],
+	"totem": ["instrument", "lantern", "staff"],
+	"instrument": ["lantern", "orb", "wand"],
+	"lantern": ["orb", "staff", "tome"],
+	"orb": ["staff", "wand", "totem"],
+	"staff": ["wand", "tome", "instrument"],
+	"wand": ["tome", "totem", "lantern"],
+}
+
+const ELEMENT_BEATS := {
+	"fire": ["earth", "lightning", "holy"],
+	"earth": ["lightning", "water", "necrotic"],
+	"lightning": ["water", "holy", "air"],
+	"water": ["holy", "necrotic", "fire"],
+	"holy": ["necrotic", "air", "earth"],
+	"necrotic": ["air", "fire", "lightning"],
+	"air": ["fire", "earth", "water"],
+}
+
+const ADVANTAGE_BONUS := 0.5
+const DISADVANTAGE_PENALTY := 0.25
+
+static func get_type_modifier(beats_table: Dictionary, attacker: String, defender: String) -> float:
+	if attacker == defender:
+		return 0.0
+	var attacker_beats: Array = beats_table.get(attacker, [])
+	if attacker_beats.has(defender):
+		return ADVANTAGE_BONUS
+	var defender_beats: Array = beats_table.get(defender, [])
+	if defender_beats.has(attacker):
+		return -DISADVANTAGE_PENALTY
+	return 0.0
+
+static func get_damage_multiplier(
+	attacker_weapon: String,
+	attacker_element: String,
+	defender_weapon: String,
+	defender_element: String
+) -> float:
+	var multiplier := 1.0
+	multiplier += get_type_modifier(WEAPON_BEATS, attacker_weapon, defender_weapon)
+	multiplier += get_type_modifier(ELEMENT_BEATS, attacker_element, defender_element)
+	return multiplier
 
 func build_spell_data(weapon: String, element: String, form: String) -> Dictionary:
 	var weapon_data = WEAPONS[weapon]
@@ -142,11 +196,11 @@ func build_spell_data(weapon: String, element: String, form: String) -> Dictiona
 		"element": element,
 		"form": form,
 		"damage": 10.0 * weapon_data["damage"] * element_data["damage"] * form_data["damage"],
-		"speed": 250.0 * weapon_data["speed"] * element_data["speed"] * form_data["speed"],
+		"speed": 1000.0 * weapon_data["speed"] * element_data["speed"] * form_data["speed"],
 		"size": 1.0 * weapon_data.get("size", 1.0) * form_data.get("size", 1.0),
 		"lifetime": 2.0 * weapon_data.get("lifetime", 1.0) * form_data.get("lifetime", 1.0),
 		"attack_cooldown": form_data.get("attack_cooldown", 0.35),
-		"spawn_offset": form_data.get("spawn_offset", 18.0),
+		"spawn_offset": form_data.get("spawn_offset", 72.0),
 		"color": element_data["color"],
 	}
 

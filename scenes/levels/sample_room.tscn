@@ -5,6 +5,7 @@
 [ext_resource type="TileSet" uid="uid://bbdo68j181ixe" path="res://assets/tilesets/roof_decorations.tres" id="8_e0v7x"]
 [ext_resource type="PackedScene" uid="uid://bvtb5q00mduby" path="res://scenes/items/door.tscn" id="9_4tg0c"]
 [ext_resource type="PackedScene" uid="uid://xuo7vq4nsbrj" path="res://scenes/items/expedition_door.tscn" id="10_c2qyi"]
+[ext_resource type="Script" path="res://scenes/levels/hide_on_ready.gd" id="99_hideready"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ik6cc"]
 size = Vector2(16, 16)
@@ -61,6 +62,7 @@ tile_map_data = PackedByteArray("AAAOAPT/AAACAAAAAAA=")
 tile_set = ExtResource("8_e0v7x")
 
 [node name="navigation" type="Node2D" parent="." unique_id=1263263874]
+script = ExtResource("99_hideready")
 
 [node name="doors" type="Node2D" parent="." unique_id=1898977763]
 

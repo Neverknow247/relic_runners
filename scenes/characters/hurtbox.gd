@@ -1,6 +1,8 @@
 extends Area2D
 class_name Hurtbox
 
+var owner_id: int = 0
+
 var is_invincible = false:
 	set(value):
 		is_invincible = value

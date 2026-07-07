@@ -21,8 +21,8 @@ func start():
 	if await SaveAndLoad.load_data():
 		stats["save_data"]["stats"]["power_on_count"] += 1
 		stats.rng.randomize()
-	await SaveAndLoad.save_all()
-	finish()
+		await SaveAndLoad.save_all()
+		finish()
 
 func finish():
 	transition.fade_out()

@@ -35,9 +35,9 @@ func refresh() -> void:
 	for child in spell_list.get_children():
 		child.queue_free()
 
-	var weapon_id: String = player.equipped_weapon_data["id"]
-	var element: String = player.equipped_weapon_data["element"]
-	var forms: Array = player.equipped_weapon_data["forms"]
+	var weapon_id: String = player.get_equipped_weapon().type
+	var element: String = player.get_equipped_weapon().element
+	var forms: Array = player.get_equipped_weapon().forms
 	var current_sequence: Array = player.spell_input_sequence
 
 	title_label.text = "%s / %s" % [weapon_id.capitalize(), element.capitalize()]

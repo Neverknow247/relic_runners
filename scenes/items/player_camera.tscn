@@ -3,6 +3,6 @@
 [ext_resource type="PackedScene" uid="uid://dd60brf5xim6d" path="res://ui/spell_list_ui.tscn" id="1_3wdvw"]
 
 [node name="player_camera" type="Camera2D" unique_id=563461302]
-zoom = Vector2(6, 6)
+zoom = Vector2(3, 3)
 
 [node name="spell_list_ui" parent="." unique_id=622022064 instance=ExtResource("1_3wdvw")]

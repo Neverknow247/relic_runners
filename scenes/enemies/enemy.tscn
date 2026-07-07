@@ -1,0 +1,90 @@
+[gd_scene format=3 uid="uid://bus6i1df6svqv"]
+
+[ext_resource type="Script" uid="uid://dav5f1af77ave" path="res://scenes/enemies/enemy.gd" id="1_enemy"]
+[ext_resource type="PackedScene" uid="uid://duy4yhammffs2" path="res://scenes/characters/hurtbox.tscn" id="2_hurtbox"]
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_enemy"]
+properties/0/path = NodePath(".:position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+properties/1/path = NodePath(".:health")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+properties/2/path = NodePath(".:is_dead")
+properties/2/spawn = true
+properties/2/replication_mode = 1
+properties/3/path = NodePath(".:attacker_weapon")
+properties/3/spawn = true
+properties/3/replication_mode = 1
+properties/4/path = NodePath(".:attacker_element")
+properties/4/spawn = true
+properties/4/replication_mode = 1
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_body"]
+radius = 16.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_hurtbox"]
+radius = 16.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_detection"]
+radius = 448.0
+
+[node name="enemy" type="CharacterBody2D" unique_id=569062249]
+collision_layer = 32
+collision_mask = 33
+motion_mode = 1
+script = ExtResource("1_enemy")
+
+[node name="multiplayer_synchronizer" type="MultiplayerSynchronizer" parent="." unique_id=1825287188]
+replication_config = SubResource("SceneReplicationConfig_enemy")
+
+[node name="collision_shape_2d" type="CollisionShape2D" parent="." unique_id=163265599]
+shape = SubResource("CircleShape2D_body")
+
+[node name="visual_root" type="Node2D" parent="." unique_id=885034717]
+
+[node name="color_rect" type="ColorRect" parent="visual_root" unique_id=79717482]
+offset_left = -16.0
+offset_top = -16.0
+offset_right = 16.0
+offset_bottom = 16.0
+color = Color(0.7, 0.1, 0.1, 1)
+
+[node name="facing_indicator" type="Node2D" parent="visual_root" unique_id=2011711917]
+
+[node name="dot" type="ColorRect" parent="visual_root/facing_indicator" unique_id=1531389057]
+offset_left = -8.0
+offset_top = -8.0
+offset_right = 8.0
+offset_bottom = 8.0
+
+[node name="weapon_label" type="Label" parent="visual_root" unique_id=156039005]
+offset_left = -32.0
+offset_top = -32.0
+offset_right = 32.0
+offset_bottom = 32.0
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+theme_override_colors/font_outline_color = Color(1, 1, 1, 1)
+theme_override_constants/outline_size = 8
+theme_override_font_sizes/font_size = 24
+text = "T"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="hurtbox" parent="." unique_id=1860165535 instance=ExtResource("2_hurtbox")]
+collision_layer = 8
+
+[node name="collision_shape_2d" type="CollisionShape2D" parent="hurtbox" unique_id=1366235036]
+shape = SubResource("CircleShape2D_hurtbox")
+
+[node name="detection_area" type="Area2D" parent="." unique_id=699383536]
+collision_layer = 0
+collision_mask = 4
+
+[node name="collision_shape_2d" type="CollisionShape2D" parent="detection_area" unique_id=161218754]
+shape = SubResource("CircleShape2D_detection")
+
+[node name="nav_agent" type="NavigationAgent2D" parent="." unique_id=381640148]
+path_desired_distance = 48.0
+target_desired_distance = 16.0
+radius = 32.0

@@ -4,6 +4,7 @@
 [ext_resource type="Texture2D" uid="uid://dwjlops2ib8yc" path="res://assets/art/pixel_quest/Pixel Quest - The Village/Pixel Quest - The Village/Village Exterior/Trees/Pine1.png" id="2_ig2mh"]
 [ext_resource type="Texture2D" uid="uid://bn6o0at7vgnt3" path="res://assets/art/pixel_quest/Pixel Quest - The Village/Pixel Quest - The Village/Village Exterior/Trees/Pine2.png" id="3_8jaok"]
 [ext_resource type="PackedScene" uid="uid://bvtb5q00mduby" path="res://scenes/items/door.tscn" id="3_phwmj"]
+[ext_resource type="Script" path="res://scenes/levels/hide_on_ready.gd" id="99_hideready"]
 [ext_resource type="Texture2D" uid="uid://dexk8adh6q2yq" path="res://assets/art/pixel_quest/Pixel Quest - The Village/Pixel Quest - The Village/Village Exterior/Trees/Pine3.png" id="4_5a63h"]
 [ext_resource type="Texture2D" uid="uid://ogf72g17opmm" path="res://assets/art/pixel_quest/Pixel Quest - The Village/Pixel Quest - The Village/Village Exterior/Trees/Pine4.png" id="5_7gfcb"]
 [ext_resource type="Texture2D" uid="uid://ua0l5c2ubfhv" path="res://assets/art/pixel_quest/Pixel Quest - The Village/Pixel Quest - The Village/Village Exterior/Trees/Pine5.png" id="6_cn2mi"]
@@ -109,6 +110,7 @@ script = ExtResource("11_0hr3h")
 tile_set = ExtResource("12_wxb1j")
 
 [node name="navigation" type="Node2D" parent="." unique_id=407197934]
+script = ExtResource("99_hideready")
 
 [node name="doors" type="Node2D" parent="." unique_id=12620854]
 

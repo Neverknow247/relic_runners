@@ -7,6 +7,12 @@ func setup(_world):
 
 func load_location_locally(zone: String, room: String):
 	for child in world.zone_container.get_children():
+		# Snapshot this room's enemies (who's dead, where survivors were
+		# left) before it's freed, so re-entering it later this same
+		# expedition can restore it instead of getting a fresh roll.
+		var old_enemies = child.get_node_or_null("enemies")
+		if old_enemies and old_enemies.has_method("save_state"):
+			old_enemies.save_state()
 		world.zone_container.remove_child(child)
 		child.queue_free()
 	for child in world.floor_container.get_children():
@@ -20,6 +26,11 @@ func load_location_locally(zone: String, room: String):
 		return
 	var packed_scene = load(world.ZONE_SCENES[key])
 	var scene_instance = packed_scene.instantiate()
+	# Set before add_child() (i.e. before _ready() runs) so enemy_spawner.gd
+	# knows which room it is and can restore this room's saved state.
+	var new_enemies = scene_instance.get_node_or_null("enemies")
+	if new_enemies and "room_key" in new_enemies:
+		new_enemies.room_key = key
 	world.zone_container.add_child(scene_instance)
 	var _floor = scene_instance.get_node_or_null("floor_tiles")
 	if _floor:

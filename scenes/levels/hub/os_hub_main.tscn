@@ -5,6 +5,7 @@
 [ext_resource type="TileSet" uid="uid://dua13nhypkxs6" path="res://assets/tilesets/wall_bases.tres" id="3_jaa0n"]
 [ext_resource type="TileSet" uid="uid://cfhpqedp8vlos" path="res://assets/tilesets/wall_decorations.tres" id="4_wk2xd"]
 [ext_resource type="TileSet" uid="uid://bc36pd3du2jlc" path="res://assets/tilesets/wall_tops.tres" id="5_jh6j6"]
+[ext_resource type="Script" path="res://scenes/levels/hide_on_ready.gd" id="99_hideready"]
 [ext_resource type="TileSet" uid="uid://bsc7eqpgx4mqv" path="res://assets/tilesets/roofs.tres" id="6_mrs8f"]
 [ext_resource type="Script" uid="uid://c6d6yv6tgnx5d" path="res://scenes/levels/roofs.gd" id="7_yf1iu"]
 [ext_resource type="TileSet" uid="uid://bbdo68j181ixe" path="res://assets/tilesets/roof_decorations.tres" id="8_ijapb"]
@@ -94,6 +95,7 @@ tile_map_data = PackedByteArray("AAAOAPT/AAACAAAAAAA=")
 tile_set = ExtResource("8_ijapb")
 
 [node name="navigation" type="Node2D" parent="." unique_id=1263263874]
+script = ExtResource("99_hideready")
 
 [node name="doors" type="Node2D" parent="." unique_id=1898977763]
 

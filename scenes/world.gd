@@ -49,7 +49,7 @@ enum PartyState {
 var party_state := PartyState.HUB
 var expedition_zone := "hub"
 var expedition_room := "main"
-var expedition_countdown_time := 15
+var expedition_countdown_time := 1
 
 var shutting_down = false
 
@@ -472,6 +472,18 @@ func server_request_start_expedition(expedition_id: String):
 @rpc("authority", "call_local", "reliable")
 func broadcast_countdown_started(expedition_id: String, seconds: int):
 	print("Leaving for ", expedition_id, " in ", seconds, " seconds")
+
+@rpc("authority", "call_local", "reliable")
+func broadcast_expedition_seed(seed_value: int):
+	# Every peer loads the same room scene independently with no networked
+	# node spawning, so anything that needs to look "randomized" per
+	# expedition (like enemy_spawner.gd's group rolls) has to derive from
+	# this shared, server-picked seed instead of real per-peer randomness —
+	# otherwise each peer would roll a different, mismatched layout.
+	Stats.expedition_seed = seed_value
+	# A new expedition is a new instance — clear out where enemies were
+	# left in every room from the last one so this one starts fresh.
+	Stats.expedition_room_state = {}
 
 func launch_expedition(expedition_id: String):
 	world_expeditions.launch_expedition(expedition_id)

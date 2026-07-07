@@ -38,11 +38,8 @@ func save_all():
 	update_settings()
 
 func update_save_data():
-	var save_data = load_data_from_file()
-	for stat in stats.save_data:
-		save_data[stat] = stats.save_data[stat]
-	await SaveAndLoad.save_data_to_file(save_data)
-	await SaveAndLoad.save_data_to_backup(save_data)
+	await SaveAndLoad.save_data_to_file(stats.save_data)
+	await SaveAndLoad.save_data_to_backup(stats.save_data)
 
 func load_data_from_file():
 	if not FileAccess.file_exists(SAVE_DATA_PATH):

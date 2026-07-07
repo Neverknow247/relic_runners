@@ -4,6 +4,7 @@
 [ext_resource type="Texture2D" uid="uid://ov3fkgut2c7y" path="res://assets/art/ground_tiles/castle.png" id="2_a4g86"]
 [ext_resource type="PackedScene" uid="uid://bvtb5q00mduby" path="res://scenes/items/door.tscn" id="3_phwmj"]
 [ext_resource type="Script" uid="uid://c6d6yv6tgnx5d" path="res://scenes/levels/roofs.gd" id="11_0hr3h"]
+[ext_resource type="Script" path="res://scenes/levels/hide_on_ready.gd" id="99_hideready"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_d8bdv"]
 texture = ExtResource("1_24r3q")
@@ -553,6 +554,7 @@ script = ExtResource("11_0hr3h")
 tile_map_data = PackedByteArray("AAAOAPT/AAACAAAAAAA=")
 
 [node name="navigation" type="Node2D" parent="." unique_id=1263263874]
+script = ExtResource("99_hideready")
 
 [node name="doors" type="Node2D" parent="." unique_id=1898977763]
 
