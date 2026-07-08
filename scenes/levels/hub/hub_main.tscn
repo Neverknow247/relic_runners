@@ -4,6 +4,9 @@
 [ext_resource type="TileSet" uid="uid://dempu3v4hhlsi" path="res://assets/tilesets/wall_tiles.tres" id="3_nirru"]
 [ext_resource type="PackedScene" uid="uid://bvtb5q00mduby" path="res://scenes/items/door.tscn" id="4_ugcti"]
 [ext_resource type="PackedScene" uid="uid://xuo7vq4nsbrj" path="res://scenes/items/expedition_door.tscn" id="5_scjj4"]
+[ext_resource type="PackedScene" path="res://scenes/items/chest.tscn" id="6_chest"]
+[ext_resource type="PackedScene" uid="uid://1ud2gu1jk81b" path="res://scenes/items/weapon_workbench.tscn" id="8_weapon_workbench"]
+[ext_resource type="PackedScene" uid="uid://dserwfl6wgwsa" path="res://scenes/items/overflow_chest.tscn" id="9_overflow_chest"]
 [ext_resource type="Script" uid="uid://ccg1eh5kiuy2j" path="res://scenes/levels/hide_on_ready.gd" id="99_hideready"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_iexg3"]
@@ -82,3 +85,12 @@ expedition_id = "cemetery"
 
 [node name="collision_shape_2d" type="CollisionShape2D" parent="doors/expedition_door2" unique_id=424655663]
 shape = SubResource("RectangleShape2D_qu7j1")
+
+[node name="chest" parent="." unique_id=772216313 instance=ExtResource("6_chest")]
+position = Vector2(200, -32)
+
+[node name="weapon_workbench" parent="." unique_id=1212330743 instance=ExtResource("8_weapon_workbench")]
+position = Vector2(352, -384)
+
+[node name="overflow_chest" parent="." unique_id=1212330744 instance=ExtResource("9_overflow_chest")]
+position = Vector2(0, -832)

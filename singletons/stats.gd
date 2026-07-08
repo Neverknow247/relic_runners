@@ -27,10 +27,15 @@ var new_save_data = {
 	"items" : {
 
 	},
+	"equipment" : {
+
+	},
+	"stash" : [],
 	"eggs" : {
 
 	},
 	"weapons" : [],
+	"quick_slots" : [],
 }
 
 var save_data = return_new_save_data()

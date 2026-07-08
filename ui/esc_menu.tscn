@@ -1,0 +1,52 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://ui/esc_menu.gd" id="1_esc"]
+
+[node name="esc_menu" type="CanvasLayer"]
+script = ExtResource("1_esc")
+
+[node name="dim_background" type="ColorRect" parent="."]
+offset_right = 3840.0
+offset_bottom = 2160.0
+color = Color(0, 0, 0, 0.55)
+
+[node name="panel_container" type="PanelContainer" parent="."]
+offset_left = 1620.0
+offset_top = 780.0
+offset_right = 2220.0
+offset_bottom = 1380.0
+
+[node name="margin_container" type="MarginContainer" parent="panel_container"]
+layout_mode = 2
+theme_override_constants/margin_left = 40
+theme_override_constants/margin_top = 40
+theme_override_constants/margin_right = 40
+theme_override_constants/margin_bottom = 40
+
+[node name="v_box_container" type="VBoxContainer" parent="panel_container/margin_container"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="title_label" type="Label" parent="panel_container/margin_container/v_box_container"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 48
+text = "Menu"
+horizontal_alignment = 1
+
+[node name="resume_button" type="Button" parent="panel_container/margin_container/v_box_container"]
+custom_minimum_size = Vector2(0, 90)
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "Resume"
+
+[node name="leave_button" type="Button" parent="panel_container/margin_container/v_box_container"]
+custom_minimum_size = Vector2(0, 90)
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "Save & Leave Lobby"
+
+[node name="quit_button" type="Button" parent="panel_container/margin_container/v_box_container"]
+custom_minimum_size = Vector2(0, 90)
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "Save & Quit Game"

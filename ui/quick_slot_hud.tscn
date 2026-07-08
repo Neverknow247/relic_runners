@@ -1,0 +1,13 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://ui/quick_slot_hud.gd" id="1_hud"]
+
+[node name="quick_slot_hud" type="CanvasLayer"]
+script = ExtResource("1_hud")
+
+[node name="row" type="HBoxContainer" parent="."]
+offset_left = 40.0
+offset_top = 210.0
+offset_right = 700.0
+offset_bottom = 350.0
+theme_override_constants/separation = 16

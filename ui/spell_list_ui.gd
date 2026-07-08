@@ -35,9 +35,14 @@ func refresh() -> void:
 	for child in spell_list.get_children():
 		child.queue_free()
 
-	var weapon_id: String = player.get_equipped_weapon().type
-	var element: String = player.get_equipped_weapon().element
-	var forms: Array = player.get_equipped_weapon().forms
+	var equipped: Weapon = player.get_equipped_weapon()
+	if equipped == null:
+		title_label.text = "No weapon equipped"
+		title_label.add_theme_font_size_override("font_size", 64)
+		return
+	var weapon_id: String = equipped.type
+	var element: String = equipped.element
+	var forms: Array = equipped.forms
 	var current_sequence: Array = player.spell_input_sequence
 
 	title_label.text = "%s / %s" % [weapon_id.capitalize(), element.capitalize()]
@@ -70,6 +75,13 @@ func refresh() -> void:
 		label.text = " - %s" % recipe["form"].capitalize()
 		label.add_theme_font_size_override("font_size", 64)
 		row.add_child(label)
+
+		# Can't currently afford it — gray it out and fade it back so it
+		# reads as "not really an option right now" rather than a normal
+		# selectable recipe (typing toward it also won't hold the sequence
+		# open, see player.gd's has_relevant_spell_prefix()).
+		if !player.can_afford_recipe(recipe, equipped):
+			row.modulate = Color(0.5, 0.5, 0.5, 0.35)
 
 		spell_list.add_child(row)
 

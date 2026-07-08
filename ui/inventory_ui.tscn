@@ -1,0 +1,179 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://ui/inventory_ui.gd" id="1_ui"]
+[ext_resource type="PackedScene" path="res://ui/inventory_grid.tscn" id="2_grid"]
+[ext_resource type="Script" path="res://ui/weapon_slot_button.gd" id="3_weapon_slot"]
+[ext_resource type="Script" path="res://ui/equipment_slot.gd" id="4_equipment_slot"]
+[ext_resource type="Script" path="res://ui/stash_tab_button.gd" id="5_stash_tab"]
+[ext_resource type="Script" path="res://ui/trash_can_button.gd" id="6_trash_can"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel_bg"]
+bg_color = Color(0.07, 0.07, 0.08, 0.98)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_trash_can"]
+bg_color = Color(0.35, 0.12, 0.1, 1)
+
+[node name="inventory_ui" type="CanvasLayer"]
+layer = 10
+script = ExtResource("1_ui")
+
+[node name="panel_container" type="PanelContainer" parent="."]
+offset_left = 100.0
+offset_top = 80.0
+offset_right = 2100.0
+offset_bottom = 1900.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel_bg")
+
+[node name="margin_container" type="MarginContainer" parent="panel_container"]
+layout_mode = 2
+theme_override_constants/margin_left = 32
+theme_override_constants/margin_top = 32
+theme_override_constants/margin_right = 32
+theme_override_constants/margin_bottom = 32
+
+[node name="v_box_container" type="VBoxContainer" parent="panel_container/margin_container"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="title_row" type="HBoxContainer" parent="panel_container/margin_container/v_box_container"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="title_label" type="Label" parent="panel_container/margin_container/v_box_container/title_row"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 64
+text = "Inventory"
+
+[node name="trash_can" type="PanelContainer" parent="panel_container/margin_container/v_box_container/title_row"]
+custom_minimum_size = Vector2(160, 90)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_trash_can")
+script = ExtResource("6_trash_can")
+
+[node name="trash_can_label" type="Label" parent="panel_container/margin_container/v_box_container/title_row/trash_can"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+text = "Trash"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="weapon_row" type="HBoxContainer" parent="panel_container/margin_container/v_box_container"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="weapon_hand_slot" type="Button" parent="panel_container/margin_container/v_box_container/weapon_row"]
+custom_minimum_size = Vector2(320, 160)
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "Hand
+Tome"
+script = ExtResource("3_weapon_slot")
+role = "hand"
+
+[node name="weapon_holster_slot" type="Button" parent="panel_container/margin_container/v_box_container/weapon_row"]
+custom_minimum_size = Vector2(320, 160)
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "Holster
+Wand"
+script = ExtResource("3_weapon_slot")
+role = "holster"
+
+[node name="gear_row" type="HBoxContainer" parent="panel_container/margin_container/v_box_container"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="backpack_slot" type="Button" parent="panel_container/margin_container/v_box_container/gear_row"]
+custom_minimum_size = Vector2(320, 160)
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "Backpack"
+script = ExtResource("4_equipment_slot")
+slot_type = "backpack"
+
+[node name="belt_slot" type="Button" parent="panel_container/margin_container/v_box_container/gear_row"]
+custom_minimum_size = Vector2(320, 160)
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "Belt"
+script = ExtResource("4_equipment_slot")
+slot_type = "belt"
+
+[node name="cloak_slot" type="Button" parent="panel_container/margin_container/v_box_container/gear_row"]
+custom_minimum_size = Vector2(320, 160)
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "Cloak"
+script = ExtResource("4_equipment_slot")
+slot_type = "cloak"
+
+[node name="quick_slot_row" type="HBoxContainer" parent="panel_container/margin_container/v_box_container"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="loot_actions_row" type="HBoxContainer" parent="panel_container/margin_container/v_box_container"]
+visible = false
+layout_mode = 2
+
+[node name="take_all_button" type="Button" parent="panel_container/margin_container/v_box_container/loot_actions_row"]
+custom_minimum_size = Vector2(240, 90)
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+text = "Take All"
+
+[node name="panels_row" type="HBoxContainer" parent="panel_container/margin_container/v_box_container"]
+layout_mode = 2
+theme_override_constants/separation = 32
+
+[node name="player_grid" parent="panel_container/margin_container/v_box_container/panels_row" instance=ExtResource("2_grid")]
+layout_mode = 2
+
+[node name="loot_grid" parent="panel_container/margin_container/v_box_container/panels_row" instance=ExtResource("2_grid")]
+layout_mode = 2
+visible = false
+
+[node name="stash_column" type="VBoxContainer" parent="panel_container/margin_container/v_box_container/panels_row"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="stash_tab_row" type="HBoxContainer" parent="panel_container/margin_container/v_box_container/panels_row/stash_column"]
+layout_mode = 2
+size_flags_horizontal = 3
+alignment = 1
+theme_override_constants/separation = 16
+
+[node name="stash_tab_1" type="Button" parent="panel_container/margin_container/v_box_container/panels_row/stash_column/stash_tab_row"]
+custom_minimum_size = Vector2(200, 90)
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+text = "Tab 1"
+script = ExtResource("5_stash_tab")
+tab_index = 0
+
+[node name="stash_tab_2" type="Button" parent="panel_container/margin_container/v_box_container/panels_row/stash_column/stash_tab_row"]
+custom_minimum_size = Vector2(200, 90)
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+text = "Tab 2"
+script = ExtResource("5_stash_tab")
+tab_index = 1
+
+[node name="stash_tab_3" type="Button" parent="panel_container/margin_container/v_box_container/panels_row/stash_column/stash_tab_row"]
+custom_minimum_size = Vector2(200, 90)
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+text = "Tab 3"
+script = ExtResource("5_stash_tab")
+tab_index = 2
+
+[node name="move_all_button" type="Button" parent="panel_container/margin_container/v_box_container/panels_row/stash_column"]
+custom_minimum_size = Vector2(0, 90)
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+text = "Move All to Stash"
+
+[node name="stash_grid" parent="panel_container/margin_container/v_box_container/panels_row/stash_column" instance=ExtResource("2_grid")]
+layout_mode = 2

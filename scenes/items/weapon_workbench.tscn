@@ -1,0 +1,40 @@
+[gd_scene format=3 uid="uid://1ud2gu1jk81b"]
+
+[ext_resource type="Script" uid="uid://bitmil8rttrp7" path="res://scenes/items/weapon_workbench.gd" id="1_workbench"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_workbench"]
+radius = 64.0
+
+[node name="weapon_workbench" type="Area2D" unique_id=1258024062]
+collision_layer = 0
+collision_mask = 2
+script = ExtResource("1_workbench")
+
+[node name="collision_shape_2d" type="CollisionShape2D" parent="." unique_id=1112672644]
+shape = SubResource("CircleShape2D_workbench")
+
+[node name="visual_root" type="Node2D" parent="." unique_id=1308118310]
+
+[node name="color_rect" type="ColorRect" parent="visual_root" unique_id=959255960]
+offset_left = -32.0
+offset_top = -32.0
+offset_right = 32.0
+offset_bottom = 32.0
+color = Color(0.35, 0.4, 0.5, 1)
+
+[node name="status_label" type="Label" parent="visual_root" unique_id=800891272]
+offset_left = -100.0
+offset_top = -100.0
+offset_right = 100.0
+offset_bottom = -32.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 18
+text = "Weapon Workbench"
+horizontal_alignment = 1
+vertical_alignment = 2
+autowrap_mode = 2
+
+[connection signal="body_entered" from="." to="." method="_on_body_entered"]
+[connection signal="body_exited" from="." to="." method="_on_body_exited"]

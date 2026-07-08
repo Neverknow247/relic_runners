@@ -1,0 +1,60 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://ui/expedition_kit_ui.gd" id="1_kit_ui"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_kit_bg"]
+bg_color = Color(0.07, 0.07, 0.08, 0.98)
+
+[node name="expedition_kit_ui" type="CanvasLayer"]
+layer = 15
+visible = false
+script = ExtResource("1_kit_ui")
+
+[node name="center_container" type="CenterContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="panel_container" type="PanelContainer" parent="center_container"]
+custom_minimum_size = Vector2(1200, 0)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_kit_bg")
+
+[node name="margin_container" type="MarginContainer" parent="center_container/panel_container"]
+layout_mode = 2
+theme_override_constants/margin_left = 48
+theme_override_constants/margin_top = 48
+theme_override_constants/margin_right = 48
+theme_override_constants/margin_bottom = 48
+
+[node name="v_box_container" type="VBoxContainer" parent="center_container/panel_container/margin_container"]
+layout_mode = 2
+theme_override_constants/separation = 32
+
+[node name="title_label" type="Label" parent="center_container/panel_container/margin_container/v_box_container"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 64
+text = "Choose Your Kit"
+horizontal_alignment = 1
+
+[node name="starter_button" type="Button" parent="center_container/panel_container/margin_container/v_box_container"]
+custom_minimum_size = Vector2(0, 160)
+layout_mode = 2
+theme_override_font_sizes/font_size = 40
+text = "Starter Kit
+Bank everything, enter with a fresh weapon + backpack"
+
+[node name="custom_button" type="Button" parent="center_container/panel_container/margin_container/v_box_container"]
+custom_minimum_size = Vector2(0, 160)
+layout_mode = 2
+theme_override_font_sizes/font_size = 40
+text = "Custom Kit
+Take exactly what you're carrying now"
+
+[node name="cancel_button" type="Button" parent="center_container/panel_container/margin_container/v_box_container"]
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "Cancel"

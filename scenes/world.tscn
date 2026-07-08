@@ -5,6 +5,8 @@
 [ext_resource type="Theme" uid="uid://dx7snotftebdm" path="res://ui/themes/menu_theme.tres" id="2_rwgxs"]
 [ext_resource type="Script" uid="uid://dmp44odb0fqbu" path="res://scenes/world_rooms.gd" id="3_qfnet"]
 [ext_resource type="Script" uid="uid://c2vrbey506jdm" path="res://scenes/world_expeditions.gd" id="4_i7141"]
+[ext_resource type="Script" uid="uid://b8ioxo6ip0ti" path="res://scenes/world_loot.gd" id="5_loot"]
+[ext_resource type="PackedScene" path="res://ui/esc_menu.tscn" id="6_esc_menu"]
 
 [node name="world" type="Node2D" unique_id=861009768 node_paths=PackedStringArray("zone_container")]
 script = ExtResource("1_nnsk1")
@@ -19,18 +21,22 @@ script = ExtResource("3_qfnet")
 [node name="world_expeditions" type="Node" parent="." unique_id=218897192]
 script = ExtResource("4_i7141")
 
+[node name="world_loot" type="Node" parent="." unique_id=74670486]
+script = ExtResource("5_loot")
+
 [node name="floor_container" type="Node2D" parent="." unique_id=1405729617]
 
 [node name="y_sort_root" type="Node2D" parent="." unique_id=1884291296]
-y_sort_enabled = true
 
 [node name="zone_objects" type="Node2D" parent="y_sort_root" unique_id=1347812664]
-y_sort_enabled = true
 
 [node name="players" type="Node2D" parent="y_sort_root" unique_id=1022022517]
-y_sort_enabled = true
 
 [node name="zone_container" type="Node2D" parent="." unique_id=1833399871]
+
+[node name="held_rooms" type="Node2D" parent="." unique_id=1833399872]
+
+[node name="esc_menu" parent="." unique_id=1890857215 instance=ExtResource("6_esc_menu")]
 
 [node name="canvas_layer" type="CanvasLayer" parent="." unique_id=1329443861]
 
@@ -89,6 +95,7 @@ theme = ExtResource("2_rwgxs")
 text = "Dungeon 2"
 
 [node name="leave_button" type="Button" parent="canvas_layer" unique_id=887045908]
+visible = false
 offset_left = 3264.0
 offset_top = 64.0
 offset_right = 3776.0

@@ -19,9 +19,18 @@ properties/3/replication_mode = 1
 properties/4/path = NodePath(".:attacker_element")
 properties/4/spawn = true
 properties/4/replication_mode = 1
+properties/5/path = NodePath(".:facing_direction")
+properties/5/spawn = true
+properties/5/replication_mode = 1
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
 radius = 16.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_health_bg"]
+bg_color = Color(0.1, 0.1, 0.1, 0.8)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_health_fill"]
+bg_color = Color(0.85, 0.15, 0.15, 1)
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_hurtbox"]
 radius = 16.0
@@ -30,6 +39,7 @@ radius = 16.0
 radius = 448.0
 
 [node name="enemy" type="CharacterBody2D" unique_id=569062249]
+z_index = 50
 collision_layer = 32
 collision_mask = 33
 motion_mode = 1
@@ -57,6 +67,16 @@ offset_left = -8.0
 offset_top = -8.0
 offset_right = 8.0
 offset_bottom = 8.0
+
+[node name="health_bar" type="ProgressBar" parent="visual_root" unique_id=-474810849]
+offset_left = -24.0
+offset_top = -44.0
+offset_right = 24.0
+offset_bottom = -32.0
+theme_override_styles/background = SubResource("StyleBoxFlat_health_bg")
+theme_override_styles/fill = SubResource("StyleBoxFlat_health_fill")
+value = 100.0
+show_percentage = false
 
 [node name="weapon_label" type="Label" parent="visual_root" unique_id=156039005]
 offset_left = -32.0

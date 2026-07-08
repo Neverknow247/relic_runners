@@ -2,6 +2,7 @@
 
 [ext_resource type="PackedScene" path="res://scenes/enemies/enemy.tscn" id="20_enemy"]
 [ext_resource type="Script" path="res://scenes/levels/hide_on_ready.gd" id="99_hideready"]
+[ext_resource type="PackedScene" path="res://scenes/items/exit_portal.tscn" id="101_portal"]
 
 [ext_resource type="TileSet" uid="uid://ct1ilx2ca8lhd" path="res://assets/tilesets/ground.tres" id="1_y4qeq"]
 [ext_resource type="Texture2D" uid="uid://dwjlops2ib8yc" path="res://assets/art/pixel_quest/Pixel Quest - The Village/Pixel Quest - The Village/Village Exterior/Trees/Pine1.png" id="2_87bs0"]
@@ -62,18 +63,14 @@ tile_set = ExtResource("1_y4qeq")
 tile_set = ExtResource("1_y4qeq")
 
 [node name="y_sort_objects" type="Node2D" parent="." unique_id=1029218867]
-y_sort_enabled = true
 
 [node name="trees" type="TileMapLayer" parent="y_sort_objects" unique_id=1874372010]
-y_sort_enabled = true
 tile_set = SubResource("TileSet_c862i")
 
 [node name="wall_bases" type="TileMapLayer" parent="y_sort_objects" unique_id=476079215]
-y_sort_enabled = true
 tile_set = ExtResource("7_a5tpl")
 
 [node name="wall_decorations" type="TileMapLayer" parent="y_sort_objects" unique_id=1466482106]
-y_sort_enabled = true
 tile_set = ExtResource("8_76tcg")
 
 [node name="enemy" parent="y_sort_objects" instance=ExtResource("20_enemy")]
@@ -104,3 +101,6 @@ tile_set = ExtResource("12_3c08h")
 script = ExtResource("99_hideready")
 
 [node name="doors" type="Node2D" parent="." unique_id=1969549983]
+
+[node name="exit_portal" parent="." instance=ExtResource("101_portal")]
+position = Vector2(300, 0)

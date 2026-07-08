@@ -51,7 +51,6 @@ script = ExtResource("5_ecx5f")
 position = Vector2(208, -32)
 
 [node name="y_sort_objects" type="Node2D" parent="." unique_id=1007456695]
-y_sort_enabled = true
 
 [node name="spawn_points" type="Node2D" parent="." unique_id=280258232]
 

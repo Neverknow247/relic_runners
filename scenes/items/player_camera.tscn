@@ -1,8 +1,29 @@
 [gd_scene format=3 uid="uid://ctukarabqgugx"]
 
 [ext_resource type="PackedScene" uid="uid://dd60brf5xim6d" path="res://ui/spell_list_ui.tscn" id="1_3wdvw"]
+[ext_resource type="PackedScene" path="res://ui/health_ui.tscn" id="2_health"]
+[ext_resource type="PackedScene" path="res://ui/inventory_ui.tscn" id="3_inventory"]
+[ext_resource type="PackedScene" path="res://ui/mana_ui.tscn" id="4_mana"]
+[ext_resource type="PackedScene" path="res://ui/downed_ui.tscn" id="5_downed"]
+[ext_resource type="PackedScene" path="res://ui/quick_slot_hud.tscn" id="6_quick_slot_hud"]
+[ext_resource type="PackedScene" path="res://ui/workbench_ui.tscn" id="7_workbench"]
+[ext_resource type="PackedScene" path="res://ui/expedition_kit_ui.tscn" id="8_kit_ui"]
 
 [node name="player_camera" type="Camera2D" unique_id=563461302]
 zoom = Vector2(3, 3)
 
 [node name="spell_list_ui" parent="." unique_id=622022064 instance=ExtResource("1_3wdvw")]
+
+[node name="health_ui" parent="." instance=ExtResource("2_health")]
+
+[node name="mana_ui" parent="." instance=ExtResource("4_mana")]
+
+[node name="inventory_ui" parent="." instance=ExtResource("3_inventory")]
+
+[node name="downed_ui" parent="." instance=ExtResource("5_downed")]
+
+[node name="quick_slot_hud" parent="." instance=ExtResource("6_quick_slot_hud")]
+
+[node name="workbench_ui" parent="." instance=ExtResource("7_workbench")]
+
+[node name="expedition_kit_ui" parent="." instance=ExtResource("8_kit_ui")]

@@ -3,5 +3,16 @@
 [ext_resource type="PackedScene" uid="uid://bg8kikir621sv" path="res://scenes/spells/projectile.tscn" id="1_lhjwv"]
 [ext_resource type="Script" uid="uid://dmaeugstuk1v5" path="res://scenes/spells/beam_projectile.gd" id="2_tr5d5"]
 
-[node name="beam_projectile" unique_id=1555628361 instance=ExtResource("1_lhjwv")]
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_beam"]
+size = Vector2(400, 24)
+
+[node name="beam_projectile" instance=ExtResource("1_lhjwv")]
 script = ExtResource("2_tr5d5")
+
+[node name="collision_shape_2d" parent="hitbox"]
+position = Vector2(200, 0)
+shape = SubResource("RectangleShape2D_beam")
+
+[node name="beam_visual" type="Polygon2D" parent="."]
+polygon = PackedVector2Array(0, -12, 400, -12, 400, 12, 0, 12)
+color = Color(1, 1, 1, 0.7)

@@ -1,0 +1,52 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://ui/workbench_ui.gd" id="1_wb_ui"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_wb_bg"]
+bg_color = Color(0.07, 0.07, 0.08, 0.98)
+
+[node name="workbench_ui" type="CanvasLayer"]
+layer = 11
+visible = false
+script = ExtResource("1_wb_ui")
+
+[node name="panel_container" type="PanelContainer" parent="."]
+offset_left = 2180.0
+offset_top = 80.0
+offset_right = 3760.0
+offset_bottom = 1900.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_wb_bg")
+
+[node name="margin_container" type="MarginContainer" parent="panel_container"]
+layout_mode = 2
+theme_override_constants/margin_left = 32
+theme_override_constants/margin_top = 32
+theme_override_constants/margin_right = 32
+theme_override_constants/margin_bottom = 32
+
+[node name="v_box_container" type="VBoxContainer" parent="panel_container/margin_container"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="title_label" type="Label" parent="panel_container/margin_container/v_box_container"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 64
+text = "Weapon Workbench"
+
+[node name="weapon_row" type="HBoxContainer" parent="panel_container/margin_container/v_box_container"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="status_label" type="Label" parent="panel_container/margin_container/v_box_container"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+theme_override_colors/font_color = Color(1, 0.85, 0.5, 1)
+autowrap_mode = 2
+
+[node name="element_section" type="VBoxContainer" parent="panel_container/margin_container/v_box_container"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="forms_section" type="VBoxContainer" parent="panel_container/margin_container/v_box_container"]
+layout_mode = 2
+theme_override_constants/separation = 12

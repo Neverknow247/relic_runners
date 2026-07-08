@@ -60,19 +60,15 @@ tile_set = ExtResource("1_t42ps")
 tile_set = ExtResource("1_t42ps")
 
 [node name="y_sort_objects" type="Node2D" parent="." unique_id=89103381]
-y_sort_enabled = true
 
 [node name="trees" type="TileMapLayer" parent="y_sort_objects" unique_id=821505938]
-y_sort_enabled = true
 tile_set = SubResource("TileSet_hk80u")
 
 [node name="wall_bases" type="TileMapLayer" parent="y_sort_objects" unique_id=123667275]
-y_sort_enabled = true
 tile_map_data = PackedByteArray("AAD+/+//AQAEAAMAAAD//+//AQAEAAMAAAAAAO//AQABAAMAAAABAO//AQAFAAMAAAACAO//AQABAAMAAAADAO//AQAJAAMAAAAEAO//AQAFAAMAAAAFAO//AQAHAAMAAAAGAO//AQADAAMAAAAHAO//AQAHAAMAAAA=")
 tile_set = ExtResource("7_oylyi")
 
 [node name="wall_decorations" type="TileMapLayer" parent="y_sort_objects" unique_id=403948971]
-y_sort_enabled = true
 tile_set = ExtResource("8_0bqam")
 
 [node name="spawn_points" type="Node2D" parent="." unique_id=2073054079]

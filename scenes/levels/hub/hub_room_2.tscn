@@ -520,7 +520,6 @@ tile_map_data = PackedByteArray("AACz/yUAAQASAAYAAACz/yYAAQASAAYAAACz/ycAAQASAAY
 tile_set = SubResource("TileSet_nirru")
 
 [node name="y_sort_objects" type="Node2D" parent="." unique_id=349078708]
-y_sort_enabled = true
 
 [node name="spawn_points" type="Node2D" parent="." unique_id=1303415433]
 

@@ -17,8 +17,56 @@ const WEAPON_LETTERS := {
 var all_spell_data = SpellData.new()
 var all_spell_recipes = SpellRecipes.new()
 
+const DamageNumberScene := preload("res://scenes/effects/damage_number.tscn")
+
+func _spawn_damage_number(amount: float, color: Color, is_crit: bool = false) -> void:
+	var num = DamageNumberScene.instantiate()
+	get_tree().current_scene.add_child(num)
+	num.global_position = global_position + Vector2(0, -32)
+	num.setup(amount, color, is_crit)
+
 @export var max_health := 100.0
-var health := max_health
+
+# Each entry rolled independently (its own chance to drop at all, then a
+# min-max quantity if it does) into one shared ground pile — LootPickup's
+# pile is already a small generic grid (see world_loot.gd's LOOT_PILE_SIZE),
+# built exactly to hold more than one item type per kill. Crystal/gear
+# quantities are capped at 1 (matches their max_stack, and gear doesn't
+# stack at all) so a roll never tries to cram "2" of a single-cell-or-less
+# item into one entry.
+# Chance the guaranteed "scrap" roll below gets replaced entirely by the
+# enemy's own equipped weapon instead — see die()'s loot_table.duplicate().
+const WEAPON_DROP_CHANCE := 0.1
+
+const LOOT_TABLE := [
+	{"type": "scrap", "chance": 1.0, "min": 1, "max": 3},
+	# min 0 means this simply rolls 0 (skipped — see world_loot.gd's
+	# qty <= 0 continue) on some kills rather than needing a separate
+	# "chance to drop at all" gate on top of the quantity roll.
+	{"type": "gold", "chance": 1.0, "min": 0, "max": 3},
+	{"type": "crystal_fire", "chance": 0.15, "min": 1, "max": 1},
+	{"type": "crystal_holy", "chance": 0.15, "min": 1, "max": 1},
+	{"type": "crystal_air", "chance": 0.15, "min": 1, "max": 1},
+	# Form Stones — the lootable way to add forms to weapons now. Each rolls
+	# independently at a low rate so a stone is a real find, not a per-kill
+	# handout.
+	{"type": "form_stone_ball", "chance": 0.05, "min": 1, "max": 1},
+	{"type": "form_stone_bolt", "chance": 0.05, "min": 1, "max": 1},
+	{"type": "form_stone_rain", "chance": 0.05, "min": 1, "max": 1},
+	{"type": "form_stone_beam", "chance": 0.05, "min": 1, "max": 1},
+	{"type": "form_stone_burst", "chance": 0.05, "min": 1, "max": 1},
+	{"type": "form_stone_cone", "chance": 0.05, "min": 1, "max": 1},
+	{"type": "mana_crystal", "chance": 0.25, "min": 1, "max": 3},
+	{"type": "health_potion", "chance": 0.1, "min": 1, "max": 1},
+	{"type": "belt_basic", "chance": 0.05, "min": 1, "max": 1},
+	{"type": "cloak_basic", "chance": 0.05, "min": 1, "max": 1},
+	{"type": "backpack_basic", "chance": 0.05, "min": 1, "max": 1},
+]
+var health := max_health:
+	set(value):
+		health = value
+		if health_bar:
+			health_bar.value = health
 var is_dead := false:
 	set(value):
 		is_dead = value
@@ -28,10 +76,22 @@ var is_dead := false:
 				visual_root.visible = false
 			if hurtbox:
 				hurtbox.is_invincible = true
-			# TODO: loot spawning hooks in here later. No death animation to
-			# wait on, so free immediately rather than leaving a corpse
-			# sitting invisible in the tree forever.
-			queue_free()
+			# Loot is rolled/broadcast from die() instead, not here — see its
+			# comment for why. Freeing is deferred (not instant) because this
+			# setter also runs on every remote peer the moment is_dead's
+			# on-change sync arrives — freeing the node immediately here would
+			# race against MultiplayerSynchronizer's own outgoing flush on the
+			# AUTHORITY side specifically: if the server frees the node in the
+			# same frame it sets is_dead = true, the synchronizer can be torn
+			# down before it ever gets a chance to actually send that final
+			# update, leaving remote peers permanently stuck seeing a "dead"
+			# enemy that never received the is_dead flag at all.
+			_defer_free()
+
+func _defer_free() -> void:
+	await get_tree().create_timer(0.3).timeout
+	if is_inside_tree():
+		queue_free()
 
 @export var move_speed := 240.0
 
@@ -73,12 +133,22 @@ var attacker_element: String = "fire":
 	set(value):
 		attacker_element = value
 		_update_visual()
+# The forms this enemy's weapon actually holds — rolled 1-3 at spawn (see
+# _ready()) from the type's capable list, exactly like a real weapon now
+# carries a subset of Form Stones rather than all three. Drives which
+# sequences it can cast AND, if its weapon drops, which forms the dropped
+# weapon comes with (see die()). Server-rolled and only ever read
+# server-side (AI casting runs on the authority; the fire_spell RPC carries
+# the chosen form string to peers), so it needs no replication — just
+# persistence across room revisits (see enemy_spawner.gd).
+var attacker_forms: Array = []
 
 @onready var hurtbox: Hurtbox = $hurtbox
 @onready var detection_area: Area2D = $detection_area
 @onready var visual_root: Node2D = $visual_root
 @onready var color_rect: ColorRect = $visual_root/color_rect
 @onready var weapon_label: Label = $visual_root/weapon_label
+@onready var health_bar: ProgressBar = $visual_root/health_bar
 @onready var nav_agent: NavigationAgent2D = $nav_agent
 
 var targets_in_range: Array[Hurtbox] = []
@@ -284,9 +354,12 @@ func _ready() -> void:
 	# get_instance_id() is process-local and would differ per peer, silently
 	# breaking self-hit exclusion on whichever clients don't match.
 	hurtbox.owner_id = name.hash()
+	health_bar.max_value = max_health
+	health_bar.value = health
 	if is_multiplayer_authority():
 		attacker_weapon = WEAPON_TYPES.pick_random()
 		attacker_element = ELEMENT_TYPES.pick_random()
+		attacker_forms = _roll_forms(attacker_weapon)
 		spawn_position = global_position
 		actual_search_turn_speed = max(0.1, search_turn_speed + randf_range(-search_turn_speed_variance, search_turn_speed_variance))
 		# Start idle by looking around rather than immediately wandering off.
@@ -294,12 +367,30 @@ func _ready() -> void:
 		search_timer = search_duration + randf_range(-search_duration_variance, search_duration_variance)
 	_update_visual()
 
+# 1-3 distinct forms from the weapon type's capable list, shuffled so it's a
+# random subset (not always the first N). Mirrors how a looted weapon carries
+# an arbitrary handful of Form Stones rather than the full set.
+func _roll_forms(weapon_type: String) -> Array:
+	var pool: Array = SpellData.get_capable_forms(weapon_type).duplicate()
+	pool.shuffle()
+	var count: int = clampi(randi_range(1, 3), 1, pool.size())
+	return pool.slice(0, count)
+
 func _update_visual() -> void:
 	if !color_rect or !weapon_label:
 		return
 	var element_data: Dictionary = SpellData.ELEMENTS.get(attacker_element, SpellData.ELEMENTS["default"])
 	color_rect.color = element_data["color"]
 	weapon_label.text = WEAPON_LETTERS.get(attacker_weapon, "?")
+
+# facing_direction itself is only ever simulated on the authority (see
+# _physics_process's early return above), but the indicator's on-screen
+# position needs to update for every peer — this runs unconditionally so
+# remote viewers, who only ever receive facing_direction via replication,
+# still see the dot move instead of sitting frozen at its spawn position.
+func _process(_delta: float) -> void:
+	if facing_indicator:
+		facing_indicator.position = facing_direction * FACING_INDICATOR_DISTANCE
 
 func _physics_process(delta: float) -> void:
 	if !is_multiplayer_authority():
@@ -348,9 +439,10 @@ func _physics_process(delta: float) -> void:
 			facing_indicator.position = facing_direction * FACING_INDICATOR_DISTANCE
 		return
 	var visible_point = get_visible_point(current_target)
-	var can_see := visible_point != null
+	# Cloak stealth: unseen while standing still, and/or never heard.
+	var can_see := visible_point != null and not _hidden_by_stillness(current_target)
 	var distance := global_position.distance_to(current_target.global_position)
-	var can_hear := distance <= hearing_radius
+	var can_hear := distance <= hearing_radius and not _target_silent(current_target)
 	# Hearing reveals location the same as sight would (no wall/FOV check),
 	# but only sight lets us aim — you can't snipe someone you only hear
 	# through a wall, so current_visible_point stays sight-only.
@@ -605,6 +697,22 @@ const LOS_PEEK_OFFSETS: Array[Vector2] = [
 	Vector2(0, LOS_PEEK_RADIUS), Vector2(0, -LOS_PEEK_RADIUS),
 ]
 
+# --- Cloak stealth: a target player's replicated flags gate our perception ---
+# The target Hurtbox's parent is the player node, which carries the two
+# replicated stealth bits (see player.gd). "in" guards keep this safe for any
+# non-player hurtbox.
+func _target_silent(target: Hurtbox) -> bool:
+	var p = target.get_parent()
+	return p != null and "stealth_silent" in p and p.stealth_silent
+
+func _hidden_by_stillness(target: Hurtbox) -> bool:
+	var p = target.get_parent()
+	if p == null or not ("stealth_unseen_still" in p) or not p.stealth_unseen_still:
+		return false
+	# Only hidden while actually standing still (default true = assume moving, so
+	# we never wrongly hide a target whose movement we aren't tracking yet).
+	return not target_is_moving.get(target, true)
+
 func has_line_of_sight(target: Hurtbox) -> bool:
 	return get_visible_point(target) != null
 
@@ -662,6 +770,14 @@ func update_current_target() -> void:
 	# (arriving at last_known_position without re-spotting them).
 	if current_target and !is_instance_valid(current_target):
 		current_target = null
+	# A downed player reads as invincible on every peer (player.gd sets
+	# hurtbox.is_invincible while prone/dead — and the server's copy gets it via
+	# the replicated "prone" anim proxy), so treat them as effectively dead:
+	# drop them as a target and don't re-acquire them below. They stop being
+	# shot at until they're revived.
+	if current_target and current_target.is_invincible:
+		current_target = null
+		reset_casting()
 	# Acquiring a NEW target requires either line of sight or being within
 	# earshot AND actually moving (a perfectly still player makes no noise
 	# to hear) — sight alone would mean no detecting through walls just by
@@ -671,23 +787,17 @@ func update_current_target() -> void:
 	# enemy can still pursue your last known position instead of forgetting
 	# you the instant you turn a corner.
 	if current_target == null and !targets_in_range.is_empty():
-		for h in targets_in_range:
-			var dist := global_position.distance_to(h.global_position)
-			if dist <= hearing_radius:
-				print(
-					"[Enemy hearing check] name=", name, " dist=", dist,
-					" hearing_radius=", hearing_radius,
-					" moving=", target_is_moving.get(h, false),
-					" last=", last_target_positions.get(h, "none"),
-					" current=", h.global_position,
-					" on_cooldown=", h == recently_lost_target and lost_target_cooldown > 0.0
-				)
 		var detectable: Array = targets_in_range.filter(func(h):
+			# Downed/dead players (invincible hurtbox) are never acquired.
+			if h.is_invincible:
+				return false
 			if h == recently_lost_target and lost_target_cooldown > 0.0:
 				return false
-			if global_position.distance_to(h.global_position) <= hearing_radius:
+			# cloak_silent skips the hearing branch entirely (fall through to
+			# sight); cloak_unseen_still blocks sight while the target is still.
+			if global_position.distance_to(h.global_position) <= hearing_radius and not _target_silent(h):
 				return target_is_moving.get(h, false)
-			return has_line_of_sight(h)
+			return has_line_of_sight(h) and not _hidden_by_stillness(h)
 		)
 		if !detectable.is_empty():
 			current_target = _closest_target(detectable)
@@ -718,8 +828,9 @@ func update_casting(delta: float) -> void:
 		start_new_cast()
 
 func start_new_cast() -> void:
-	var forms: Array = SpellData.EQUIPPABLE_WEAPONS[attacker_weapon]["forms"]
-	var recipes: Array = all_spell_recipes.get_available_recipes(attacker_element, forms)
+	# Only the forms this enemy's weapon actually holds — not every form the
+	# type is capable of — so its cast repertoire matches the weapon that drops.
+	var recipes: Array = all_spell_recipes.get_available_recipes(attacker_element, attacker_forms)
 	if recipes.is_empty() or randf() < normal_cast_chance:
 		cast_default()
 		return
@@ -756,32 +867,36 @@ func fire_spell(weapon: String, element: String, form: String) -> void:
 	# behind cover even while some part of them is exposed.
 	var direction := global_position.direction_to(current_visible_point)
 	var spell_data := all_spell_data.build_spell_data(weapon, element, form)
-	spawn_projectile.rpc(weapon, element, form, direction)
+	# Rolled once here (only ever runs on this enemy's own authoritative
+	# peer) and sent as a plain bool below — every peer must apply the same
+	# crit result, so it can't be re-rolled independently inside
+	# spawn_projectile(), which runs once per peer as the RPC lands.
+	var is_crit := SpellData.roll_crit(weapon)
+	spawn_projectile.rpc(weapon, element, form, direction, is_crit)
 	# Same per-form cooldown table the player's attack_check() uses, so the
 	# enemy fires exactly as often as a player equipped with this weapon/
 	# form could — not a flat, unrelated timer.
 	cast_timer = spell_data["attack_cooldown"]
 
 @rpc("authority", "call_local", "reliable")
-func spawn_projectile(weapon: String, element: String, form: String, direction: Vector2) -> void:
+func spawn_projectile(weapon: String, element: String, form: String, direction: Vector2, is_crit: bool = false) -> void:
 	var spell_data := all_spell_data.build_spell_data(weapon, element, form)
+	if is_crit:
+		spell_data["damage"] *= SpellData.CRIT_MULTIPLIER
 	var projectile = spell_data["scene"].instantiate()
 	get_tree().current_scene.add_child(projectile)
 	projectile.global_position = global_position + direction * spell_data["spawn_offset"]
-	projectile.setup_spell(direction, spell_data, name.hash())
+	projectile.setup_spell(direction, spell_data, name.hash(), is_crit)
 
 func _on_detection_area_entered(area: Area2D) -> void:
 	if area is Hurtbox:
 		targets_in_range.append(area)
-		print("[Enemy detect area] name=", name, " entered=", area.name, " owner_id=", area.owner_id)
 
 func _on_detection_area_exited(area: Area2D) -> void:
 	if area is Hurtbox:
 		targets_in_range.erase(area)
 
 func _on_hurtbox_hurt(hitbox, damage) -> void:
-	if !is_multiplayer_authority():
-		return
 	var final_damage: float = damage
 	if hitbox != null and "attacker_weapon" in hitbox and "attacker_element" in hitbox:
 		var multiplier := SpellData.get_damage_multiplier(
@@ -791,6 +906,12 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 			attacker_element
 		)
 		final_damage = damage * multiplier
+	# Damage math above is pure/deterministic from data every peer already
+	# has, so the number is spawned for everyone watching regardless of
+	# authority — only the actual health change below is authority-only.
+	_spawn_damage_number(final_damage, Color(1, 0.9, 0.3), hitbox != null and hitbox.is_crit)
+	if !is_multiplayer_authority():
+		return
 	# Getting hit is an instant, unmissable cue of where the attack came
 	# from — snap facing straight there instead of easing over with
 	# turn_speed like normal tracking does.
@@ -819,4 +940,36 @@ func take_damage(amount: float) -> void:
 		die()
 
 func die() -> void:
+	# Rolled/broadcast here rather than in the is_dead setter below (despite
+	# the TODO comment sitting right there) — that setter body runs once
+	# server-side directly and once more per client every time replication
+	# applies the incoming synced value, so rolling loot there would have
+	# every client uselessly (and separately) roll RNG too. die() is only
+	# ever reachable server-side (take_damage() <- _on_hurtbox_hurt(), which
+	# early-returns for non-authority), so this is the one place it actually
+	# only runs once.
+	var world = get_tree().get_first_node_in_group("world")
+	if world:
+		# 10% chance to drop the weapon this enemy was actually using instead
+		# of scrap (everything else in the table — crystals, potions, gear —
+		# still rolls independently either way). attacker_weapon/element are
+		# live per-instance values, not static strings, so this table can't
+		# just live in the LOOT_TABLE const like the rest — the "element" key
+		# here is what tells world_loot.gd to override the dropped Weapon's
+		# element away from its generic type default (see Weapon._init(),
+		# which otherwise always defaults every weapon type to "fire").
+		var loot_table: Array = []
+		for entry in LOOT_TABLE:
+			if entry["type"] == "scrap" and randf() < WEAPON_DROP_CHANCE:
+				loot_table.append({
+					"type": attacker_weapon, "chance": 1.0, "min": 1, "max": 1,
+					"element": attacker_element,
+					# The dropped weapon carries exactly the forms this enemy was
+					# fighting with — world_loot.gd copies this onto the Weapon,
+					# same override mechanism as "element" above.
+					"forms": attacker_forms.duplicate(),
+				})
+			else:
+				loot_table.append(entry)
+		world.spawn_loot(global_position, loot_table)
 	is_dead = true

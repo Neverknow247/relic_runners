@@ -64,6 +64,15 @@ func _ready() -> void:
 		rng.seed = Stats.expedition_seed ^ point.name.hash()
 		if rng.randf() < spawn_chance:
 			spawn_group(point, rng, map_rid, saved_state)
+	# Enemies are added directly above (not via any networked spawn RPC), so
+	# this is the one point in time every enemy in this room is guaranteed to
+	# exist on THIS peer — tell the server so it only now starts replicating
+	# this room's enemies to us (see world.gd's room_ready_peers handshake).
+	# On the server this both marks itself ready and re-runs the per-room enemy
+	# visibility pass, exactly as the old direct refresh call did.
+	var world = get_tree().get_first_node_in_group("world")
+	if world:
+		world.notify_room_ready(room_key)
 
 # Awaits a single physics frame and reports whether we're still safe to keep
 # going afterward. _ready() can be suspended here for a while (waiting on
@@ -126,6 +135,7 @@ func apply_saved_state(enemy: Enemy, saved_state: Dictionary) -> void:
 	# fight as) a completely different enemy after a revisit.
 	enemy.attacker_weapon = data.get("attacker_weapon", enemy.attacker_weapon)
 	enemy.attacker_element = data.get("attacker_element", enemy.attacker_element)
+	enemy.attacker_forms = data.get("attacker_forms", enemy.attacker_forms)
 	if data.get("is_dead", false):
 		enemy.is_dead = true
 		return
@@ -142,6 +152,7 @@ func record_enemy_state(enemy: Enemy) -> void:
 		"health": enemy.health,
 		"attacker_weapon": enemy.attacker_weapon,
 		"attacker_element": enemy.attacker_element,
+		"attacker_forms": enemy.attacker_forms,
 	}
 	Stats.expedition_room_state[room_key] = state
 
