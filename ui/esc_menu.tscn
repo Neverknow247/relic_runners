@@ -1,6 +1,7 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://ui/esc_menu.gd" id="1_esc"]
+[ext_resource type="PackedScene" path="res://ui/settings_menu.tscn" id="2_settings"]
 
 [node name="esc_menu" type="CanvasLayer"]
 script = ExtResource("1_esc")
@@ -39,6 +40,12 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 32
 text = "Resume"
 
+[node name="settings_button" type="Button" parent="panel_container/margin_container/v_box_container"]
+custom_minimum_size = Vector2(0, 90)
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "Settings"
+
 [node name="leave_button" type="Button" parent="panel_container/margin_container/v_box_container"]
 custom_minimum_size = Vector2(0, 90)
 layout_mode = 2
@@ -50,3 +57,5 @@ custom_minimum_size = Vector2(0, 90)
 layout_mode = 2
 theme_override_font_sizes/font_size = 32
 text = "Save & Quit Game"
+
+[node name="settings_menu" parent="." instance=ExtResource("2_settings")]

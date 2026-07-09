@@ -8,39 +8,39 @@
 [ext_resource type="Script" uid="uid://b8ioxo6ip0ti" path="res://scenes/world_loot.gd" id="5_loot"]
 [ext_resource type="PackedScene" path="res://ui/esc_menu.tscn" id="6_esc_menu"]
 
-[node name="world" type="Node2D" unique_id=861009768 node_paths=PackedStringArray("zone_container")]
+[node name="world" type="Node2D" node_paths=PackedStringArray("zone_container")]
 script = ExtResource("1_nnsk1")
 zone_container = NodePath("zone_container")
 
-[node name="world_players" type="Node" parent="." unique_id=1964494852]
+[node name="world_players" type="Node" parent="."]
 script = ExtResource("2_71j4m")
 
-[node name="world_rooms" type="Node" parent="." unique_id=1825214601]
+[node name="world_rooms" type="Node" parent="."]
 script = ExtResource("3_qfnet")
 
-[node name="world_expeditions" type="Node" parent="." unique_id=218897192]
+[node name="world_expeditions" type="Node" parent="."]
 script = ExtResource("4_i7141")
 
-[node name="world_loot" type="Node" parent="." unique_id=74670486]
+[node name="world_loot" type="Node" parent="."]
 script = ExtResource("5_loot")
 
-[node name="floor_container" type="Node2D" parent="." unique_id=1405729617]
+[node name="floor_container" type="Node2D" parent="."]
 
-[node name="y_sort_root" type="Node2D" parent="." unique_id=1884291296]
+[node name="y_sort_root" type="Node2D" parent="."]
 
-[node name="zone_objects" type="Node2D" parent="y_sort_root" unique_id=1347812664]
+[node name="zone_objects" type="Node2D" parent="y_sort_root"]
 
-[node name="players" type="Node2D" parent="y_sort_root" unique_id=1022022517]
+[node name="players" type="Node2D" parent="y_sort_root"]
 
-[node name="zone_container" type="Node2D" parent="." unique_id=1833399871]
+[node name="zone_container" type="Node2D" parent="."]
 
-[node name="held_rooms" type="Node2D" parent="." unique_id=1833399872]
+[node name="held_rooms" type="Node2D" parent="."]
 
-[node name="esc_menu" parent="." unique_id=1890857215 instance=ExtResource("6_esc_menu")]
+[node name="esc_menu" parent="." instance=ExtResource("6_esc_menu")]
 
-[node name="canvas_layer" type="CanvasLayer" parent="." unique_id=1329443861]
+[node name="canvas_layer" type="CanvasLayer" parent="."]
 
-[node name="go_hub_main_button" type="Button" parent="canvas_layer" unique_id=1415185275]
+[node name="go_hub_main_button" type="Button" parent="canvas_layer"]
 visible = false
 offset_left = 32.0
 offset_top = 88.0
@@ -49,7 +49,7 @@ offset_bottom = 119.0
 theme = ExtResource("2_rwgxs")
 text = "Hub Main"
 
-[node name="go_hub_room1_button" type="Button" parent="canvas_layer" unique_id=168592909]
+[node name="go_hub_room1_button" type="Button" parent="canvas_layer"]
 visible = false
 offset_left = 88.0
 offset_top = 264.0
@@ -58,7 +58,7 @@ offset_bottom = 387.0
 theme = ExtResource("2_rwgxs")
 text = "Hub 1"
 
-[node name="go_hub_room2_button" type="Button" parent="canvas_layer" unique_id=1619998138]
+[node name="go_hub_room2_button" type="Button" parent="canvas_layer"]
 visible = false
 offset_left = 80.0
 offset_top = 448.0
@@ -67,7 +67,7 @@ offset_bottom = 571.0
 theme = ExtResource("2_rwgxs")
 text = "Hub 2"
 
-[node name="go_dungeon_main_button" type="Button" parent="canvas_layer" unique_id=930171636]
+[node name="go_dungeon_main_button" type="Button" parent="canvas_layer"]
 visible = false
 offset_left = 656.0
 offset_top = 80.0
@@ -76,7 +76,7 @@ offset_bottom = 203.0
 theme = ExtResource("2_rwgxs")
 text = "Dungeon Main"
 
-[node name="go_dungeon_room1_button" type="Button" parent="canvas_layer" unique_id=2002745602]
+[node name="go_dungeon_room1_button" type="Button" parent="canvas_layer"]
 visible = false
 offset_left = 736.0
 offset_top = 264.0
@@ -85,7 +85,7 @@ offset_bottom = 387.0
 theme = ExtResource("2_rwgxs")
 text = "Dungeon 1"
 
-[node name="go_dungeon_room2_button" type="Button" parent="canvas_layer" unique_id=1626484754]
+[node name="go_dungeon_room2_button" type="Button" parent="canvas_layer"]
 visible = false
 offset_left = 728.0
 offset_top = 440.0
@@ -94,7 +94,7 @@ offset_bottom = 563.0
 theme = ExtResource("2_rwgxs")
 text = "Dungeon 2"
 
-[node name="leave_button" type="Button" parent="canvas_layer" unique_id=887045908]
+[node name="leave_button" type="Button" parent="canvas_layer"]
 visible = false
 offset_left = 3264.0
 offset_top = 64.0

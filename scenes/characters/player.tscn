@@ -32,6 +32,12 @@ properties/6/replication_mode = 1
 properties/7/path = NodePath(".:stealth_unseen_still")
 properties/7/spawn = true
 properties/7/replication_mode = 1
+properties/8/path = NodePath(".:network_weapon_type")
+properties/8/spawn = true
+properties/8/replication_mode = 1
+properties/9/path = NodePath(".:network_element")
+properties/9/spawn = true
+properties/9/replication_mode = 1
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_dyp2m"]
 radius = 16.0
@@ -176,17 +182,17 @@ radius = 16.0
 [sub_resource type="CircleShape2D" id="CircleShape2D_atpat"]
 radius = 24.0
 
-[node name="player" type="CharacterBody2D" unique_id=736798270]
+[node name="player" type="CharacterBody2D"]
 z_index = 100
 collision_layer = 2
 script = ExtResource("1_rp718")
 
-[node name="multiplayer_synchronizer" type="MultiplayerSynchronizer" parent="." unique_id=747180492]
+[node name="multiplayer_synchronizer" type="MultiplayerSynchronizer" parent="."]
 replication_config = SubResource("SceneReplicationConfig_atpat")
 
-[node name="player_camera" parent="." unique_id=563461302 instance=ExtResource("2_atpat")]
+[node name="player_camera" parent="." instance=ExtResource("2_atpat")]
 
-[node name="name_label" type="Label" parent="." unique_id=1362109846]
+[node name="name_label" type="Label" parent="."]
 offset_left = -64.0
 offset_top = -48.0
 offset_right = 1215.9999
@@ -200,40 +206,40 @@ text = "Neverknow247"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="visual_root" type="Node2D" parent="." unique_id=1895538767]
+[node name="visual_root" type="Node2D" parent="."]
 
-[node name="legs" type="Sprite2D" parent="visual_root" unique_id=1793390641]
+[node name="legs" type="Sprite2D" parent="visual_root"]
 texture = ExtResource("4_kqtwu")
 hframes = 14
 frame = 12
 
-[node name="sprite" type="Sprite2D" parent="visual_root" unique_id=1505886042]
+[node name="sprite" type="Sprite2D" parent="visual_root"]
 texture = ExtResource("5_6eyoc")
 hframes = 4
 vframes = 2
 
-[node name="collision_shape_2d" type="CollisionShape2D" parent="." unique_id=242083290]
+[node name="collision_shape_2d" type="CollisionShape2D" parent="."]
 position = Vector2(2.3841858e-07, 0)
 shape = SubResource("CircleShape2D_dyp2m")
 
-[node name="legs_animation_player" type="AnimationPlayer" parent="." unique_id=1795438609]
+[node name="legs_animation_player" type="AnimationPlayer" parent="."]
 libraries/ = SubResource("AnimationLibrary_legs")
 autoplay = &"RESET"
 
-[node name="body_animation_player" type="AnimationPlayer" parent="." unique_id=14560490]
+[node name="body_animation_player" type="AnimationPlayer" parent="."]
 libraries/ = SubResource("AnimationLibrary_body")
 
-[node name="hurtbox" parent="." unique_id=1454717858 instance=ExtResource("5_atpat")]
+[node name="hurtbox" parent="." instance=ExtResource("5_atpat")]
 collision_layer = 4
 
-[node name="collision_shape_2d" type="CollisionShape2D" parent="hurtbox" unique_id=813068255]
+[node name="collision_shape_2d" type="CollisionShape2D" parent="hurtbox"]
 shape = SubResource("CircleShape2D_kqtwu")
 
-[node name="roof_sense" type="Area2D" parent="." unique_id=1874305043]
+[node name="roof_sense" type="Area2D" parent="."]
 collision_layer = 0
 collision_mask = 16
 
-[node name="collision_shape_2d" type="CollisionShape2D" parent="roof_sense" unique_id=227315553]
+[node name="collision_shape_2d" type="CollisionShape2D" parent="roof_sense"]
 shape = SubResource("CircleShape2D_atpat")
 
 [connection signal="body_entered" from="roof_sense" to="." method="_on_roof_sense_body_entered"]

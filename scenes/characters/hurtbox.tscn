@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://bjectydfc3o8m" path="res://scenes/characters/hurtbox.gd" id="1_cig4x"]
 
-[node name="hurtbox" type="Area2D" unique_id=1454717858]
+[node name="hurtbox" type="Area2D"]
 collision_layer = 0
 collision_mask = 0
 script = ExtResource("1_cig4x")

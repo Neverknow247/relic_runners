@@ -10,8 +10,8 @@ script = ExtResource("2_dg2uu")
 disabled = true
 
 [node name="cone_polygon" type="CollisionPolygon2D" parent="hitbox"]
-polygon = PackedVector2Array(0, 0, 150, 62.1, 150, -62.1)
+polygon = PackedVector2Array(0, 0, 150, 150, 150, -150)
 
 [node name="cone_visual" type="Polygon2D" parent="."]
-polygon = PackedVector2Array(0, 0, 150, 62.1, 150, -62.1)
+polygon = PackedVector2Array(0, 0, 150, 150, 150, -150)
 color = Color(1, 1, 1, 0.6)

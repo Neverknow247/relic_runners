@@ -58,14 +58,27 @@ func setup(target_player) -> void:
 	player = target_player
 	refresh()
 
+# The equip_slot an item must declare to fit here. Normally the slot_type
+# itself, but ring_1 and ring_2 are two slots that both take a plain "ring".
+func _accepted_slot() -> String:
+	if slot_type.begins_with("ring_"):
+		return "ring"
+	return slot_type
+
+# User-facing name — "ring_1"/"ring_2" both read as "Ring".
+func _slot_label() -> String:
+	if slot_type.begins_with("ring_"):
+		return "Ring"
+	return slot_type.capitalize()
+
 func refresh() -> void:
 	if player == null:
 		return
 	var item: Item = player.get_equipped(slot_type)
 	if item == null:
-		text = slot_type.capitalize()
+		text = _slot_label()
 	else:
-		text = "%s\n%s" % [slot_type.capitalize(), ItemData.get_def(item.type)["display_name"]]
+		text = "%s\n%s" % [_slot_label(), ItemData.get_def(item.type)["display_name"]]
 
 func _get_drag_data(_at_position: Vector2) -> Variant:
 	if player == null:
@@ -83,7 +96,7 @@ func _can_drop_data(_at_position: Vector2, data: Variant) -> bool:
 	if typeof(data) != TYPE_DICTIONARY or !data.has("item") or !data.has("origin_container"):
 		return false
 	var item: Item = data["item"]
-	return ItemData.get_equip_slot(item.type) == slot_type
+	return ItemData.get_equip_slot(item.type) == _accepted_slot()
 
 func _drop_data(_at_position: Vector2, data: Variant) -> void:
 	if player == null:

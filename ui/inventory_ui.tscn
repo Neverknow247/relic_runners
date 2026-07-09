@@ -6,174 +6,355 @@
 [ext_resource type="Script" path="res://ui/equipment_slot.gd" id="4_equipment_slot"]
 [ext_resource type="Script" path="res://ui/stash_tab_button.gd" id="5_stash_tab"]
 [ext_resource type="Script" path="res://ui/trash_can_button.gd" id="6_trash_can"]
+[ext_resource type="Script" path="res://ui/materials_grid.gd" id="7_materials"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel_bg"]
-bg_color = Color(0.07, 0.07, 0.08, 0.98)
+bg_color = Color(0.16, 0.16, 0.19, 0.98)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_trash_can"]
-bg_color = Color(0.35, 0.12, 0.1, 1)
+bg_color = Color(0.5, 0.16, 0.14, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_doll_bg"]
+bg_color = Color(0.2, 0.2, 0.24, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.36, 0.36, 0.42, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_slot"]
+bg_color = Color(0.3, 0.3, 0.36, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.55, 0.55, 0.63, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_slot_hover"]
+bg_color = Color(0.4, 0.4, 0.47, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.7, 0.7, 0.78, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
 
 [node name="inventory_ui" type="CanvasLayer"]
 layer = 10
 script = ExtResource("1_ui")
 
 [node name="panel_container" type="PanelContainer" parent="."]
-offset_left = 100.0
-offset_top = 80.0
-offset_right = 2100.0
-offset_bottom = 1900.0
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -80.0
+offset_top = 120.0
+offset_right = -80.0
+offset_bottom = 120.0
+grow_horizontal = 0
+grow_vertical = 1
 theme_override_styles/panel = SubResource("StyleBoxFlat_panel_bg")
 
 [node name="margin_container" type="MarginContainer" parent="panel_container"]
 layout_mode = 2
-theme_override_constants/margin_left = 32
+theme_override_constants/margin_left = 40
 theme_override_constants/margin_top = 32
-theme_override_constants/margin_right = 32
+theme_override_constants/margin_right = 40
 theme_override_constants/margin_bottom = 32
 
-[node name="v_box_container" type="VBoxContainer" parent="panel_container/margin_container"]
+[node name="root_vbox" type="VBoxContainer" parent="panel_container/margin_container"]
 layout_mode = 2
 theme_override_constants/separation = 24
 
-[node name="title_row" type="HBoxContainer" parent="panel_container/margin_container/v_box_container"]
+[node name="title_row" type="HBoxContainer" parent="panel_container/margin_container/root_vbox"]
 layout_mode = 2
 theme_override_constants/separation = 16
 
-[node name="title_label" type="Label" parent="panel_container/margin_container/v_box_container/title_row"]
+[node name="title_label" type="Label" parent="panel_container/margin_container/root_vbox/title_row"]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 64
 text = "Inventory"
 
-[node name="trash_can" type="PanelContainer" parent="panel_container/margin_container/v_box_container/title_row"]
-custom_minimum_size = Vector2(160, 90)
+[node name="columns_row" type="HBoxContainer" parent="panel_container/margin_container/root_vbox"]
 layout_mode = 2
-theme_override_styles/panel = SubResource("StyleBoxFlat_trash_can")
-script = ExtResource("6_trash_can")
+size_flags_vertical = 3
+theme_override_constants/separation = 64
 
-[node name="trash_can_label" type="Label" parent="panel_container/margin_container/v_box_container/title_row/trash_can"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 28
-theme_override_colors/font_color = Color(1, 1, 1, 1)
-text = "Trash"
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="weapon_row" type="HBoxContainer" parent="panel_container/margin_container/v_box_container"]
+[node name="left_column" type="VBoxContainer" parent="panel_container/margin_container/root_vbox/columns_row"]
 layout_mode = 2
 theme_override_constants/separation = 16
 
-[node name="weapon_hand_slot" type="Button" parent="panel_container/margin_container/v_box_container/weapon_row"]
-custom_minimum_size = Vector2(320, 160)
-layout_mode = 2
-theme_override_font_sizes/font_size = 32
-text = "Hand
-Tome"
-script = ExtResource("3_weapon_slot")
-role = "hand"
-
-[node name="weapon_holster_slot" type="Button" parent="panel_container/margin_container/v_box_container/weapon_row"]
-custom_minimum_size = Vector2(320, 160)
-layout_mode = 2
-theme_override_font_sizes/font_size = 32
-text = "Holster
-Wand"
-script = ExtResource("3_weapon_slot")
-role = "holster"
-
-[node name="gear_row" type="HBoxContainer" parent="panel_container/margin_container/v_box_container"]
-layout_mode = 2
-theme_override_constants/separation = 16
-
-[node name="backpack_slot" type="Button" parent="panel_container/margin_container/v_box_container/gear_row"]
-custom_minimum_size = Vector2(320, 160)
-layout_mode = 2
-theme_override_font_sizes/font_size = 32
-text = "Backpack"
-script = ExtResource("4_equipment_slot")
-slot_type = "backpack"
-
-[node name="belt_slot" type="Button" parent="panel_container/margin_container/v_box_container/gear_row"]
-custom_minimum_size = Vector2(320, 160)
-layout_mode = 2
-theme_override_font_sizes/font_size = 32
-text = "Belt"
-script = ExtResource("4_equipment_slot")
-slot_type = "belt"
-
-[node name="cloak_slot" type="Button" parent="panel_container/margin_container/v_box_container/gear_row"]
-custom_minimum_size = Vector2(320, 160)
-layout_mode = 2
-theme_override_font_sizes/font_size = 32
-text = "Cloak"
-script = ExtResource("4_equipment_slot")
-slot_type = "cloak"
-
-[node name="quick_slot_row" type="HBoxContainer" parent="panel_container/margin_container/v_box_container"]
-layout_mode = 2
-theme_override_constants/separation = 16
-
-[node name="loot_actions_row" type="HBoxContainer" parent="panel_container/margin_container/v_box_container"]
+[node name="loot_actions_row" type="HBoxContainer" parent="panel_container/margin_container/root_vbox/columns_row/left_column"]
 visible = false
 layout_mode = 2
 
-[node name="take_all_button" type="Button" parent="panel_container/margin_container/v_box_container/loot_actions_row"]
+[node name="take_all_button" type="Button" parent="panel_container/margin_container/root_vbox/columns_row/left_column/loot_actions_row"]
 custom_minimum_size = Vector2(240, 90)
 layout_mode = 2
 theme_override_font_sizes/font_size = 28
 text = "Take All"
 
-[node name="panels_row" type="HBoxContainer" parent="panel_container/margin_container/v_box_container"]
-layout_mode = 2
-theme_override_constants/separation = 32
-
-[node name="player_grid" parent="panel_container/margin_container/v_box_container/panels_row" instance=ExtResource("2_grid")]
-layout_mode = 2
-
-[node name="loot_grid" parent="panel_container/margin_container/v_box_container/panels_row" instance=ExtResource("2_grid")]
-layout_mode = 2
+[node name="loot_grid" parent="panel_container/margin_container/root_vbox/columns_row/left_column" instance=ExtResource("2_grid")]
 visible = false
+layout_mode = 2
 
-[node name="stash_column" type="VBoxContainer" parent="panel_container/margin_container/v_box_container/panels_row"]
+[node name="stash_column" type="VBoxContainer" parent="panel_container/margin_container/root_vbox/columns_row/left_column"]
 visible = false
 layout_mode = 2
 theme_override_constants/separation = 16
 
-[node name="stash_tab_row" type="HBoxContainer" parent="panel_container/margin_container/v_box_container/panels_row/stash_column"]
+[node name="stash_tab_row" type="HBoxContainer" parent="panel_container/margin_container/root_vbox/columns_row/left_column/stash_column"]
 layout_mode = 2
 size_flags_horizontal = 3
 alignment = 1
 theme_override_constants/separation = 16
 
-[node name="stash_tab_1" type="Button" parent="panel_container/margin_container/v_box_container/panels_row/stash_column/stash_tab_row"]
-custom_minimum_size = Vector2(200, 90)
+[node name="stash_tab_1" type="Button" parent="panel_container/margin_container/root_vbox/columns_row/left_column/stash_column/stash_tab_row"]
+custom_minimum_size = Vector2(110, 90)
 layout_mode = 2
-theme_override_font_sizes/font_size = 28
-text = "Tab 1"
+theme_override_font_sizes/font_size = 32
+text = "1"
 script = ExtResource("5_stash_tab")
 tab_index = 0
 
-[node name="stash_tab_2" type="Button" parent="panel_container/margin_container/v_box_container/panels_row/stash_column/stash_tab_row"]
-custom_minimum_size = Vector2(200, 90)
+[node name="stash_tab_2" type="Button" parent="panel_container/margin_container/root_vbox/columns_row/left_column/stash_column/stash_tab_row"]
+custom_minimum_size = Vector2(110, 90)
 layout_mode = 2
-theme_override_font_sizes/font_size = 28
-text = "Tab 2"
+theme_override_font_sizes/font_size = 32
+text = "2"
 script = ExtResource("5_stash_tab")
 tab_index = 1
 
-[node name="stash_tab_3" type="Button" parent="panel_container/margin_container/v_box_container/panels_row/stash_column/stash_tab_row"]
-custom_minimum_size = Vector2(200, 90)
+[node name="stash_tab_3" type="Button" parent="panel_container/margin_container/root_vbox/columns_row/left_column/stash_column/stash_tab_row"]
+custom_minimum_size = Vector2(110, 90)
 layout_mode = 2
-theme_override_font_sizes/font_size = 28
-text = "Tab 3"
+theme_override_font_sizes/font_size = 32
+text = "3"
 script = ExtResource("5_stash_tab")
 tab_index = 2
 
-[node name="move_all_button" type="Button" parent="panel_container/margin_container/v_box_container/panels_row/stash_column"]
+[node name="stash_tab_4" type="Button" parent="panel_container/margin_container/root_vbox/columns_row/left_column/stash_column/stash_tab_row"]
+custom_minimum_size = Vector2(110, 90)
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "4"
+script = ExtResource("5_stash_tab")
+tab_index = 3
+
+[node name="materials_tab_button" type="Button" parent="panel_container/margin_container/root_vbox/columns_row/left_column/stash_column/stash_tab_row"]
+custom_minimum_size = Vector2(110, 90)
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "M"
+
+[node name="move_all_button" type="Button" parent="panel_container/margin_container/root_vbox/columns_row/left_column/stash_column"]
 custom_minimum_size = Vector2(0, 90)
 layout_mode = 2
 theme_override_font_sizes/font_size = 28
 text = "Move All to Stash"
 
-[node name="stash_grid" parent="panel_container/margin_container/v_box_container/panels_row/stash_column" instance=ExtResource("2_grid")]
+[node name="stash_grid" parent="panel_container/margin_container/root_vbox/columns_row/left_column/stash_column" instance=ExtResource("2_grid")]
 layout_mode = 2
+
+[node name="materials_grid" type="Control" parent="panel_container/margin_container/root_vbox/columns_row/left_column/stash_column"]
+visible = false
+layout_mode = 2
+script = ExtResource("7_materials")
+
+[node name="middle_column" type="VBoxContainer" parent="panel_container/margin_container/root_vbox/columns_row"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="backpack_label" type="Label" parent="panel_container/margin_container/root_vbox/columns_row/middle_column"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 40
+text = "Backpack"
+
+[node name="player_grid" parent="panel_container/margin_container/root_vbox/columns_row/middle_column" instance=ExtResource("2_grid")]
+layout_mode = 2
+
+[node name="quick_slot_row" type="HBoxContainer" parent="panel_container/margin_container/root_vbox/columns_row/middle_column"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="right_column" type="VBoxContainer" parent="panel_container/margin_container/root_vbox/columns_row"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="equip_label" type="Label" parent="panel_container/margin_container/root_vbox/columns_row/right_column"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 40
+text = "Equipment"
+
+[node name="doll_panel" type="PanelContainer" parent="panel_container/margin_container/root_vbox/columns_row/right_column"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_doll_bg")
+
+[node name="doll_margin" type="MarginContainer" parent="panel_container/margin_container/root_vbox/columns_row/right_column/doll_panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="equipment_doll" type="GridContainer" parent="panel_container/margin_container/root_vbox/columns_row/right_column/doll_panel/doll_margin"]
+layout_mode = 2
+theme_override_constants/h_separation = 16
+theme_override_constants/v_separation = 16
+columns = 3
+
+[node name="backpack_slot" type="Button" parent="panel_container/margin_container/root_vbox/columns_row/right_column/doll_panel/doll_margin/equipment_doll"]
+custom_minimum_size = Vector2(210, 130)
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+theme_override_styles/normal = SubResource("StyleBoxFlat_slot")
+theme_override_styles/hover = SubResource("StyleBoxFlat_slot_hover")
+text = "Backpack"
+script = ExtResource("4_equipment_slot")
+slot_type = "backpack"
+
+[node name="hat_slot" type="Button" parent="panel_container/margin_container/root_vbox/columns_row/right_column/doll_panel/doll_margin/equipment_doll"]
+custom_minimum_size = Vector2(210, 130)
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+theme_override_styles/normal = SubResource("StyleBoxFlat_slot")
+theme_override_styles/hover = SubResource("StyleBoxFlat_slot_hover")
+text = "Hat"
+script = ExtResource("4_equipment_slot")
+slot_type = "hat"
+
+[node name="necklace_slot" type="Button" parent="panel_container/margin_container/root_vbox/columns_row/right_column/doll_panel/doll_margin/equipment_doll"]
+custom_minimum_size = Vector2(210, 130)
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+theme_override_styles/normal = SubResource("StyleBoxFlat_slot")
+theme_override_styles/hover = SubResource("StyleBoxFlat_slot_hover")
+text = "Necklace"
+script = ExtResource("4_equipment_slot")
+slot_type = "necklace"
+
+[node name="weapon_hand_slot" type="Button" parent="panel_container/margin_container/root_vbox/columns_row/right_column/doll_panel/doll_margin/equipment_doll"]
+custom_minimum_size = Vector2(210, 130)
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+theme_override_styles/normal = SubResource("StyleBoxFlat_slot")
+theme_override_styles/hover = SubResource("StyleBoxFlat_slot_hover")
+text = "Hand"
+script = ExtResource("3_weapon_slot")
+role = "hand"
+
+[node name="body_slot" type="Button" parent="panel_container/margin_container/root_vbox/columns_row/right_column/doll_panel/doll_margin/equipment_doll"]
+custom_minimum_size = Vector2(210, 130)
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+theme_override_styles/normal = SubResource("StyleBoxFlat_slot")
+theme_override_styles/hover = SubResource("StyleBoxFlat_slot_hover")
+text = "Body"
+script = ExtResource("4_equipment_slot")
+slot_type = "body"
+
+[node name="weapon_holster_slot" type="Button" parent="panel_container/margin_container/root_vbox/columns_row/right_column/doll_panel/doll_margin/equipment_doll"]
+custom_minimum_size = Vector2(210, 130)
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+theme_override_styles/normal = SubResource("StyleBoxFlat_slot")
+theme_override_styles/hover = SubResource("StyleBoxFlat_slot_hover")
+text = "Holster"
+script = ExtResource("3_weapon_slot")
+role = "holster"
+
+[node name="ring_1_slot" type="Button" parent="panel_container/margin_container/root_vbox/columns_row/right_column/doll_panel/doll_margin/equipment_doll"]
+custom_minimum_size = Vector2(210, 130)
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+theme_override_styles/normal = SubResource("StyleBoxFlat_slot")
+theme_override_styles/hover = SubResource("StyleBoxFlat_slot_hover")
+text = "Ring"
+script = ExtResource("4_equipment_slot")
+slot_type = "ring_1"
+
+[node name="belt_slot" type="Button" parent="panel_container/margin_container/root_vbox/columns_row/right_column/doll_panel/doll_margin/equipment_doll"]
+custom_minimum_size = Vector2(210, 130)
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+theme_override_styles/normal = SubResource("StyleBoxFlat_slot")
+theme_override_styles/hover = SubResource("StyleBoxFlat_slot_hover")
+text = "Belt"
+script = ExtResource("4_equipment_slot")
+slot_type = "belt"
+
+[node name="ring_2_slot" type="Button" parent="panel_container/margin_container/root_vbox/columns_row/right_column/doll_panel/doll_margin/equipment_doll"]
+custom_minimum_size = Vector2(210, 130)
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+theme_override_styles/normal = SubResource("StyleBoxFlat_slot")
+theme_override_styles/hover = SubResource("StyleBoxFlat_slot_hover")
+text = "Ring"
+script = ExtResource("4_equipment_slot")
+slot_type = "ring_2"
+
+[node name="spacer_bl" type="Control" parent="panel_container/margin_container/root_vbox/columns_row/right_column/doll_panel/doll_margin/equipment_doll"]
+custom_minimum_size = Vector2(210, 130)
+layout_mode = 2
+
+[node name="pants_slot" type="Button" parent="panel_container/margin_container/root_vbox/columns_row/right_column/doll_panel/doll_margin/equipment_doll"]
+custom_minimum_size = Vector2(210, 130)
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+theme_override_styles/normal = SubResource("StyleBoxFlat_slot")
+theme_override_styles/hover = SubResource("StyleBoxFlat_slot_hover")
+text = "Pants"
+script = ExtResource("4_equipment_slot")
+slot_type = "pants"
+
+[node name="spacer_br" type="Control" parent="panel_container/margin_container/root_vbox/columns_row/right_column/doll_panel/doll_margin/equipment_doll"]
+custom_minimum_size = Vector2(210, 130)
+layout_mode = 2
+
+[node name="spacer_bl2" type="Control" parent="panel_container/margin_container/root_vbox/columns_row/right_column/doll_panel/doll_margin/equipment_doll"]
+custom_minimum_size = Vector2(210, 130)
+layout_mode = 2
+
+[node name="boots_slot" type="Button" parent="panel_container/margin_container/root_vbox/columns_row/right_column/doll_panel/doll_margin/equipment_doll"]
+custom_minimum_size = Vector2(210, 130)
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+theme_override_styles/normal = SubResource("StyleBoxFlat_slot")
+theme_override_styles/hover = SubResource("StyleBoxFlat_slot_hover")
+text = "Boots"
+script = ExtResource("4_equipment_slot")
+slot_type = "boots"
+
+[node name="spacer_br2" type="Control" parent="panel_container/margin_container/root_vbox/columns_row/right_column/doll_panel/doll_margin/equipment_doll"]
+custom_minimum_size = Vector2(210, 130)
+layout_mode = 2
+
+[node name="trash_can" type="PanelContainer" parent="panel_container/margin_container/root_vbox/columns_row/right_column"]
+custom_minimum_size = Vector2(210, 100)
+layout_mode = 2
+size_flags_horizontal = 8
+theme_override_styles/panel = SubResource("StyleBoxFlat_trash_can")
+script = ExtResource("6_trash_can")
+
+[node name="trash_can_label" type="Label" parent="panel_container/margin_container/root_vbox/columns_row/right_column/trash_can"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+text = "Trash"
+horizontal_alignment = 1
+vertical_alignment = 1

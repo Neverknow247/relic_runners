@@ -1,0 +1,44 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://ui/crafting_ui.gd" id="1_craft_ui"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_craft_bg"]
+bg_color = Color(0.09, 0.09, 0.11, 0.98)
+
+[node name="crafting_ui" type="CanvasLayer"]
+layer = 11
+visible = false
+script = ExtResource("1_craft_ui")
+
+[node name="panel_container" type="PanelContainer" parent="."]
+offset_left = 80.0
+offset_top = 120.0
+offset_right = 1720.0
+offset_bottom = 1900.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_craft_bg")
+
+[node name="margin_container" type="MarginContainer" parent="panel_container"]
+layout_mode = 2
+theme_override_constants/margin_left = 40
+theme_override_constants/margin_top = 32
+theme_override_constants/margin_right = 40
+theme_override_constants/margin_bottom = 32
+
+[node name="v_box_container" type="VBoxContainer" parent="panel_container/margin_container"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="title_label" type="Label" parent="panel_container/margin_container/v_box_container"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 64
+text = "Crafting Bench"
+
+[node name="status_label" type="Label" parent="panel_container/margin_container/v_box_container"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+theme_override_colors/font_color = Color(1, 0.85, 0.5, 1)
+autowrap_mode = 2
+
+[node name="recipes_section" type="VBoxContainer" parent="panel_container/margin_container/v_box_container"]
+layout_mode = 2
+theme_override_constants/separation = 12

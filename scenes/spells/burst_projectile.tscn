@@ -3,5 +3,5 @@
 [ext_resource type="PackedScene" uid="uid://bg8kikir621sv" path="res://scenes/spells/projectile.tscn" id="1_irc2j"]
 [ext_resource type="Script" uid="uid://2axrfnpgrb3r" path="res://scenes/spells/burst_projectile.gd" id="2_xvao6"]
 
-[node name="burst_projectile" unique_id=1555628361 instance=ExtResource("1_irc2j")]
+[node name="burst_projectile" instance=ExtResource("1_irc2j")]
 script = ExtResource("2_xvao6")

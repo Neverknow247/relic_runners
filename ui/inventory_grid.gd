@@ -251,7 +251,11 @@ func _drop_data(at_position: Vector2, data: Variant) -> void:
 	var origin_container: String = data["origin_container"]
 	var cell := _pixel_to_cell(at_position)
 	if origin_container == container_id:
-		inventory.move_item(item.instance_id, cell.x, cell.y)
+		# combine_or_move so dropping a stack onto a same-type stack in the SAME
+		# container (e.g. stash-to-stash) merges instead of no-op'ing.
+		inventory.combine_or_move(item.instance_id, cell.x, cell.y)
+		if player_ref != null:
+			player_ref.persist_container(container_id)
 	elif origin_container.begins_with("equip_") and _is_own_storage(container_id) and player_ref != null:
 		player_ref.unequip_to_grid(origin_container.trim_prefix("equip_"), container_id, cell.x, cell.y)
 	elif origin_container.begins_with("quick_") and _is_own_storage(container_id) and player_ref != null:

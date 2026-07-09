@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://dyuhmtm81ixsv" path="res://scenes/items/expedition_door.gd" id="1_04df3"]
 
-[node name="expedition_door" type="Area2D" unique_id=1733621152]
+[node name="expedition_door" type="Area2D"]
 collision_layer = 0
 collision_mask = 2
 script = ExtResource("1_04df3")

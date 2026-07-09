@@ -69,8 +69,30 @@ func load_location_locally(zone: String, room: String, _old_zone: String = "", _
 		scene_instance.remove_child(objects)
 		world.zone_objects.add_child(objects)
 		objects_node = objects
+	# Each location loads at its own distinct world offset (deterministic per
+	# key, identical on every peer) so different rooms never overlap in world
+	# space. This is what stops a held room's walls (kept in place by design so
+	# node paths stay stable) from colliding with whatever room you're actually
+	# standing in — e.g. a held dungeon's walls bleeding into the hub as
+	# invisible collision. Everything downstream (spawn points, enemy/loot/
+	# player positions) uses global coordinates, so the offset is transparent
+	# and stays consistent across peers.
+	var offset := _location_offset(key)
+	scene_instance.position += offset
+	if floor_node:
+		floor_node.position += offset
+	if objects_node:
+		objects_node.position += offset
 	loaded_rooms[key] = {"scene": scene_instance, "floor": floor_node, "objects": objects_node}
 	active_key = key
+
+const LOCATION_SPACING := 100000.0
+
+func _location_offset(key: String) -> Vector2:
+	var idx: int = world.ZONE_SCENES.keys().find(key)
+	if idx < 0:
+		idx = 0
+	return Vector2(0, idx * LOCATION_SPACING)
 
 # Hides (server, someone else still there) or frees (everyone else) the room
 # currently shown as this peer's view, before a new one replaces it. Clients

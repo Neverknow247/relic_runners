@@ -1,0 +1,188 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://ui/settings_menu.gd" id="1_settings"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_settings_bg"]
+bg_color = Color(0.09, 0.09, 0.11, 0.98)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.4, 0.4, 0.45, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+
+[node name="settings_menu" type="CanvasLayer"]
+layer = 20
+visible = false
+script = ExtResource("1_settings")
+
+[node name="dim_background" type="ColorRect" parent="."]
+offset_right = 3840.0
+offset_bottom = 2160.0
+color = Color(0, 0, 0, 0.6)
+
+[node name="panel_container" type="PanelContainer" parent="."]
+offset_left = 1120.0
+offset_top = 300.0
+offset_right = 2720.0
+offset_bottom = 1860.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_settings_bg")
+
+[node name="margin_container" type="MarginContainer" parent="panel_container"]
+layout_mode = 2
+theme_override_constants/margin_left = 56
+theme_override_constants/margin_top = 56
+theme_override_constants/margin_right = 56
+theme_override_constants/margin_bottom = 56
+
+[node name="v_box_container" type="VBoxContainer" parent="panel_container/margin_container"]
+layout_mode = 2
+theme_override_constants/separation = 32
+
+[node name="title_label" type="Label" parent="panel_container/margin_container/v_box_container"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 76
+text = "Settings"
+horizontal_alignment = 1
+
+[node name="window_section" type="VBoxContainer" parent="panel_container/margin_container/v_box_container"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="label" type="Label" parent="panel_container/margin_container/v_box_container/window_section"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 44
+text = "Window Mode"
+
+[node name="window_buttons" type="HBoxContainer" parent="panel_container/margin_container/v_box_container/window_section"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 20
+
+[node name="windowed_button" type="Button" parent="panel_container/margin_container/v_box_container/window_section/window_buttons"]
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 38
+text = "Windowed"
+
+[node name="fullscreen_button" type="Button" parent="panel_container/margin_container/v_box_container/window_section/window_buttons"]
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 38
+text = "Fullscreen"
+
+[node name="exclusive_button" type="Button" parent="panel_container/margin_container/v_box_container/window_section/window_buttons"]
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 38
+text = "Exclusive Fullscreen"
+
+[node name="mouse_row" type="HBoxContainer" parent="panel_container/margin_container/v_box_container"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="label" type="Label" parent="panel_container/margin_container/v_box_container/mouse_row"]
+custom_minimum_size = Vector2(560, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 44
+text = "Confine Cursor to Window"
+vertical_alignment = 1
+autowrap_mode = 2
+
+[node name="mouse_capture_check" type="CheckButton" parent="panel_container/margin_container/v_box_container/mouse_row"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 40
+
+[node name="audio_label" type="Label" parent="panel_container/margin_container/v_box_container"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 56
+text = "Audio"
+
+[node name="master_row" type="HBoxContainer" parent="panel_container/margin_container/v_box_container"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="label" type="Label" parent="panel_container/margin_container/v_box_container/master_row"]
+custom_minimum_size = Vector2(360, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 40
+text = "Master"
+vertical_alignment = 1
+
+[node name="master_slider" type="HSlider" parent="panel_container/margin_container/v_box_container/master_row"]
+custom_minimum_size = Vector2(0, 64)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 1
+max_value = 1.0
+step = 0.01
+
+[node name="music_row" type="HBoxContainer" parent="panel_container/margin_container/v_box_container"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="label" type="Label" parent="panel_container/margin_container/v_box_container/music_row"]
+custom_minimum_size = Vector2(360, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 40
+text = "Music"
+vertical_alignment = 1
+
+[node name="music_slider" type="HSlider" parent="panel_container/margin_container/v_box_container/music_row"]
+custom_minimum_size = Vector2(0, 64)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 1
+max_value = 1.0
+step = 0.01
+
+[node name="sounds_row" type="HBoxContainer" parent="panel_container/margin_container/v_box_container"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="label" type="Label" parent="panel_container/margin_container/v_box_container/sounds_row"]
+custom_minimum_size = Vector2(360, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 40
+text = "Sounds"
+vertical_alignment = 1
+
+[node name="sounds_slider" type="HSlider" parent="panel_container/margin_container/v_box_container/sounds_row"]
+custom_minimum_size = Vector2(0, 64)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 1
+max_value = 1.0
+step = 0.01
+
+[node name="voice_row" type="HBoxContainer" parent="panel_container/margin_container/v_box_container"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="label" type="Label" parent="panel_container/margin_container/v_box_container/voice_row"]
+custom_minimum_size = Vector2(360, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 40
+text = "Voice"
+vertical_alignment = 1
+
+[node name="voice_slider" type="HSlider" parent="panel_container/margin_container/v_box_container/voice_row"]
+custom_minimum_size = Vector2(0, 64)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 1
+max_value = 1.0
+step = 0.01
+
+[node name="back_button" type="Button" parent="panel_container/margin_container/v_box_container"]
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+theme_override_font_sizes/font_size = 44
+text = "Back"

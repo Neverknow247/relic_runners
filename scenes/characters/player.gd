@@ -29,6 +29,7 @@ func _spawn_damage_number(amount: float, color: Color, is_crit: bool = false) ->
 @onready var downed_ui = $player_camera/downed_ui
 @onready var quick_slot_hud = $player_camera/quick_slot_hud
 @onready var workbench_ui = $player_camera/workbench_ui
+@onready var crafting_ui = $player_camera/crafting_ui
 @onready var expedition_kit_ui = $player_camera/expedition_kit_ui
 
 # Legs and the upper body are animated and rotated completely
@@ -49,6 +50,14 @@ var _applied_legs_anim := ""
 var _applied_body_anim := ""
 @export var network_rotation := 0.0
 @export var network_legs_rotation := 0.0
+# Replicated combat identity (weapon type + element) — the matchup multiplier
+# needs the DEFENDER's weapon/element, but a remote peer doesn't have this
+# player's equipped Weapon (gear/weapons aren't networked). Set on the
+# authority from the equipped weapon (see persist_weapon_slots) and read by
+# _on_hurtbox_hurt so every peer computes the same damage number. "default"
+# when unarmed (neutral, no matchup bonus — same as a broken weapon).
+@export var network_weapon_type := "default"
+@export var network_element := "default"
 var aim_direction := Vector2.DOWN
 var is_attacking := false
 
@@ -68,7 +77,17 @@ var health := max_health:
 	set(value):
 		health = value
 		if health_ui:
-			health_ui.update_health(health, max_health)
+			health_ui.update_health(health, max_health, shield)
+# Shield (from an equipped Blessed Band) absorbs damage before health. Each
+# Blessed Band grants BLESSED_BAND_SHIELD; when the shield is fully spent the
+# band(s) break into scrap (see take_damage / _break_blessed_bands).
+var shield := 0.0:
+	set(value):
+		shield = value
+		if health_ui:
+			health_ui.update_health(health, max_health, shield)
+var max_shield := 0.0
+const BLESSED_BAND_SHIELD := 50.0
 # ALIVE -> DOWNED (prone, 60s countdown, frozen) -> DYING (brief "dead" anim
 # pause) -> back to ALIVE once _finish_death() resets everything and sends
 # you to hub. Movement/attack input is ignored whenever this isn't ALIVE.
@@ -83,6 +102,17 @@ const DEATH_ANIM_DELAY := 1.0
 # rather than a separate "instant kill" code path.
 var give_up_hold_timer := 0.0
 const GIVE_UP_HOLD_DURATION := 3.0
+
+# Co-op revive: an ALIVE ally holds interact next to a DOWNED player to revive
+# them. Base is a slow revive to a sliver of health; if the REVIVER is carrying
+# Phoenix Ash it's consumed for a much faster revive to more health. The downed
+# player can't revive themselves.
+const REVIVE_RANGE := 120.0
+const REVIVE_TIME_BASE := 5.0
+const REVIVE_TIME_ASH := 1.5
+const REVIVE_HP_BASE := 25.0
+const REVIVE_HP_ASH := 50.0
+var _revive_progress := 0.0
 
 # Fresh characters start unarmed — a weapon is only ever granted by picking
 # the Starter Kit at an expedition door (see apply_starter_kit()); Custom Kit
@@ -100,7 +130,9 @@ var open_overflow_chest = null
 # opening the "same" physical chest each just see their own stash, not a
 # shared container.
 const STASH_TAB_SIZE := Vector2i(7, 6)
-const STASH_TAB_COUNT := 3
+const STASH_TAB_COUNT := 4
+# Stash cells hold double a normal stack (see Inventory.stack_multiplier).
+const STASH_STACK_MULTIPLIER := 2
 var stash_tabs: Array[Inventory] = []
 
 # Overflow chest — a per-player safety container for the "Starter Kit" bank
@@ -114,6 +146,11 @@ var stash_tabs: Array[Inventory] = []
 # the overflow rather than accumulate it.
 const OVERFLOW_SIZE := Vector2i(8, 8)
 var overflow := Inventory.new(OVERFLOW_SIZE.x, OVERFLOW_SIZE.y)
+
+# Crafting materials (element crystals + form stones), banked from the stash's
+# Materials tab: a flat per-type count that stacks infinitely (no grid). The
+# weapon workbench consumes from here first (see workbench_* / consume_material).
+var materials: Dictionary = {}
 
 # Backpack is unequippable now (like belt/cloak) — this is what you're left
 # with when equipped_backpack is null (fresh character, unequipped, or after
@@ -135,7 +172,14 @@ var inventory := Inventory.new(4, 3)
 # for it (see EquipmentSlot._get_drag_data) — only equip-a-different-one is.
 var equipped_backpack: Item = null
 var equipped_belt: Item = null
-var equipped_cloak: Item = null
+var equipped_body: Item = null
+# Simple attribute-only gear slots beyond backpack/belt/cloak (which keep their
+# own vars for their special mechanics — inventory size / quick slots). Stored
+# generically as slot_type -> Item. ring_1 and ring_2 are two slots that both
+# accept a "ring" item. No lootable items fill these yet — the slots exist in the
+# equipment UI and persist, ready for gear to be added later.
+const EXTRA_GEAR_SLOTS := ["hat", "necklace", "pants", "boots", "ring_1", "ring_2"]
+var equipped_gear: Dictionary = {}
 
 # Quick slots a belt provides — usable items only (health_potion,
 # mana_crystal, ...), used with the quick_slot_1/quick_slot_2 keys without
@@ -180,6 +224,8 @@ func swap_to_weapon_slot(slot: int) -> void:
 		return
 	active_slot = slot
 	spell_input_sequence.clear()
+	# Refresh the replicated combat identity for the newly-active weapon.
+	persist_weapon_slots()
 	refresh_spell_ui()
 	refresh_mana_ui()
 	inventory_ui.refresh()
@@ -223,6 +269,7 @@ func close_inventory_if_open() -> bool:
 	# open_workbench_panel) — tear it (and the interactable's panel_open flag)
 	# down too, same reasoning as close_stash_panel above.
 	close_workbench_panel()
+	close_crafting_panel()
 	# CanvasLayer.visible only stops the whole layer from drawing — it
 	# doesn't reset state on anything inside it, so a still-open right-click
 	# context menu inside player_grid would otherwise silently persist and
@@ -307,7 +354,7 @@ func apply_starter_kit() -> void:
 	for weapon in weapon_slots:
 		if weapon != null:
 			carried.append(_wrap_weapon_as_item(weapon))
-	for slot_type in ["backpack", "belt", "cloak"]:
+	for slot_type in (["backpack", "belt", "body"] + EXTRA_GEAR_SLOTS):
 		var gear: Item = get_equipped(slot_type)
 		if gear != null:
 			carried.append(gear)
@@ -321,7 +368,8 @@ func apply_starter_kit() -> void:
 	weapon_slots[1] = null
 	equipped_backpack = null
 	equipped_belt = null
-	equipped_cloak = null
+	equipped_body = null
+	equipped_gear.clear()
 	quick_slots.clear()
 	inventory = Inventory.new(DEFAULT_INVENTORY_SIZE.x, DEFAULT_INVENTORY_SIZE.y)
 
@@ -378,17 +426,45 @@ func _bank_item_to_stash(item: Item, preferred_tab: int) -> bool:
 func move_all_to_stash(preferred_tab: int) -> void:
 	for entry in inventory.placements.duplicate():
 		var item: Item = entry["item"]
+		# Crystals/form stones always go to the Materials tab, no matter which
+		# stash tab is showing. bank_material removes them from the bag itself.
+		if ItemData.is_material(item.type):
+			bank_material(item, "player")
+			continue
+		# Everything else fills the tab you're looking at first, spilling into the
+		# others in order (see _bank_item_to_stash). Anything that fits nowhere
+		# stays in the bag rather than being lost.
 		if _bank_item_to_stash(item, preferred_tab):
 			inventory.remove_item(item.instance_id)
 	persist_inventory()
 	persist_stash()
+	persist_materials()
 	inventory_ui.refresh()
 
 func persist_weapon_slots() -> void:
 	stats.save_data["weapons"] = weapon_slots.map(func(w): return w.to_dict() if w != null else null)
+	# Which slot is in-hand vs holstered is part of the loadout — without this,
+	# a load always snaps back to slot 0, so a weapon you'd swapped into your
+	# hand reverts to the holster.
+	stats.save_data["active_slot"] = active_slot
+	# Keep the replicated combat identity in sync with the active weapon so
+	# other peers compute the same matchup damage against us. "default" =
+	# unarmed/neutral.
+	var equipped := get_equipped_weapon()
+	network_weapon_type = equipped.type if equipped != null else "default"
+	network_element = equipped.element if equipped != null else "default"
 
 func persist_inventory() -> void:
 	stats.save_data["items"] = inventory.to_dict()
+
+# Persist whichever own-storage container a UI just mutated in place.
+func persist_container(container_id: String) -> void:
+	if container_id == "player":
+		persist_inventory()
+	elif container_id.begins_with("stash_"):
+		persist_stash()
+	elif container_id == "overflow":
+		persist_overflow()
 
 func persist_stash() -> void:
 	stats.save_data["stash"] = stash_tabs.map(func(inv): return inv.to_dict())
@@ -413,6 +489,39 @@ func persist_overflow() -> void:
 
 func overflow_has_items() -> bool:
 	return !overflow.placements.is_empty()
+
+# --- Crafting materials (stash Materials tab) -----------------------------
+func persist_materials() -> void:
+	stats.save_data["materials"] = materials.duplicate()
+
+func material_count(type: String) -> int:
+	return materials.get(type, 0)
+
+# Consume `n` of a banked material. Returns false (unchanged) if not enough.
+func consume_material(type: String, n: int = 1) -> bool:
+	if materials.get(type, 0) < n:
+		return false
+	materials[type] -= n
+	if materials[type] <= 0:
+		materials.erase(type)
+	persist_materials()
+	return true
+
+# Drag-in banking: pull the whole material stack out of its own-storage origin
+# and fold its quantity into the infinite per-type materials store.
+func bank_material(item: Item, origin_container_id: String) -> void:
+	if !ItemData.is_material(item.type):
+		return
+	var origin := get_container_by_id(origin_container_id)
+	if origin == null:
+		return
+	var removed := origin.remove_item(item.instance_id)
+	if removed == null:
+		return
+	materials[removed.type] = materials.get(removed.type, 0) + removed.quantity
+	persist_materials()
+	persist_container(origin_container_id)
+	inventory_ui.refresh()
 
 func move_between_own_containers(origin_id: String, item_instance_id: String, dest_id: String, x: int, y: int) -> void:
 	var origin_inv := get_container_by_id(origin_id)
@@ -515,6 +624,78 @@ func close_workbench_panel() -> void:
 		open_workbench = null
 	workbench_ui.visible = false
 
+# The crafting bench — a hub interactable that opens the crafting panel (turn
+# recipe ingredients from your bag/Materials tab into their output). Local like
+# the workbench; opens alongside the inventory so you can see your materials.
+var open_crafting_bench = null
+
+func open_crafting_panel(bench = null) -> void:
+	open_crafting_bench = bench
+	inventory_ui.visible = true
+	inventory_ui.refresh()
+	crafting_ui.visible = true
+	crafting_ui.setup(self)
+
+func close_crafting_panel() -> void:
+	if open_crafting_bench != null:
+		open_crafting_bench.panel_open = false
+		open_crafting_bench = null
+	crafting_ui.visible = false
+
+# --- Crafting (called by crafting_ui.gd) ----------------------------------
+# How many of an item the player has across the bag AND the Materials tab.
+func item_available(item_type: String) -> int:
+	var total := material_count(item_type)
+	for entry in inventory.placements:
+		var it: Item = entry["item"]
+		if it.type == item_type:
+			total += it.quantity
+	return total
+
+# How many items satisfying a recipe ingredient (a wildcard like
+# "@element_crystal" sums across every type it accepts).
+func ingredient_available(ingredient: String) -> int:
+	var total := 0
+	for t in ItemData.CRAFTING_WILDCARDS.get(ingredient, [ingredient]):
+		total += item_available(t)
+	return total
+
+func can_craft(recipe: Dictionary) -> bool:
+	for pair in recipe["inputs"]:
+		if ingredient_available(pair[0]) < pair[1]:
+			return false
+	return true
+
+# Consume `count` of an ingredient — Materials tab first, then loose from the bag.
+func _consume_ingredient(ingredient: String, count: int) -> void:
+	var remaining := count
+	for t in ItemData.CRAFTING_WILDCARDS.get(ingredient, [ingredient]):
+		var from_mat: int = mini(remaining, material_count(t))
+		if from_mat > 0:
+			consume_material(t, from_mat)
+			remaining -= from_mat
+		while remaining > 0 and _consume_one_of_type(t):
+			remaining -= 1
+		if remaining <= 0:
+			return
+
+func craft(recipe_index: int) -> bool:
+	if recipe_index < 0 or recipe_index >= ItemData.CRAFTING_RECIPES.size():
+		return false
+	var recipe: Dictionary = ItemData.CRAFTING_RECIPES[recipe_index]
+	if not can_craft(recipe):
+		return false
+	# Consuming inputs (which include bag items) frees grid cells, so the single
+	# output item reliably fits afterward.
+	for pair in recipe["inputs"]:
+		_consume_ingredient(pair[0], pair[1])
+	var out: Array = recipe["output"]
+	inventory.try_stack_or_place(Item.create(out[0], out[1]))
+	persist_inventory()
+	persist_materials()
+	inventory_ui.refresh()
+	return true
+
 # --- Workbench operations (called by workbench_ui.gd) ---------------------
 # All three keep inventory access, save persistence and UI refresh in one
 # place so the UI just calls and re-reads. They mutate the Weapon in the given
@@ -542,8 +723,10 @@ func workbench_set_element(slot: int, element: String) -> bool:
 	if weapon == null or weapon.element == element:
 		return false
 	# Element crystals are named crystal_fire / crystal_holy / crystal_air —
-	# consume the one matching the target element to re-attune the weapon.
-	if !_consume_one_of_type("crystal_" + element):
+	# consume the one matching the target element, from the banked Materials tab
+	# first, then any loose one in the backpack.
+	var crystal := "crystal_" + element
+	if !consume_material(crystal) and !_consume_one_of_type(crystal):
 		return false
 	weapon.element = element
 	persist_weapon_slots()
@@ -555,7 +738,8 @@ func workbench_attach_form(slot: int, form: String) -> bool:
 	if weapon == null or !weapon.can_hold_form(form):
 		return false
 	var stone := ItemData.stone_for_form(form)
-	if !_consume_one_of_type(stone):
+	# Materials tab first, then a loose one in the backpack.
+	if !consume_material(stone) and !_consume_one_of_type(stone):
 		return false
 	weapon.attach_form(form)
 	persist_weapon_slots()
@@ -566,14 +750,13 @@ func workbench_detach_form(slot: int, form: String) -> bool:
 	var weapon: Weapon = weapon_slots[slot] if slot >= 0 and slot < weapon_slots.size() else null
 	if weapon == null or !weapon.forms.has(form):
 		return false
-	# Abort-safely: only pull the form off once we know the returned stone has
-	# somewhere to go, so a full grid can never eat the form.
-	var returned := Item.create(ItemData.stone_for_form(form), 1)
-	if !inventory.try_stack_or_place(returned):
-		return false
 	weapon.detach_form(form)
+	# The freed stone banks straight into the Materials tab (infinite per-type
+	# store), so this always succeeds — no grid-full abort needed.
+	var stone := ItemData.stone_for_form(form)
+	materials[stone] = materials.get(stone, 0) + 1
+	persist_materials()
 	persist_weapon_slots()
-	persist_inventory()
 	_refresh_after_workbench_change()
 	return true
 
@@ -589,16 +772,25 @@ func _refresh_after_workbench_change() -> void:
 # use_quick_slot() (belt quick-slot items) — the effect itself doesn't care
 # which container the item came from, only the removal/decrement after does.
 func _apply_item_effect(item: Item, potency := 1.0) -> void:
-	match item.type:
-		"health_potion":
-			health = clamp(health + ItemData.get_def(item.type)["heal_amount"] * potency, 0.0, max_health)
-		"mana_crystal":
+	# Data-driven: any item with heal_amount heals; any with mana_restore charges
+	# the held weapon (or both weapons if mana_both_weapons). Lets new consumables
+	# work by just declaring those fields in ItemData, no new cases here.
+	var def := ItemData.get_def(item.type)
+	if def.has("heal_amount"):
+		health = clamp(health + def["heal_amount"] * potency, 0.0, max_health)
+	if def.has("mana_restore"):
+		var amount: float = def["mana_restore"] * potency
+		if def.get("mana_both_weapons", false):
+			for w in weapon_slots:
+				if w != null:
+					w.restore_mana(amount)
+		else:
 			var equipped := get_equipped_weapon()
 			if equipped != null:
-				equipped.restore_mana(ItemData.get_def(item.type)["mana_restore"] * potency)
-				persist_weapon_slots()
-				refresh_mana_ui()
-				refresh_spell_ui()
+				equipped.restore_mana(amount)
+		persist_weapon_slots()
+		refresh_mana_ui()
+		refresh_spell_ui()
 
 # Consumes one from the stack (removing the placement entirely once it hits
 # 0) and applies whatever effect that item type has. Unusable types just
@@ -671,9 +863,25 @@ func persist_quick_slots() -> void:
 func assign_quick_slot(slot_index: int, item: Item) -> void:
 	if equipped_belt == null or slot_index < 0 or slot_index >= quick_slots.size():
 		return
+	var previous: Item = quick_slots[slot_index]
+	# Same stackable type already in the slot -> merge onto it (up to max_stack)
+	# instead of swapping. (Dropping a 2nd potion onto a 1-potion slot used to
+	# swap them, forcing you to pull it out to stack.)
+	if previous != null and previous.type == item.type and ItemData.is_stackable(item.type):
+		if inventory.remove_item(item.instance_id) == null:
+			return
+		var room: int = ItemData.get_max_stack(item.type) - previous.quantity
+		var transfer: int = min(room, item.quantity)
+		previous.quantity += transfer
+		item.quantity -= transfer
+		if item.quantity > 0:
+			inventory.try_stack_or_place(item)  # remainder over the cap stays in the bag
+		persist_quick_slots()
+		persist_inventory()
+		inventory_ui.refresh()
+		return
 	if inventory.remove_item(item.instance_id) == null:
 		return
-	var previous: Item = quick_slots[slot_index]
 	if previous != null and !inventory.try_stack_or_place(previous):
 		inventory.try_stack_or_place(item)
 		return
@@ -807,18 +1015,32 @@ func get_equipped(slot_type: String) -> Item:
 	match slot_type:
 		"backpack": return equipped_backpack
 		"belt": return equipped_belt
-		"cloak": return equipped_cloak
-	return null
+		"body": return equipped_body
+	return equipped_gear.get(slot_type)
 
 func set_equipped(slot_type: String, item) -> void:
 	match slot_type:
 		"backpack": equipped_backpack = item
 		"belt": equipped_belt = item
-		"cloak": equipped_cloak = item
+		"body": equipped_body = item
+		_:
+			# One of the EXTRA_GEAR_SLOTS — erase rather than store null so the
+			# dict only ever holds real items.
+			if item == null:
+				equipped_gear.erase(slot_type)
+			else:
+				equipped_gear[slot_type] = item
 	# Equipping/unequipping gear can change max health and the cloak-stealth
 	# flags — recompute from the new loadout. (Direct assignments that bypass
 	# this — _ready load, apply_starter_kit — call _refresh_gear_effects too.)
 	_refresh_gear_effects()
+
+# Every equipped gear piece (the three special-var slots + the generic ones),
+# for the trait scans and durability drain that don't care which slot is which.
+func _all_gear() -> Array:
+	var list: Array = [equipped_body, equipped_belt, equipped_backpack]
+	list.append_array(equipped_gear.values())
+	return list
 
 # --- Gear traits ----------------------------------------------------------
 # True only if the piece carrying this trait is equipped AND unbroken. Only one
@@ -827,7 +1049,7 @@ func set_equipped(slot_type: String, item) -> void:
 # so this correctly returns false there — the two stealth traits reach enemies
 # via the replicated flags instead (see _refresh_gear_effects).
 func has_gear_attribute(attr_id: String) -> bool:
-	for gear in [equipped_cloak, equipped_belt, equipped_backpack]:
+	for gear in _all_gear():
 		if gear != null and gear.durability > 0.0 and gear.attributes.has(attr_id):
 			return true
 	return false
@@ -842,8 +1064,40 @@ func _refresh_gear_effects() -> void:
 	# Re-assigning health fires its setter, which refreshes the health bar with
 	# the new max (clamped down if vitality was just lost).
 	health = min(health, max_health)
+	# Blessed Band shield capacity = BLESSED_BAND_SHIELD per equipped band. When a
+	# band is newly equipped (capacity just went up) grant that fresh buffer; the
+	# shield otherwise only ever goes DOWN via damage, so it isn't refilled here.
+	var new_max_shield := BLESSED_BAND_SHIELD * _count_equipped_blessed_bands()
+	if new_max_shield > max_shield:
+		shield += new_max_shield - max_shield
+	max_shield = new_max_shield
+	shield = minf(shield, max_shield)
 	stealth_silent = has_gear_attribute("cloak_silent")
 	stealth_unseen_still = has_gear_attribute("cloak_unseen_still")
+
+func _count_equipped_blessed_bands() -> int:
+	var n := 0
+	for slot in ["ring_1", "ring_2"]:
+		var g: Item = get_equipped(slot)
+		if g != null and g.type == "blessed_band":
+			n += 1
+	return n
+
+# Called when the shield is fully spent: every equipped Blessed Band breaks into
+# 1 scrap dropped into the bag, freeing its ring slot (which drops max_shield to
+# 0 via _refresh_gear_effects inside set_equipped).
+func _break_blessed_bands() -> void:
+	var broke := false
+	for slot in ["ring_1", "ring_2"]:
+		var g: Item = get_equipped(slot)
+		if g != null and g.type == "blessed_band":
+			set_equipped(slot, null)
+			inventory.try_stack_or_place(Item.create("scrap", 1))
+			broke = true
+	if broke:
+		persist_equipment()
+		persist_inventory()
+		inventory_ui.refresh()
 
 # Sequence-spell mana cost after cloak_efficient (10% off, rounded up). Used by
 # both the affordability pre-check and the actual deduction so they agree.
@@ -857,7 +1111,7 @@ func effective_mana_cost(spell_data: Dictionary) -> float:
 # hitting 0 stops granting its trait (has_gear_attribute checks durability).
 func _drain_gear_durability() -> void:
 	var changed := false
-	for gear in [equipped_cloak, equipped_belt, equipped_backpack]:
+	for gear in _all_gear():
 		if gear != null and gear.durability > 0.0:
 			gear.durability = max(gear.durability - GEAR_DURABILITY_COST_PER_HIT, 0.0)
 			changed = true
@@ -867,11 +1121,15 @@ func _drain_gear_durability() -> void:
 		inventory_ui.refresh()
 
 func persist_equipment() -> void:
-	stats.save_data["equipment"] = {
+	var data := {
 		"backpack": equipped_backpack.to_dict() if equipped_backpack != null else null,
 		"belt": equipped_belt.to_dict() if equipped_belt != null else null,
-		"cloak": equipped_cloak.to_dict() if equipped_cloak != null else null,
+		"body": equipped_body.to_dict() if equipped_body != null else null,
 	}
+	for slot in EXTRA_GEAR_SLOTS:
+		var g = equipped_gear.get(slot)
+		data[slot] = g.to_dict() if g != null else null
+	stats.save_data["equipment"] = data
 
 # Called by an EquipmentSlot when an eligible item is dropped on it from the
 # player's OWN grid (never a ground pile — see EquipmentSlot._can_drop_data).
@@ -958,20 +1216,30 @@ func unequip_backpack_to_grid(dest_container_id: String, x: int, y: int) -> void
 	if dest == null:
 		return
 	if dest_container_id != "player":
-		# A stash tab is unaffected by the inventory resize below, so this
-		# placement resolves normally, up front.
+		# Shrink the bag to the bagless size FIRST. If the current items won't
+		# fit that smaller grid, refuse the whole unequip (re-equip, don't move)
+		# — otherwise the backpack would leave but the grid stay large, leaving
+		# it "acting like a backpack is equipped" with none actually on.
+		equipped_backpack = null
+		if !_resize_inventory_for_backpack(null):
+			equipped_backpack = item
+			return
+		# Now stash the backpack; if the stash can't take it, revert everything.
 		if dest.can_place_at(item, x, y):
 			dest.place_item(item, x, y)
 		elif !dest.try_stack_or_place(item):
+			equipped_backpack = item
+			_resize_inventory_for_backpack(item)
 			return
-		equipped_backpack = null
-		_resize_inventory_for_backpack(null)
 		persist_equipment()
 		persist_stash()
+		persist_inventory()
 		inventory_ui.refresh()
 		return
 	equipped_backpack = null
-	_resize_inventory_for_backpack(null)
+	if !_resize_inventory_for_backpack(null):
+		equipped_backpack = item
+		return
 	if !inventory.try_stack_or_place(item):
 		# No room in the new tiny inventory (the realistic outcome for any
 		# backpack with a footprint taller than 1 cell) — restore exactly
@@ -1047,7 +1315,9 @@ func unequip_weapon_to_grid(slot_index: int, dest_container_id: String, x: int, 
 # new_backpack may be null now (unequipping entirely) — falls back to
 # DEFAULT_INVENTORY_SIZE, same abort-if-anything-doesn't-fit safety either
 # way.
-func _resize_inventory_for_backpack(new_backpack: Item) -> void:
+# Returns false (leaving the current inventory untouched) if even one item
+# has nowhere to go in the new size — callers use that to abort abort-safely.
+func _resize_inventory_for_backpack(new_backpack: Item) -> bool:
 	var capacity := ItemData.get_provides_capacity(new_backpack.type) if new_backpack != null else DEFAULT_INVENTORY_SIZE
 	var new_inventory := Inventory.new(capacity.x, capacity.y)
 	for entry in inventory.placements:
@@ -1058,11 +1328,12 @@ func _resize_inventory_for_backpack(new_backpack: Item) -> void:
 		var footprint := ItemData.get_footprint(existing_item.type)
 		var pos := new_inventory.find_free_position(footprint.x, footprint.y)
 		if pos == Vector2i(-1, -1):
-			return
+			return false
 		new_inventory.place_item(existing_item, pos.x, pos.y)
 	inventory = new_inventory
 	# Re-pointing player_grid at this new object happens generically in
 	# inventory_ui.refresh() (called right after this by equip_item()).
+	return true
 
 func open_loot_panel(pickup) -> void:
 	# A chest and a ground pile showing at once would be confusing, and
@@ -1113,6 +1384,12 @@ func _quick_transfer(item: Item, origin: String, dest: String) -> void:
 		return
 	# The overflow chest is take-only — never a shift-click destination.
 	if dest == "overflow":
+		return
+	# The Materials tab only accepts crystals/form stones; shift-clicking one
+	# banks it, and a non-material simply has nowhere to go here.
+	if dest == "materials":
+		if ItemData.is_material(item.type):
+			bank_material(item, origin)
 		return
 	if _is_own_storage_id(origin) and _is_own_storage_id(dest):
 		# Backpack <-> stash tab <-> overflow (out) — a plain local move.
@@ -1202,7 +1479,7 @@ func receive_claimed_item(item_dict: Dictionary, destination: String = "inventor
 	inventory_ui.refresh()
 
 # Single entry point for "equip/assign this item to <destination>"
-# (destination is a slot_type string — "backpack"/"belt"/"cloak"/"hand"/
+# (destination is a slot_type string — "backpack"/"belt"/"body"/"hand"/
 # "holster"/"quick_N" — see unequip_to_grid()'s matching vocabulary),
 # regardless of where the item is currently sitting: the player's own grid
 # (already there, equips directly), a stash tab (moved into the grid first,
@@ -1240,7 +1517,7 @@ func equip_from(origin_container: String, item: Item, destination: String) -> vo
 # destination() instead, which sources from the passed item directly.
 func _auto_equip_to_destination(destination: String, item: Item) -> void:
 	match destination:
-		"backpack", "belt", "cloak":
+		"backpack", "belt", "body", "hat", "necklace", "pants", "boots", "ring_1", "ring_2":
 			equip_item(destination, item)
 		"hand":
 			equip_weapon_item(active_slot, item)
@@ -1262,7 +1539,7 @@ func _equip_claimed_to_destination(destination: String, item: Item) -> bool:
 			return _equip_claimed_weapon(active_slot, item)
 		"holster":
 			return _equip_claimed_weapon(1 - active_slot, item)
-		"backpack", "belt", "cloak":
+		"backpack", "belt", "body", "hat", "necklace", "pants", "boots", "ring_1", "ring_2":
 			return _equip_claimed_gear(destination, item)
 		_:
 			if destination.begins_with("quick_"):
@@ -1305,6 +1582,18 @@ func _assign_claimed_quick_slot(slot_index: int, item: Item) -> bool:
 	if equipped_belt == null or slot_index < 0 or slot_index >= quick_slots.size():
 		return false
 	var previous: Item = quick_slots[slot_index]
+	# Merge onto a same-type stackable already in the slot (up to max_stack).
+	if previous != null and previous.type == item.type and ItemData.is_stackable(item.type):
+		var room: int = ItemData.get_max_stack(item.type) - previous.quantity
+		var transfer: int = min(room, item.quantity)
+		previous.quantity += transfer
+		item.quantity -= transfer
+		if item.quantity > 0:
+			inventory.try_stack_or_place(item)
+		persist_quick_slots()
+		persist_inventory()
+		inventory_ui.refresh()
+		return true
 	if previous != null and !inventory.try_stack_or_place(previous):
 		return false
 	quick_slots[slot_index] = item
@@ -1333,6 +1622,16 @@ func _ready() -> void:
 			persist_weapon_slots()
 		else:
 			weapon_slots.assign(saved.map(func(w): return Weapon.from_dict(w) if w != null else null))
+			# Restore which slot was in-hand BEFORE persisting (persist reads the
+			# active weapon for the replicated combat identity) — otherwise the
+			# hand/holster choice is lost on load.
+			active_slot = clampi(int(stats.save_data.get("active_slot", 0)), 0, weapon_slots.size() - 1)
+			# Sync the replicated combat identity to the loaded weapon (persist_
+			# weapon_slots wasn't called on this branch).
+			persist_weapon_slots()
+		# The spell list was set up above BEFORE weapons loaded, so it's showing
+		# the wrong (empty/default) weapon's spells until refreshed here.
+		refresh_spell_ui()
 		mana_ui.visible = true
 		refresh_mana_ui()
 		# Equipment loads before inventory contents, since inventory's grid
@@ -1349,8 +1648,14 @@ func _ready() -> void:
 			equipped_backpack = Item.from_dict(saved_equipment["backpack"])
 		if saved_equipment.get("belt") != null:
 			equipped_belt = Item.from_dict(saved_equipment["belt"])
-		if saved_equipment.get("cloak") != null:
-			equipped_cloak = Item.from_dict(saved_equipment["cloak"])
+		# "body" is the current key; fall back to the old "cloak" key so saves
+		# made before the rename keep their equipped robe/cloak.
+		var saved_body = saved_equipment.get("body", saved_equipment.get("cloak"))
+		if saved_body != null:
+			equipped_body = Item.from_dict(saved_body)
+		for slot in EXTRA_GEAR_SLOTS:
+			if saved_equipment.get(slot) != null:
+				equipped_gear[slot] = Item.from_dict(saved_equipment[slot])
 		if saved_equipment.is_empty():
 			persist_equipment()
 		var saved_quick_slots: Array = stats.save_data.get("quick_slots", [])
@@ -1370,19 +1675,27 @@ func _ready() -> void:
 		# (already loaded above, so there's somewhere for it to land).
 		_resize_quick_slots_for_belt(equipped_belt)
 		var saved_stash: Array = stats.save_data.get("stash", [])
-		if saved_stash.is_empty():
-			stash_tabs.clear()
-			for i in STASH_TAB_COUNT:
-				stash_tabs.append(Inventory.new(STASH_TAB_SIZE.x, STASH_TAB_SIZE.y))
+		# Always end up with exactly STASH_TAB_COUNT tabs (pad if an older save
+		# had fewer — e.g. before Tab 4 existed) and give each the stash stack
+		# multiplier so cells hold double.
+		stash_tabs.clear()
+		for i in STASH_TAB_COUNT:
+			var tab: Inventory
+			if i < saved_stash.size():
+				tab = Inventory.from_dict(saved_stash[i])
+			else:
+				tab = Inventory.new(STASH_TAB_SIZE.x, STASH_TAB_SIZE.y)
+			tab.stack_multiplier = STASH_STACK_MULTIPLIER
+			stash_tabs.append(tab)
+		if saved_stash.size() != STASH_TAB_COUNT:
 			persist_stash()
-		else:
-			stash_tabs.assign(saved_stash.map(func(d): return Inventory.from_dict(d)))
 		var saved_overflow: Dictionary = stats.save_data.get("overflow", {})
 		if saved_overflow.is_empty():
 			overflow = Inventory.new(OVERFLOW_SIZE.x, OVERFLOW_SIZE.y)
 			persist_overflow()
 		else:
 			overflow = Inventory.from_dict(saved_overflow)
+		materials = stats.save_data.get("materials", {}).duplicate()
 		inventory_ui.visible = false
 		inventory_ui.setup(self)
 		# Gear was loaded by direct assignment above (not set_equipped), so
@@ -1397,36 +1710,36 @@ func _ready() -> void:
 		quick_slot_hud.visible = false
 
 func _on_hurtbox_hurt(hitbox, damage) -> void:
-	var final_damage: float = damage
-	if hitbox != null and "attacker_weapon" in hitbox and "attacker_element" in hitbox:
-		# Unarmed (get_equipped_weapon() can be null now — see the starter-
-		# weapon rework) still takes full, unmodified damage: no weapon means
-		# no matchup bonus OR penalty either way, same neutral-multiplier
-		# idea as a 0-durability weapon.
-		var equipped := get_equipped_weapon()
-		var multiplier := 1.0
-		if equipped != null:
-			multiplier = SpellData.get_damage_multiplier(
-				hitbox.attacker_weapon,
-				hitbox.attacker_element,
-				equipped.type,
-				equipped.element
-			)
-		final_damage = damage * multiplier
-	# Cloak armor trait: 5% less damage. Only our own authority has the cloak
-	# equipped, so this is where the real reduction happens; a remote viewer's
-	# cosmetic number won't reflect it.
-	if has_gear_attribute("cloak_armor"):
-		final_damage *= 0.95
-	# Damage math above is pure/deterministic from data every peer already
-	# has, so the number is spawned for everyone watching regardless of
-	# authority — only the actual health change below is authority-only.
-	_spawn_damage_number(final_damage, Color(1, 0.3, 0.25), hitbox != null and hitbox.is_crit)
+	# The damage NUMBER is authoritative: only our own authority computes it and
+	# then broadcasts it to everyone. Our own authority is the only peer that has
+	# BOTH our real equipped gear (cloak_armor) and a guaranteed-current combat
+	# identity, so recomputing it per-peer from replicated data made screens
+	# disagree (e.g. one shows 26, another 28).
 	if !is_multiplayer_authority():
 		return
+	var final_damage: float = damage
+	if hitbox != null and "attacker_weapon" in hitbox and "attacker_element" in hitbox:
+		var multiplier := SpellData.get_damage_multiplier(
+			hitbox.attacker_weapon,
+			hitbox.attacker_element,
+			network_weapon_type,
+			network_element
+		)
+		final_damage = damage * multiplier
+	# Cloak/robe armor trait: 5% less damage.
+	if has_gear_attribute("cloak_armor"):
+		final_damage *= 0.95
+	_broadcast_damage_number.rpc(final_damage, hitbox != null and hitbox.is_crit)
 	take_damage(final_damage)
 	# Getting hit wears down equipped gear; a piece that breaks loses its trait.
 	_drain_gear_durability()
+
+# Shows the authoritative damage number on every peer (call_local so our own
+# screen shows it too) — the one place the number is spawned now, so all peers
+# agree.
+@rpc("authority", "call_local", "unreliable")
+func _broadcast_damage_number(amount: float, is_crit: bool) -> void:
+	_spawn_damage_number(amount, Color(1, 0.3, 0.25), is_crit)
 
 func take_damage(amount: float) -> void:
 	if death_state != DeathState.ALIVE:
@@ -1436,6 +1749,16 @@ func take_damage(amount: float) -> void:
 	# effect, with no separate attacker-type check needed.
 	if _is_in_hub():
 		return
+	# Shield soaks damage first; if it empties, the Blessed Band(s) providing it
+	# break, and any leftover damage carries through to health.
+	if shield > 0.0:
+		var absorbed := minf(shield, amount)
+		shield -= absorbed
+		amount -= absorbed
+		if shield <= 0.0:
+			_break_blessed_bands()
+	if amount <= 0.0:
+		return
 	health = clamp(health - amount, 0.0, max_health)
 	if health <= 0.0:
 		die()
@@ -1443,6 +1766,62 @@ func take_damage(amount: float) -> void:
 func _is_in_hub() -> bool:
 	var world = get_tree().get_first_node_in_group("world")
 	return world != null and world.my_zone == "hub"
+
+# --- Co-op revive ---------------------------------------------------------
+# Run each frame while alive (see _physics_process). If we're holding interact
+# next to a downed ally, fill the revive; on completion, revive them (consuming
+# Phoenix Ash from OUR bag for the faster/stronger version if we have one).
+func _check_revive(delta: float) -> void:
+	var target = _nearest_downed_ally()
+	if target == null or not Input.is_action_pressed("interact"):
+		_revive_progress = 0.0
+		return
+	var has_ash := _has_item("phoenix_ash")
+	var duration: float = REVIVE_TIME_ASH if has_ash else REVIVE_TIME_BASE
+	_revive_progress += delta
+	if _revive_progress < duration:
+		return
+	_revive_progress = 0.0
+	if has_ash:
+		_consume_one_of_type("phoenix_ash")
+	target.request_revive.rpc(REVIVE_HP_ASH if has_ash else REVIVE_HP_BASE)
+
+# Closest OTHER player showing the replicated downed (prone) anim, within range.
+# death_state isn't replicated, so network_body_anim is how we spot a downed ally.
+func _nearest_downed_ally():
+	var world = get_tree().get_first_node_in_group("world")
+	if world == null or world.players == null:
+		return null
+	var best = null
+	var best_dist := REVIVE_RANGE
+	for p in world.players.get_children():
+		if p == self or not ("network_body_anim" in p) or p.network_body_anim != "prone":
+			continue
+		var d := global_position.distance_to(p.global_position)
+		if d <= best_dist:
+			best_dist = d
+			best = p
+	return best
+
+func _has_item(item_type: String) -> bool:
+	for entry in inventory.placements:
+		if entry["item"].type == item_type and entry["item"].quantity > 0:
+			return true
+	return false
+
+# Revive request sent by a reviving ally; only the downed player's own authority
+# actually performs it, and only if still genuinely downed.
+@rpc("any_peer", "call_local", "reliable")
+func request_revive(health_amount: float) -> void:
+	if !is_multiplayer_authority() or death_state != DeathState.DOWNED:
+		return
+	downed_ui.visible = false
+	give_up_hold_timer = 0.0
+	death_state = DeathState.ALIVE
+	hurtbox.is_invincible = false
+	health = clampf(health_amount, 0.0, max_health)
+	play_legs_anim("idle")
+	play_body_anim("idle")
 
 func die() -> void:
 	death_state = DeathState.DOWNED
@@ -1505,8 +1884,8 @@ func _drop_death_bag_and_reset_gear() -> void:
 	# ending up in the death bag like the backpack and its contents did.
 	if equipped_belt != null:
 		dropped_items.append(equipped_belt.to_dict())
-	if equipped_cloak != null:
-		dropped_items.append(equipped_cloak.to_dict())
+	if equipped_body != null:
+		dropped_items.append(equipped_body.to_dict())
 	for slot_item in quick_slots:
 		if slot_item != null:
 			dropped_items.append(slot_item.to_dict())
@@ -1527,7 +1906,7 @@ func _drop_death_bag_and_reset_gear() -> void:
 	# DEFAULT_INVENTORY_SIZE until you find/equip a new one.
 	equipped_backpack = null
 	equipped_belt = null
-	equipped_cloak = null
+	equipped_body = null
 	quick_slots = []
 	weapon_slots = [null, null]
 	active_slot = 0
@@ -1562,6 +1941,7 @@ func _process(_delta: float) -> void:
 			update_aim()
 		network_rotation = sprite.rotation
 		network_legs_rotation = legs.rotation
+		_update_rain_marker()
 		return
 	if network_anim != _applied_legs_anim:
 		legs_animation_player.play(network_anim)
@@ -1619,6 +1999,7 @@ func _physics_process(delta):
 		else:
 			check_weapon_swap()
 			check_quick_slot_input()
+			_check_revive(delta)
 			state.call(delta)
 	var world = get_tree().get_first_node_in_group("world")
 	if world == null:
@@ -1837,9 +2218,30 @@ func get_spell_data():
 
 const DURABILITY_COST_PER_CAST := 0.1
 
+var _beam_active_until := 0.0
+
 func cast_spell(spell_data: Dictionary, reset_sequence: bool = true):
+	# A beam is a single channeled cast — don't let another beam spawn until the
+	# current one has run its full lifetime. This ties the beam's on-screen
+	# duration directly to its lifetime (re-casting was previously stacking new
+	# beams every 0.15s, so it looked endless and lifetime changes did nothing).
+	if spell_data.get("form", "") == "beam":
+		var now := Time.get_ticks_msec() / 1000.0
+		if now < _beam_active_until:
+			return
+		_beam_active_until = now + spell_data.get("lifetime", 0.0)
 	var direction = get_facing_direction()
-	var spawn_position = global_position + direction * spell_data["spawn_offset"]
+	var spawn_position: Vector2
+	if spell_data.get("targeted", false):
+		# Targeted forms (rain) drop at the mouse, clamped to the form's max range
+		# (spawn_offset). rain_projectile.gd then LOS-clamps to a wall if one's
+		# between you and that spot.
+		var to_mouse := _targeted_cast_offset(spell_data["spawn_offset"])
+		spawn_position = global_position + to_mouse
+		if to_mouse.length() > 0.001:
+			direction = to_mouse.normalized()
+	else:
+		spawn_position = global_position + direction * spell_data["spawn_offset"]
 	var world = get_tree().get_first_node_in_group("world")
 	if world == null:
 		return
@@ -1912,7 +2314,9 @@ func spawn_spell_local(
 		form,
 		rarity
 	)
-	if is_crit:
+	# Dot forms (rain/beam) roll crit per-tick in their own scripts, so their base
+	# damage is left un-crit here; everything else bakes the one cast-time roll in.
+	if is_crit and not spell_data.get("dot", false):
 		spell_data["damage"] *= SpellData.CRIT_MULTIPLIER
 	var projectile = spell_data["scene"].instantiate()
 	get_tree().current_scene.add_child(projectile)
@@ -1973,6 +2377,60 @@ func has_relevant_spell_prefix(sequence: Array) -> bool:
 
 func get_facing_direction() -> Vector2:
 	return aim_direction.normalized()
+
+# Clamped mouse offset for a targeted cast (rain): vector from the player to the
+# mouse, capped at max_range. Shared by cast_spell and the rain preview marker so
+# the marker always shows exactly where the cast will land.
+func _targeted_cast_offset(max_range: float) -> Vector2:
+	var to_mouse := get_global_mouse_position() - global_position
+	if to_mouse.length() > max_range:
+		to_mouse = to_mouse.normalized() * max_range
+	return to_mouse
+
+# Aim direction usable on ANY peer: live on our own authority, otherwise derived
+# from the replicated sprite rotation (network_rotation) — sprite.rotation is
+# aim.angle()+PI/2 (see update_aim). Used by a following beam so it tracks this
+# player's aim on every peer, not just their own.
+func get_networked_aim() -> Vector2:
+	if is_multiplayer_authority():
+		return aim_direction.normalized()
+	return Vector2.from_angle(sprite.rotation - PI / 2.0)
+
+# Ground preview circle showing where a queued Rain will land — rain spawns far
+# in front of the caster (spawn_offset), so this makes it aimable. Only shown
+# on the local (authority) player while a full rain sequence is queued; follows
+# the aim and matches the rain's real spawn offset + radius (built from the same
+# spell_data), so it stays correct as those get tuned.
+var _rain_marker: Polygon2D = null
+
+func _update_rain_marker() -> void:
+	if _rain_marker == null:
+		_rain_marker = Polygon2D.new()
+		var pts := PackedVector2Array()
+		for i in 24:
+			var a := TAU * i / 24.0
+			# Base radius 8 matches the projectile's circle; scale applies size.
+			pts.append(Vector2(cos(a), sin(a)) * 8.0)
+		_rain_marker.polygon = pts
+		_rain_marker.z_index = -1
+		_rain_marker.visible = false
+		add_child(_rain_marker)
+	if inventory_ui.visible or death_state != DeathState.ALIVE:
+		_rain_marker.visible = false
+		return
+	var equipped := get_equipped_weapon()
+	var show_marker := false
+	if equipped != null and equipped.durability > 0.0 and equipped.forms.has("rain") and not spell_input_sequence.is_empty():
+		var recipe := all_spell_recipes.get_spell_recipe_from_sequence(spell_input_sequence)
+		if not recipe.is_empty() and recipe.get("form", "") == "rain" and recipe.get("element", "") == equipped.element:
+			var sd := all_spell_data.build_spell_data(equipped.type, equipped.element, "rain", equipped.rarity)
+			# Follows the mouse (clamped to range), matching where cast_spell drops
+			# the zone — not a fixed point ahead.
+			_rain_marker.position = _targeted_cast_offset(sd["spawn_offset"])
+			_rain_marker.scale = Vector2.ONE * sd["size"]
+			_rain_marker.color = Color(sd["color"], 0.25)
+			show_marker = true
+	_rain_marker.visible = show_marker
 
 func attack_check():
 	if get_equipped_weapon() == null:

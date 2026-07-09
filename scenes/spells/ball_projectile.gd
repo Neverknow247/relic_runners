@@ -1,31 +1,39 @@
 extends Projectile
 class_name BallProjectile
 
-# Travels like a normal projectile, but on striking an enemy it detonates a
-# burst-style AoE at the impact point (damaging everyone nearby) instead of
-# just dealing a single hit. Its own hitbox has auto_hit off (see FORMS), so all
-# the ball's damage is delivered by the explosion — the struck enemy takes one
-# explosion hit, not hit + explosion. Walls still stop it (base
-# _on_hitbox_body_entered), but only an enemy triggers the explosion.
+# Travels like a normal projectile, but ALWAYS detonates a burst-style AoE when
+# it ends — on striking an enemy, hitting a wall, running out its lifetime, or
+# reaching its max travel distance. Its own hitbox has auto_hit off (see FORMS),
+# so all the ball's damage is delivered by that explosion.
 
 const ExplosionScene := preload("res://scenes/spells/burst_projectile.tscn")
 # Explosion radius as a size multiplier (the burst scene is scaled by this).
-const EXPLOSION_SIZE := 3.0
+const EXPLOSION_SIZE := 6.0
 const EXPLOSION_LIFETIME := 0.3
 
 var _exploded := false
 
 func _on_hitbox_area_entered(area: Area2D) -> void:
-	# Ignore the caster's own hurtbox; only an enemy detonates the ball.
+	# Ignore the caster's own hurtbox; only an enemy detonates the ball early.
 	if not area is Hurtbox:
 		return
 	if hitbox.caster_id != 0 and area.owner_id == hitbox.caster_id:
 		return
+	_expire()
+
+func _on_hitbox_body_entered(_body: Node2D) -> void:
+	# A fireball bursts on the wall it hits rather than silently vanishing.
+	_expire()
+
+# Every termination path (impact, wall, lifetime, max distance) funnels here so
+# the ball explodes exactly once no matter how it ends.
+func _expire() -> void:
 	if _exploded:
 		return
 	_exploded = true
-	# Deferred: this fires from area_entered (a physics query flush), and adding
-	# the explosion's own monitoring Area2D can't change physics state mid-flush.
+	# Deferred: _expire can fire from area/body_entered (a physics query flush),
+	# and adding the explosion's monitoring Area2D can't happen mid-flush. Harmless
+	# from the lifetime-timer / max-distance paths too.
 	_explode.call_deferred()
 
 func _explode() -> void:

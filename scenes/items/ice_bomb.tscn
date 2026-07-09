@@ -58,14 +58,14 @@ _data = {
 &"shoot": SubResource("Animation_8qh7e")
 }
 
-[node name="ice_bomb" unique_id=1555628361 instance=ExtResource("1_qnnjh")]
+[node name="ice_bomb" instance=ExtResource("1_qnnjh")]
 script = ExtResource("2_61xfx")
 
-[node name="sprite_2d" type="Sprite2D" parent="." index="2" unique_id=1025261406]
+[node name="sprite_2d" type="Sprite2D" parent="." index="2"]
 position = Vector2(0, -21)
 texture = ExtResource("3_qrf8b")
 hframes = 7
 
-[node name="animation_player" type="AnimationPlayer" parent="." index="3" unique_id=1759786160]
+[node name="animation_player" type="AnimationPlayer" parent="." index="3"]
 libraries/ = SubResource("AnimationLibrary_qcgqp")
 autoplay = &"shoot"

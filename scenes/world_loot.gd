@@ -29,48 +29,69 @@ const SEPARATION_ATTEMPTS := 8
 func setup(_world) -> void:
 	world = _world
 
-# loot_table: Array of {"type": String, "chance": float 0-1, "min": int, "max": int}.
-# Each entry rolled independently; everything that hits goes into one shared
-# pile (LOOT_PILE_SIZE has room for a handful of distinct stacks). Silently
-# spawns nothing if every roll whiffs — no empty pickup left behind.
-func roll_and_broadcast_loot(position: Vector2, loot_table: Array) -> void:
+# Rolls a killed enemy's loot: rolls_min..rolls_max independent rolls, each
+# landing on a rarity tier (RARITY_DROP_WEIGHTS) then pulling a random item of
+# that tier from the enemy type's pool (ItemData.ENEMY_LOOT_POOLS[pool_id]).
+# "@weapon" resolves to the enemy's own weapon via weapon_override
+# {type, element, forms}. Everything that drops goes into one shared pile.
+func roll_pool_loot(
+	position: Vector2, pool_id: String, rolls_min: int, rolls_max: int, weapon_override: Dictionary
+) -> void:
 	if !world.multiplayer.is_server():
+		return
+	var pool: Dictionary = ItemData.ENEMY_LOOT_POOLS.get(pool_id, {})
+	if pool.is_empty():
 		return
 	var pile := Inventory.new(LOOT_PILE_SIZE.x, LOOT_PILE_SIZE.y)
 	var dropped_anything := false
-	for entry in loot_table:
-		if world.rng.randf() > entry["chance"]:
+	for r in world.rng.randi_range(rolls_min, rolls_max):
+		var tier: Array = pool.get(_roll_rarity(), [])
+		if tier.is_empty():
 			continue
-		var qty: int = world.rng.randi_range(entry["min"], entry["max"])
+		var item_type: String = tier[world.rng.randi_range(0, tier.size() - 1)]
+		var qty_range := ItemData.get_drop_qty(item_type)
+		var qty: int = world.rng.randi_range(qty_range[0], qty_range[1])
 		if qty <= 0:
 			continue
-		var item := Item.create(entry["type"], qty)
-		# Weapon.new() (inside Item.create()) always defaults element from
-		# the generic per-type template (every type defaults to "fire") —
-		# an "element" key on the loot entry (see enemy.gd's weapon-drop
-		# roll) overrides it to whatever the actual source enemy had.
-		if entry.has("element") and item.weapon != null:
-			item.weapon.element = entry["element"]
-		# Weapon.new() now starts form-less; a weapon-drop entry carries the
-		# forms the source enemy actually had (see enemy.gd's die()) so the
-		# dropped weapon isn't a blank slate.
-		if entry.has("forms") and item.weapon != null:
-			item.weapon.forms = (entry["forms"] as Array).duplicate()
-		# Weapon.new() otherwise always starts pristine (full charge/
-		# durability) — a looted weapon instead comes randomly worn, so it's
-		# not a guaranteed like-new upgrade over whatever's already equipped.
-		if item.weapon != null:
-			item.weapon.durability = world.rng.randf_range(0.2, 1.0) * item.weapon.max_durability
-			item.weapon.mana = world.rng.randf_range(0.2, 1.0) * item.weapon.max_mana
-		# Gear (Item.create rolled a trait + full durability) — looted gear comes
-		# randomly worn too, so a found piece isn't a guaranteed pristine trait.
-		if item.max_durability > 0.0:
-			item.durability = world.rng.randf_range(0.2, 1.0) * item.max_durability
-		if pile.try_stack_or_place(item):
+		var item := _make_loot_item(item_type, qty, weapon_override)
+		if item != null and pile.try_stack_or_place(item):
 			dropped_anything = true
 	if !dropped_anything:
 		return
 	_spawn_new_pile(position, pile)
+
+# Picks one rarity tier by the weighted drop odds.
+func _roll_rarity() -> String:
+	var roll: int = world.rng.randi_range(1, 100)
+	var cumulative := 0
+	for rarity in ItemData.RARITY_ORDER:
+		cumulative += ItemData.RARITY_DROP_WEIGHTS.get(rarity, 0)
+		if roll <= cumulative:
+			return rarity
+	return "common"
+
+# Builds a loot item, resolving the "@weapon" marker to the enemy's own weapon
+# (its element/forms) and applying the random "worn" durability/mana looted gear
+# and weapons come with. Returns null if a weapon was rolled but the enemy had
+# none.
+func _make_loot_item(item_type: String, qty: int, weapon_override: Dictionary) -> Item:
+	var item: Item
+	if item_type == "@weapon":
+		if weapon_override.get("type", "") == "":
+			return null
+		item = Item.create(weapon_override["type"], 1)
+		if item.weapon != null:
+			item.weapon.element = weapon_override.get("element", item.weapon.element)
+			item.weapon.forms = (weapon_override.get("forms", []) as Array).duplicate()
+	else:
+		item = Item.create(item_type, qty)
+	# Looted weapons/gear come randomly worn, not pristine.
+	if item.weapon != null:
+		item.weapon.durability = world.rng.randf_range(0.2, 1.0) * item.weapon.max_durability
+		item.weapon.mana = world.rng.randf_range(0.2, 1.0) * item.weapon.max_mana
+	if item.max_durability > 0.0:
+		item.durability = world.rng.randf_range(0.2, 1.0) * item.max_durability
+	return item
 
 # Called (server-side only, already gated by the caller in world.gd) when a
 # player drops an item. Merges into whichever nearby pile has room first;

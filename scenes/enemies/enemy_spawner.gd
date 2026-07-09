@@ -16,7 +16,7 @@ const EnemyScene := preload("res://scenes/enemies/enemy.tscn")
 
 @export var spawn_chance := 0.5
 @export var min_group_size := 1
-@export var max_group_size := 3
+@export var max_group_size := 5
 @export var group_spread := 192.0
 
 # Matches Enemy.BODY_RADIUS * 2 + a bit more than Enemy.min_enemy_separation

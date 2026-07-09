@@ -44,72 +44,72 @@ sources/7 = SubResource("TileSetAtlasSource_fbcl0")
 sources/8 = SubResource("TileSetAtlasSource_ie80n")
 sources/9 = SubResource("TileSetAtlasSource_1oh7t")
 
-[node name="hub_room_2" type="Node2D" unique_id=1658596843]
+[node name="hub_room_2" type="Node2D"]
 
-[node name="floor_tiles" type="Node2D" parent="." unique_id=2002664940]
+[node name="floor_tiles" type="Node2D" parent="."]
 z_index = -10
 
-[node name="ground_1" type="TileMapLayer" parent="floor_tiles" unique_id=1540764317]
+[node name="ground_1" type="TileMapLayer" parent="floor_tiles"]
 tile_map_data = PackedByteArray("AAD+//j/AgACAAEAAAD+//n/AgABAAcAAAD///j/AgAAAAMAAAD///n/AgADAAIAAAD+//r/AgAHAAIAAAD+//v/AgAFAAgAAAD///r/AgABAAAAAAD///v/AgAAAAYAAAD+//z/AgABAAcAAAD+//3/AgAAAAcAAAD///z/AgADAAgAAAD///3/AgACAAEAAAD+//7/AgAGAAQAAAD+////AgAFAAQAAAD///7/AgAGAAAAAAD/////AgABAAIAAAD+/wAAAgAAAAIAAAD+/wEAAgABAAMAAAD//wAAAgAFAAcAAAD//wEAAgAGAAEAAAD+/wIAAgAHAAAAAAD+/wMAAgACAAAAAAD//wIAAgAHAAIAAAD//wMAAgAFAAUAAAD+/wQAAgACAAgAAAD//wQAAgABAAEAAAAAAPj/AgAAAAcAAAAAAPn/AgAFAAEAAAABAPj/AgABAAEAAAABAPn/AgADAAgAAAAAAPr/AgAEAAAAAAAAAPv/AgAHAAEAAAABAPr/AgABAAUAAAABAPv/AgABAAcAAAAAAPz/AgACAAMAAAAAAP3/AgADAAcAAAABAPz/AgAFAAgAAAABAP3/AgAGAAEAAAAAAP7/AgAEAAAAAAAAAP//AgAAAAAAAAABAP7/AgAHAAAAAAABAP//AgADAAcAAAAAAAAAAgAFAAAAAAAAAAEAAgAAAAcAAAABAAAAAgADAAYAAAABAAEAAgAFAAUAAAAAAAIAAgAGAAAAAAAAAAMAAgAAAAcAAAABAAIAAgABAAAAAAABAAMAAgADAAQAAAAAAAQAAgAHAAYAAAABAAQAAgAAAAUAAAACAPj/AgAAAAgAAAACAPn/AgAEAAYAAAADAPj/AgAEAAEAAAADAPn/AgACAAMAAAACAPr/AgAEAAUAAAACAPv/AgAFAAAAAAADAPr/AgABAAgAAAADAPv/AgAHAAAAAAACAPz/AgAFAAUAAAACAP3/AgAHAAYAAAADAPz/AgAGAAgAAAADAP3/AgABAAAAAAACAP7/AgADAAgAAAACAP//AgADAAcAAAADAP7/AgACAAcAAAADAP//AgAGAAgAAAACAAAAAgAFAAUAAAACAAEAAgAEAAEAAAADAAAAAgABAAMAAAADAAEAAgAEAAEAAAACAAIAAgAEAAcAAAACAAMAAgAAAAAAAAADAAIAAgAGAAMAAAADAAMAAgAAAAIAAAACAAQAAgAAAAYAAAADAAQAAgABAAQAAAAEAPj/AgABAAEAAAAEAPn/AgAHAAQAAAAFAPj/AgAHAAIAAAAFAPn/AgACAAAAAAAEAPr/AgAGAAgAAAAEAPv/AgACAAIAAAAFAPr/AgABAAQAAAAFAPv/AgABAAMAAAAEAPz/AgAAAAUAAAAEAP3/AgAEAAAAAAAFAPz/AgABAAUAAAAFAP3/AgACAAIAAAAEAP7/AgAFAAUAAAAEAP//AgACAAAAAAAFAP7/AgAAAAUAAAAFAP//AgAFAAcAAAAEAAAAAgAAAAUAAAAEAAEAAgAFAAYAAAAFAAAAAgAFAAEAAAAFAAEAAgADAAEAAAAEAAIAAgAEAAQAAAAEAAMAAgAGAAMAAAAFAAIAAgAFAAIAAAAFAAMAAgABAAMAAAAEAAQAAgAHAAYAAAAFAAQAAgAEAAAAAAAGAPj/AgAFAAAAAAAGAPn/AgAEAAEAAAAHAPj/AgAEAAAAAAAHAPn/AgAGAAQAAAAGAPr/AgAGAAQAAAAGAPv/AgAHAAUAAAAHAPr/AgAFAAIAAAAHAPv/AgACAAQAAAAGAPz/AgAEAAgAAAAGAP3/AgAAAAEAAAAHAPz/AgADAAQAAAAHAP3/AgAEAAMAAAAGAP7/AgAHAAIAAAAGAP//AgADAAYAAAAHAP7/AgABAAcAAAAHAP//AgADAAAAAAAGAAAAAgACAAgAAAAGAAEAAgAFAAQAAAAHAAAAAgAHAAIAAAAHAAEAAgADAAgAAAAGAAIAAgAHAAgAAAAGAAMAAgAFAAUAAAAHAAIAAgABAAUAAAAHAAMAAgABAAcAAAAGAAQAAgACAAUAAAAHAAQAAgAFAAYAAAD+//H/AgAAAAEAAAD+//L/AgAGAAYAAAD///H/AgACAAYAAAD///L/AgAEAAAAAAD+//P/AgABAAUAAAD+//T/AgABAAYAAAD///P/AgAFAAEAAAD///T/AgAGAAIAAAD+//X/AgAGAAYAAAD+//b/AgADAAUAAAD///X/AgAGAAEAAAD///b/AgAHAAcAAAD+//f/AgACAAEAAAD///f/AgAGAAcAAAAAAPH/AgAEAAEAAAAAAPL/AgADAAAAAAABAPH/AgAHAAgAAAABAPL/AgAHAAMAAAAAAPP/AgAAAAEAAAAAAPT/AgAHAAQAAAABAPP/AgABAAUAAAABAPT/AgAHAAIAAAAAAPX/AgAFAAcAAAAAAPb/AgAFAAEAAAABAPX/AgABAAQAAAABAPb/AgAEAAAAAAAAAPf/AgAAAAAAAAABAPf/AgADAAIAAAACAPH/AgACAAUAAAACAPL/AgAFAAAAAAADAPH/AgACAAEAAAADAPL/AgABAAEAAAACAPP/AgABAAEAAAACAPT/AgADAAEAAAADAPP/AgAFAAAAAAADAPT/AgAHAAMAAAACAPX/AgAGAAYAAAACAPb/AgACAAMAAAADAPX/AgABAAUAAAADAPb/AgAEAAgAAAACAPf/AgACAAEAAAADAPf/AgAHAAQAAAAEAPH/AgAGAAMAAAAEAPL/AgAEAAgAAAAFAPH/AgADAAUAAAAFAPL/AgACAAEAAAAEAPP/AgAGAAYAAAAEAPT/AgAFAAMAAAAFAPP/AgAEAAgAAAAFAPT/AgACAAgAAAAEAPX/AgAAAAYAAAAEAPb/AgAEAAgAAAAFAPX/AgAFAAMAAAAFAPb/AgAGAAUAAAAEAPf/AgAFAAcAAAAFAPf/AgADAAIAAAAGAPH/AgAAAAAAAAAGAPL/AgACAAUAAAAHAPH/AgAAAAgAAAAHAPL/AgADAAAAAAAGAPP/AgADAAQAAAAGAPT/AgAGAAcAAAAHAPP/AgAHAAEAAAAHAPT/AgAAAAgAAAAGAPX/AgAHAAcAAAAGAPb/AgAEAAIAAAAHAPX/AgAFAAUAAAAHAPb/AgAEAAUAAAAGAPf/AgACAAUAAAAHAPf/AgAGAAEAAAAIAPH/AgADAAYAAAAIAPL/AgABAAYAAAAIAPP/AgAFAAcAAAAIAPT/AgAGAAEAAAAIAPX/AgAHAAUAAAAIAPb/AgAGAAEAAAAIAPf/AgABAAEAAAAIAPj/AgAHAAcAAAAIAPn/AgACAAAAAAAIAPr/AgADAAEAAAA=")
 tile_set = ExtResource("1_t42ps")
 
-[node name="ground_2" type="TileMapLayer" parent="floor_tiles" unique_id=577623187]
+[node name="ground_2" type="TileMapLayer" parent="floor_tiles"]
 tile_set = ExtResource("1_t42ps")
 
-[node name="ground_3" type="TileMapLayer" parent="floor_tiles" unique_id=100994194]
+[node name="ground_3" type="TileMapLayer" parent="floor_tiles"]
 tile_set = ExtResource("1_t42ps")
 
-[node name="y_sort_objects" type="Node2D" parent="." unique_id=89103381]
+[node name="y_sort_objects" type="Node2D" parent="."]
 
-[node name="trees" type="TileMapLayer" parent="y_sort_objects" unique_id=821505938]
+[node name="trees" type="TileMapLayer" parent="y_sort_objects"]
 tile_set = SubResource("TileSet_hk80u")
 
-[node name="wall_bases" type="TileMapLayer" parent="y_sort_objects" unique_id=123667275]
+[node name="wall_bases" type="TileMapLayer" parent="y_sort_objects"]
 tile_map_data = PackedByteArray("AAD+/+//AQAEAAMAAAD//+//AQAEAAMAAAAAAO//AQABAAMAAAABAO//AQAFAAMAAAACAO//AQABAAMAAAADAO//AQAJAAMAAAAEAO//AQAFAAMAAAAFAO//AQAHAAMAAAAGAO//AQADAAMAAAAHAO//AQAHAAMAAAA=")
 tile_set = ExtResource("7_oylyi")
 
-[node name="wall_decorations" type="TileMapLayer" parent="y_sort_objects" unique_id=403948971]
+[node name="wall_decorations" type="TileMapLayer" parent="y_sort_objects"]
 tile_set = ExtResource("8_0bqam")
 
-[node name="spawn_points" type="Node2D" parent="." unique_id=2073054079]
+[node name="spawn_points" type="Node2D" parent="."]
 
-[node name="default" type="Marker2D" parent="spawn_points" unique_id=419593521]
+[node name="default" type="Marker2D" parent="spawn_points"]
 position = Vector2(16, 55)
 
-[node name="hub_main" type="Marker2D" parent="spawn_points" unique_id=1105143423]
+[node name="hub_main" type="Marker2D" parent="spawn_points"]
 position = Vector2(16, 55)
 
-[node name="walls" type="Node2D" parent="." unique_id=1081854682]
+[node name="walls" type="Node2D" parent="."]
 
-[node name="wall_tops" type="TileMapLayer" parent="walls" unique_id=1085602523]
+[node name="wall_tops" type="TileMapLayer" parent="walls"]
 tile_map_data = PackedByteArray("AAACAAQAAQAJAAAAAAAFAAQAAQAJAAAAAAD//wQAAQAIAAAAAAD+/wQAAQAAAAAAAAAGAAQAAQAAAAAAAAAHAAQAAQACAAAAAAAIAAMAAQADAAQAAAD9/wMAAQABAAQAAAAIAAEAAQALAAEAAAAIAAAAAQALAAEAAAAIAP//AQALAAEAAAAIAP7/AQALAAEAAAAIAP3/AQALAAEAAAD9/wEAAQALAAEAAAD9/wAAAQALAAEAAAD9////AQALAAEAAAD9//7/AQALAAEAAAD9//3/AQALAAEAAAD9//z/AQALAAEAAAD9//v/AQALAAEAAAD9//r/AQALAAEAAAD9//n/AQALAAEAAAD9//j/AQALAAEAAAD9//f/AQALAAEAAAD9//b/AQALAAEAAAD9//X/AQALAAEAAAD9//T/AQALAAEAAAD9//P/AQALAAEAAAD9//L/AQALAAEAAAD9//H/AQALAAEAAAD9//D/AQALAAEAAAD9/+//AQALAAEAAAD9/+7/AQALAAEAAAAIAPz/AQALAAEAAAAIAPv/AQALAAEAAAAIAPr/AQALAAEAAAAIAPn/AQALAAEAAAAIAPj/AQALAAEAAAAIAPf/AQALAAEAAAAIAPb/AQALAAEAAAAIAPX/AQALAAEAAAAIAPT/AQALAAEAAAAIAPP/AQALAAEAAAAIAPL/AQALAAEAAAAIAPH/AQALAAEAAAAIAO7/AQALAAEAAAAIAO//AQALAAEAAAAIAPD/AQALAAEAAAAEAAQAAQADAAAAAAADAAQAAQAHAAAAAAA=")
 tile_set = ExtResource("9_pbhka")
 
-[node name="wall_decorations" type="TileMapLayer" parent="walls" unique_id=622747250]
+[node name="wall_decorations" type="TileMapLayer" parent="walls"]
 tile_map_data = PackedByteArray("AAAAAAMABAAKAAAAAAA=")
 tile_set = ExtResource("8_0bqam")
 
-[node name="roofs" type="Node2D" parent="walls" unique_id=1045810956]
+[node name="roofs" type="Node2D" parent="walls"]
 
-[node name="roof_1" type="TileMapLayer" parent="walls/roofs" unique_id=524431373 groups=["roof_group"]]
+[node name="roof_1" type="TileMapLayer" parent="walls/roofs" groups=["roof_group"]]
 tile_set = ExtResource("10_s3w3u")
 script = ExtResource("11_nyjrl")
 
-[node name="roof_decorations" type="TileMapLayer" parent="walls/roofs/roof_1" unique_id=1666652200]
+[node name="roof_decorations" type="TileMapLayer" parent="walls/roofs/roof_1"]
 tile_set = ExtResource("12_558ay")
 
-[node name="roof_2" type="TileMapLayer" parent="walls/roofs" unique_id=1987019469 groups=["roof_group"]]
+[node name="roof_2" type="TileMapLayer" parent="walls/roofs" groups=["roof_group"]]
 tile_set = ExtResource("10_s3w3u")
 script = ExtResource("11_nyjrl")
 
-[node name="roof_decorations" type="TileMapLayer" parent="walls/roofs/roof_2" unique_id=1005466117]
+[node name="roof_decorations" type="TileMapLayer" parent="walls/roofs/roof_2"]
 tile_set = ExtResource("12_558ay")
 
-[node name="navigation" type="Node2D" parent="." unique_id=669753022]
+[node name="navigation" type="Node2D" parent="."]
 script = ExtResource("99_hideready")
 
-[node name="doors" type="Node2D" parent="." unique_id=805026972]
+[node name="doors" type="Node2D" parent="."]
 
-[node name="door" parent="doors" unique_id=1329496194 instance=ExtResource("3_jg52x")]
+[node name="door" parent="doors" instance=ExtResource("3_jg52x")]
 position = Vector2(16, 64)
 target_spawn = "hub_2"

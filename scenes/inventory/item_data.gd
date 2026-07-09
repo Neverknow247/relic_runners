@@ -19,7 +19,7 @@ const ITEMS := {
 	# health potions are more everyday consumables and stack to 3.
 	"crystal_fire": {
 		"display_name": "Fire Crystal",
-		"stackable": true,
+		"stackable": false,
 		"max_stack": 1,
 		"footprint": Vector2i(1, 1),
 		"color": Color(1.0, 0.35, 0.1),
@@ -27,7 +27,7 @@ const ITEMS := {
 	},
 	"crystal_holy": {
 		"display_name": "Holy Crystal",
-		"stackable": true,
+		"stackable": false,
 		"max_stack": 1,
 		"footprint": Vector2i(1, 1),
 		"color": Color(1.0, 0.95, 0.55),
@@ -35,7 +35,7 @@ const ITEMS := {
 	},
 	"crystal_air": {
 		"display_name": "Air Crystal",
-		"stackable": true,
+		"stackable": false,
 		"max_stack": 1,
 		"footprint": Vector2i(1, 1),
 		"color": Color(0.65, 0.95, 1.0),
@@ -48,26 +48,102 @@ const ITEMS := {
 		"footprint": Vector2i(1, 1),
 		"color": Color(0.95, 0.8, 0.15),
 		"icon_label": "G",
+		"category": "currency",
 	},
 	"mana_crystal": {
-		"display_name": "Mana Crystal",
+		"display_name": "Crude Mana Crystal",
 		"stackable": true,
-		"max_stack": 3,
+		"max_stack": 5,
 		"footprint": Vector2i(1, 1),
 		"color": Color(0.55, 0.4, 0.95),
 		"icon_label": "M",
 		"usable": true,
 		"mana_restore": 50.0,
 	},
-	"health_potion": {
-		"display_name": "Health Potion",
+	"refined_mana_crystal": {
+		"display_name": "Refined Mana Crystal",
 		"stackable": true,
-		"max_stack": 3,
+		"max_stack": 5,
+		"footprint": Vector2i(1, 1),
+		"color": Color(0.75, 0.6, 1.0),
+		"icon_label": "M",
+		"usable": true,
+		"mana_restore": 50.0,
+		# Charges the held AND holstered weapon (see player.gd _apply_item_effect).
+		"mana_both_weapons": true,
+		"rarity": "rare",
+	},
+	"health_potion": {
+		"display_name": "Lesser Health Potion",
+		"stackable": true,
+		"max_stack": 5,
 		"footprint": Vector2i(1, 1),
 		"color": Color(0.9, 0.2, 0.35),
 		"icon_label": "+",
 		"usable": true,
-		"heal_amount": 30.0,
+		"heal_amount": 20.0,
+	},
+	"greater_health_potion": {
+		"display_name": "Greater Health Potion",
+		"stackable": true,
+		"max_stack": 5,
+		"footprint": Vector2i(1, 1),
+		"color": Color(0.75, 0.1, 0.2),
+		"icon_label": "+",
+		"usable": true,
+		"heal_amount": 35.0,
+		"rarity": "rare",
+	},
+	# Crafting materials + crafted odds and ends (see CRAFTING_RECIPES). Plain
+	# stackable bag items whose only role (beyond the two usable consumables) is
+	# being recipe ingredients.
+	"herbs": {
+		"display_name": "Herbs", "stackable": true, "max_stack": 20,
+		"footprint": Vector2i(1, 1), "color": Color(0.35, 0.7, 0.3), "icon_label": "h",
+	},
+	"water_flask": {
+		"display_name": "Water Flask", "stackable": true, "max_stack": 20,
+		"footprint": Vector2i(1, 1), "color": Color(0.3, 0.55, 0.85), "icon_label": "w",
+	},
+	"red_moss": {
+		"display_name": "Red Moss", "stackable": true, "max_stack": 20,
+		"footprint": Vector2i(1, 1), "color": Color(0.7, 0.25, 0.3), "icon_label": "o",
+	},
+	"mana_dust": {
+		"display_name": "Mana Dust", "stackable": true, "max_stack": 20,
+		"footprint": Vector2i(1, 1), "color": Color(0.5, 0.4, 0.85), "icon_label": "d",
+	},
+	"pure_mana_shard": {
+		"display_name": "Pure Mana Shard", "stackable": true, "max_stack": 20,
+		"footprint": Vector2i(1, 1), "color": Color(0.7, 0.6, 1.0), "icon_label": "s",
+	},
+	"fire_dust": {
+		"display_name": "Fire Dust", "stackable": true, "max_stack": 20,
+		"footprint": Vector2i(1, 1), "color": Color(1.0, 0.45, 0.2), "icon_label": "f",
+	},
+	"holy_dust": {
+		"display_name": "Holy Dust", "stackable": true, "max_stack": 20,
+		"footprint": Vector2i(1, 1), "color": Color(1.0, 0.9, 0.6), "icon_label": "y",
+	},
+	"air_dust": {
+		"display_name": "Air Dust", "stackable": true, "max_stack": 20,
+		"footprint": Vector2i(1, 1), "color": Color(0.7, 0.95, 1.0), "icon_label": "i",
+	},
+	"cloth": {
+		"display_name": "Cloth", "stackable": true, "max_stack": 20,
+		"footprint": Vector2i(1, 1), "color": Color(0.8, 0.75, 0.6), "icon_label": "cl",
+	},
+	"phoenix_ash": {
+		"display_name": "Phoenix Ash", "stackable": true, "max_stack": 5,
+		"footprint": Vector2i(1, 1), "color": Color(0.95, 0.5, 0.15), "icon_label": "a",
+		# Consumable; placeholder effect is a strong heal — tune once its real role
+		# (revive?) is decided.
+		"usable": true, "heal_amount": 50.0,
+	},
+	"blessed_band": {
+		"display_name": "Blessed Band", "stackable": false, "max_stack": 1,
+		"footprint": Vector2i(1, 1), "color": Color(0.95, 0.9, 0.6), "icon_label": "bb",
+		"equip_slot": "ring",
 	},
 	# Form Stones: one per spell form. Attaching a stone at the weapon
 	# workbench adds that form's spell to a weapon (if the weapon type is
@@ -76,7 +152,7 @@ const ITEMS := {
 	# a distinct single letter per form; color is arbitrary placeholder art.
 	"form_stone_ball": {
 		"display_name": "Ball Stone",
-		"stackable": true,
+		"stackable": false,
 		"max_stack": 1,
 		"footprint": Vector2i(1, 1),
 		"color": Color(0.85, 0.5, 0.2),
@@ -84,7 +160,7 @@ const ITEMS := {
 	},
 	"form_stone_bolt": {
 		"display_name": "Bolt Stone",
-		"stackable": true,
+		"stackable": false,
 		"max_stack": 1,
 		"footprint": Vector2i(1, 1),
 		"color": Color(0.9, 0.85, 0.3),
@@ -92,7 +168,7 @@ const ITEMS := {
 	},
 	"form_stone_rain": {
 		"display_name": "Rain Stone",
-		"stackable": true,
+		"stackable": false,
 		"max_stack": 1,
 		"footprint": Vector2i(1, 1),
 		"color": Color(0.3, 0.6, 0.9),
@@ -100,7 +176,7 @@ const ITEMS := {
 	},
 	"form_stone_beam": {
 		"display_name": "Beam Stone",
-		"stackable": true,
+		"stackable": false,
 		"max_stack": 1,
 		"footprint": Vector2i(1, 1),
 		"color": Color(0.6, 0.35, 0.85),
@@ -108,7 +184,7 @@ const ITEMS := {
 	},
 	"form_stone_burst": {
 		"display_name": "Burst Stone",
-		"stackable": true,
+		"stackable": false,
 		"max_stack": 1,
 		"footprint": Vector2i(1, 1),
 		"color": Color(0.9, 0.4, 0.3),
@@ -116,7 +192,7 @@ const ITEMS := {
 	},
 	"form_stone_cone": {
 		"display_name": "Cone Stone",
-		"stackable": true,
+		"stackable": false,
 		"max_stack": 1,
 		"footprint": Vector2i(1, 1),
 		"color": Color(0.4, 0.8, 0.5),
@@ -141,14 +217,17 @@ const ITEMS := {
 		# as provides_capacity for backpacks.
 		"provides_quick_slots": 1,
 	},
+	# The body-armor slot is generic ("body") so both robes and cloaks can live
+	# there; this starter piece is flavored as a Robe. equip_slot is the slot,
+	# display_name is the flavor.
 	"cloak_basic": {
-		"display_name": "Cloak",
+		"display_name": "Robe",
 		"stackable": false,
 		"max_stack": 1,
 		"footprint": Vector2i(2, 3),
 		"color": Color(0.3, 0.2, 0.45),
-		"icon_label": "C",
-		"equip_slot": "cloak",
+		"icon_label": "R",
+		"equip_slot": "body",
 	},
 	"backpack_basic": {
 		"display_name": "Backpack",
@@ -170,7 +249,7 @@ const ITEMS := {
 		"display_name": "Tome",
 		"stackable": false,
 		"max_stack": 1,
-		"footprint": Vector2i(2, 2),
+		"footprint": Vector2i(1, 2),
 		"color": Color(0.2, 0.3, 0.6),
 		"icon_label": "T",
 		"equip_slot": "weapon",
@@ -235,6 +314,19 @@ static func form_from_stone(item_type: String) -> String:
 static func stone_for_form(form: String) -> String:
 	return FORM_STONE_PREFIX + form
 
+# Crafting materials (element crystals + form stones) — banked into the stash's
+# Materials tab in dedicated, infinitely-stacking per-type slots (see
+# materials_grid.gd / player.gd's materials container). This is the fixed slot
+# order shown in the tab.
+const MATERIAL_TYPES := [
+	"crystal_fire", "crystal_holy", "crystal_air",
+	"form_stone_ball", "form_stone_bolt", "form_stone_rain",
+	"form_stone_beam", "form_stone_burst", "form_stone_cone",
+]
+
+static func is_material(item_type: String) -> bool:
+	return is_form_stone(item_type) or item_type.begins_with("crystal_")
+
 # One-line flavor/util descriptions, keyed by type (kept out of ITEMS so the
 # grid-shape data stays terse). Shown in the hover tooltip under the name.
 const DESCRIPTIONS := {
@@ -243,8 +335,21 @@ const DESCRIPTIONS := {
 	"crystal_fire": "Formed in the cooling blood of Hakii, it's still warm.",
 	"crystal_holy": "A crystal tear.",
 	"crystal_air": "A bit of Aeris's last Breath",
-	"mana_crystal": "Condensed divine essence.",
-	"health_potion": "A small health potion.",
+	"mana_crystal": "Crudely condensed mana.",
+	"refined_mana_crystal": "Purified mana — charges both your weapons.",
+	"health_potion": "A minor healing draught.",
+	"greater_health_potion": "A potent healing draught.",
+	"herbs": "Common wild herbs.",
+	"water_flask": "A flask of clean water.",
+	"red_moss": "Crimson moss with restorative properties.",
+	"mana_dust": "Faintly glowing arcane dust.",
+	"pure_mana_shard": "A shard humming with pure mana.",
+	"fire_dust": "Warm to the touch.",
+	"holy_dust": "Softly radiant motes.",
+	"air_dust": "Weightless, drifting dust.",
+	"cloth": "A scrap of woven cloth.",
+	"phoenix_ash": "Embers that rekindle life.",
+	"blessed_band": "A ring blessed with holy light.",
 	"form_stone_ball": "An ancient rune stone that shapes magic into an explosive sphere.",
 	"form_stone_bolt": "Its carved sigils focus magic into a swift projectile.",
 	"form_stone_rain": "A relic stone that calls magic down upon a targeted area.",
@@ -255,12 +360,35 @@ const DESCRIPTIONS := {
 	"orb": "A floating focus.",
 	"wand": "A quick casting rod.",
 	"belt_basic": "Adds a quick slot. +1 trait",
-	"cloak_basic": "A basid wizard cloak. +1 trait",
+	"cloak_basic": "A basic wizard robe. +1 trait",
 	"backpack_basic": "4x5 personal storage. +1 trait.",
 }
 
 static func get_description(item_type: String) -> String:
 	return DESCRIPTIONS.get(item_type, "")
+
+# --- Crafting -------------------------------------------------------------
+# The recipe list the (not-yet-built) crafting bench will use. Each recipe is a
+# list of [ingredient, count] inputs producing [item, count]. An ingredient
+# starting with "@" is a wildcard matching any type in CRAFTING_WILDCARDS (so
+# "@element_crystal" accepts any fire/holy/air crystal).
+const CRAFTING_WILDCARDS := {
+	"@element_crystal": ["crystal_fire", "crystal_holy", "crystal_air"],
+}
+const CRAFTING_RECIPES := [
+	{"inputs": [["cloth", 1], ["crystal_holy", 1]], "output": ["blessed_band", 1]},
+	{"inputs": [["crystal_fire", 1], ["herbs", 3]], "output": ["phoenix_ash", 1]},
+	{"inputs": [["herbs", 2], ["water_flask", 1]], "output": ["health_potion", 1]},
+	{"inputs": [["health_potion", 1], ["red_moss", 2]], "output": ["greater_health_potion", 1]},
+	{"inputs": [["mana_dust", 3], ["@element_crystal", 1]], "output": ["mana_crystal", 1]},
+	{"inputs": [["mana_crystal", 1], ["pure_mana_shard", 1]], "output": ["refined_mana_crystal", 1]},
+]
+
+# True if item_type can satisfy a recipe ingredient (direct match or wildcard).
+static func ingredient_matches(item_type: String, ingredient: String) -> bool:
+	if ingredient.begins_with("@"):
+		return CRAFTING_WILDCARDS.get(ingredient, []).has(item_type)
+	return item_type == ingredient
 
 # Rarity applies to weapons and gear. Only "common" exists in content today;
 # the rest are scaffolding. gear_traits = how many traits a gear piece rolls
@@ -290,11 +418,66 @@ static func rarity_gear_traits(rarity: String) -> int:
 static func rarity_stat_mult(rarity: String) -> float:
 	return rarity_def(rarity)["stat_mult"]
 
+# --- Item category --------------------------------------------------------
+# weapon / gear (any equippable non-weapon) / consumable / crafting_material /
+# currency, plus key / quest / relic / trinket for future use. Mostly derived;
+# add an explicit "category" to a def to override. Trinkets are no-function
+# sellables (worth money only).
+static func get_category(item_type: String) -> String:
+	var def := get_def(item_type)
+	if def.has("category"):
+		return def["category"]
+	var slot: String = def.get("equip_slot", "")
+	if slot == "weapon":
+		return "weapon"
+	if slot != "":
+		return "gear"
+	if def.get("usable", false):
+		return "consumable"
+	return "crafting_material"
+
+# --- Loot -----------------------------------------------------------------
+# A single loot roll lands on one rarity tier at these odds (sum 100). Then a
+# random item of that tier is pulled from the killed enemy's pool.
+const RARITY_DROP_WEIGHTS := {
+	"common": 60, "uncommon": 25, "rare": 10, "epic": 4, "legendary": 1,
+}
+# Per-enemy-type loot pools — item types grouped by rarity. Each roll picks a
+# rarity (weighted), then a random item of that tier here. "@weapon" resolves to
+# the enemy's own weapon (carrying its element/forms). New enemy types get their
+# own entry keyed by their loot_pool id (see enemy.gd).
+const ENEMY_LOOT_POOLS := {
+	"basic": {
+		"common": ["scrap", "gold", "herbs", "water_flask", "red_moss", "cloth",
+			"mana_dust", "fire_dust", "holy_dust", "air_dust", "health_potion", "mana_crystal"],
+		"uncommon": ["pure_mana_shard", "crystal_fire", "crystal_holy", "crystal_air",
+			"belt_basic", "cloak_basic", "backpack_basic"],
+		"rare": ["greater_health_potion", "refined_mana_crystal", "blessed_band", "@weapon",
+			"form_stone_ball", "form_stone_bolt", "form_stone_rain",
+			"form_stone_beam", "form_stone_burst", "form_stone_cone"],
+		"epic": [],
+		"legendary": [],
+	},
+}
+# How many of an item type drop when it's rolled, [min, max] (default [1,1]). Per
+# ITEM, so a rare wand always drops 1 while a rare potion can drop a couple.
+const DROP_QUANTITIES := {
+	"gold": [1, 8], "scrap": [1, 3],
+	"herbs": [1, 3], "water_flask": [1, 3], "red_moss": [1, 3], "cloth": [1, 3],
+	"mana_dust": [1, 3], "pure_mana_shard": [1, 2],
+	"fire_dust": [1, 3], "holy_dust": [1, 3], "air_dust": [1, 3],
+	"health_potion": [1, 2], "mana_crystal": [1, 2], "greater_health_potion": [1, 2],
+}
+static func get_drop_qty(item_type: String) -> Array:
+	return DROP_QUANTITIES.get(item_type, [1, 1])
+
 # Gear traits, one rolled per looted/crafted piece (see Item.create()). Each is
 # {id, desc}; the player applies the effect while the piece is equipped AND
 # unbroken (durability > 0). See player.gd's has_gear_attribute().
 const GEAR_ATTRIBUTES := {
-	"cloak": [
+	# The body slot's traits (ids keep the historical "cloak_" prefix — they're
+	# internal only, never shown).
+	"body": [
 		{"id": "cloak_armor", "desc": "Take 5% less damage."},
 		{"id": "cloak_silent", "desc": "Enemies can no longer hear you."},
 		{"id": "cloak_unseen_still", "desc": "Enemies can't see you while you stand still."},
@@ -311,7 +494,7 @@ const GEAR_ATTRIBUTES := {
 }
 
 static func is_gear(item_type: String) -> bool:
-	return get_equip_slot(item_type) in ["belt", "cloak", "backpack"]
+	return get_equip_slot(item_type) in ["belt", "body", "backpack"]
 
 # Up to `count` distinct traits for a slot (capped by how many that slot has).
 static func roll_gear_attributes(slot: String, count: int) -> Array:
@@ -330,13 +513,15 @@ static func gear_attribute_desc(attr_id: String) -> String:
 				return entry["desc"]
 	return ""
 
-# This item's rarity string, or "" for non-rarity items (crystals, potions...).
+# This item's rarity. Weapons/gear carry a rolled rarity on the instance; every
+# other item takes the static rarity from its def (defaulting to common), so all
+# loot has a rarity for drop-rate weighting.
 static func item_rarity(item) -> String:
 	if item.weapon != null:
 		return item.weapon.rarity
 	if is_gear(item.type):
 		return item.rarity
-	return ""
+	return get_def(item.type).get("rarity", "common")
 
 # Full display name: weapons read "<Rarity> <Element> <Type>" (e.g. "Common
 # Fire Wand"), gear reads "<Rarity> <Type>" (e.g. "Common Cloak"); everything

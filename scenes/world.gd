@@ -490,10 +490,28 @@ func get_spawn_global_position(spawn_point: String) -> Vector2:
 
 func get_visible_ids_for(viewer_id: int) -> Array:
 	var visible_ids := []
+	# The server keeps simulating enemies in rooms it's holding for other peers
+	# even when its own player isn't there (e.g. the host died and went to the
+	# hub). Those enemies need the room's players ACTIVE (collision on) to detect
+	# and fight them — so on the server, also count players in any room it has
+	# loaded. They're at that room's world offset (off-screen from the server's
+	# own view), so activating them causes no visual bleed.
+	var server_simulates := viewer_id == multiplayer.get_unique_id() and multiplayer.is_server()
 	for other_id in player_locations.keys():
 		if can_players_see_each_other(viewer_id, other_id):
 			visible_ids.append(other_id)
+		elif server_simulates and server_has_players_room_loaded(other_id):
+			visible_ids.append(other_id)
 	return visible_ids
+
+# True if the SERVER has loaded (is simulating) the room this peer is in — used
+# so the host keeps that room's players/projectiles live for its enemies even
+# while the host itself is elsewhere.
+func server_has_players_room_loaded(peer_id: int) -> bool:
+	if !multiplayer.is_server() or !player_locations.has(peer_id):
+		return false
+	var loc = player_locations[peer_id]
+	return world_rooms.loaded_rooms.has("%s/%s" % [loc["zone"], loc["room"]])
 
 func can_players_see_each_other(a: int, b: int):
 	if !player_locations.has(a):
@@ -503,6 +521,16 @@ func can_players_see_each_other(a: int, b: int):
 	var loc_a = player_locations[a]
 	var loc_b = player_locations[b]
 	return loc_a["zone"] == loc_b["zone"] and loc_a["room"] == loc_b["room"]
+
+# Peer ids whose current location matches room_key ("zone/room"). Used to scope
+# room-local RPCs (e.g. exit-portal state) to peers that actually have the room.
+func peers_in_room(room_key: String) -> Array:
+	var ids := []
+	for peer_id in player_locations.keys():
+		var loc = player_locations[peer_id]
+		if "%s/%s" % [loc["zone"], loc["room"]] == room_key:
+			ids.append(peer_id)
+	return ids
 
 # --- Per-peer "room enemies spawned" handshake ----------------------------
 # Called by enemy_spawner.gd on every peer once that room's enemies actually
@@ -699,8 +727,8 @@ func get_local_player() -> Node:
 	var my_id := multiplayer.get_unique_id()
 	return players.get_node(str(my_id)) if players.has_node(str(my_id)) else null
 
-func spawn_loot(position: Vector2, loot_table: Array) -> void:
-	world_loot.roll_and_broadcast_loot(position, loot_table)
+func spawn_pool_loot(position: Vector2, pool_id: String, rolls_min: int, rolls_max: int, weapon_override: Dictionary) -> void:
+	world_loot.roll_pool_loot(position, pool_id, rolls_min, rolls_max, weapon_override)
 
 @rpc("authority", "call_local", "reliable")
 func broadcast_loot_pickup_spawned(pickup_id: String, position: Vector2, inventory_dict: Dictionary) -> void:
@@ -714,12 +742,10 @@ func broadcast_loot_pickup_spawned(pickup_id: String, position: Vector2, invento
 	_spawn_loot_pickup_deferred.call_deferred(pickup_id, position, inventory_dict)
 
 func _spawn_loot_pickup_deferred(pickup_id: String, position: Vector2, inventory_dict: Dictionary) -> void:
-	# Loot piles only exist in expeditions — never spawn one in the hub. This
-	# fixes a death bag (dropped in the expedition as you die, then broadcast to
-	# all peers) landing in your own hub view: the spawn is deferred, so it can
-	# arrive right after you've already loaded the hub and cleared piles.
-	if my_zone == "hub":
-		return
+	# (No hub gate: each location loads at its own world offset now, so an
+	# expedition death bag broadcast to a peer already in the hub spawns far
+	# off-screen at the expedition's coords rather than on top of them — while
+	# legitimate hub drops still spawn normally at hub coords.)
 	var pickup = preload("res://scenes/items/loot_pickup.tscn").instantiate()
 	zone_objects.add_child(pickup)
 	pickup.global_position = position
@@ -886,11 +912,14 @@ func server_request_spawn_spell(origin_position: Vector2, direction: Vector2, we
 		caster_id = multiplayer.get_unique_id()
 	var server_id := multiplayer.get_unique_id()
 	for viewer_id in player_locations.keys():
-		if !can_players_see_each_other(viewer_id, caster_id):
-			continue
+		var can_see: bool = can_players_see_each_other(viewer_id, caster_id)
 		if viewer_id == server_id:
-			client_spawn_spell(caster_id, origin_position, direction, weapon, element, form, is_crit, rarity)
-		else:
+			# Also spawn on the server when it's simulating the caster's room but
+			# its own player isn't there (host in hub) — otherwise the caster's
+			# spell never exists on the authority and its enemies take no damage.
+			if can_see or server_has_players_room_loaded(caster_id):
+				client_spawn_spell(caster_id, origin_position, direction, weapon, element, form, is_crit, rarity)
+		elif can_see:
 			client_spawn_spell.rpc_id(viewer_id, caster_id, origin_position, direction, weapon, element, form, is_crit, rarity)
 
 @rpc("authority", "call_remote", "reliable")

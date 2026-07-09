@@ -135,6 +135,7 @@ func update_settings():
 	settings.set_value("squash_and_stretch","setting",utils.squash_and_stretch)
 	settings.set_value("screen_shake","setting",utils.screen_shake)
 	settings.set_value("window_mode","setting",utils.window_mode)
+	settings.set_value("mouse_capture","setting",utils.mouse_capture)
 	settings.set_value("seperate_core","setting",utils.seperate_core)
 	settings.save(SAVE_SETTINGS_PATH)
 

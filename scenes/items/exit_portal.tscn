@@ -1,28 +1,28 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://bxvd4librxhme"]
 
-[ext_resource type="Script" path="res://scenes/items/exit_portal.gd" id="1_portal"]
+[ext_resource type="Script" uid="uid://s2xcc77ckbnh" path="res://scenes/items/exit_portal.gd" id="1_portal"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_portal"]
 radius = 64.0
 
-[node name="exit_portal" type="Area2D"]
+[node name="exit_portal" type="Area2D" unique_id=1836154145]
 collision_layer = 0
 collision_mask = 2
 script = ExtResource("1_portal")
 
-[node name="collision_shape_2d" type="CollisionShape2D" parent="."]
+[node name="collision_shape_2d" type="CollisionShape2D" parent="." unique_id=1993117243]
 shape = SubResource("CircleShape2D_portal")
 
-[node name="visual_root" type="Node2D" parent="."]
+[node name="visual_root" type="Node2D" parent="." unique_id=159174958]
 
-[node name="color_rect" type="ColorRect" parent="visual_root"]
+[node name="color_rect" type="ColorRect" parent="visual_root" unique_id=156857143]
 offset_left = -48.0
 offset_top = -48.0
 offset_right = 48.0
 offset_bottom = 48.0
 color = Color(0.4, 0.4, 0.4, 1)
 
-[node name="status_label" type="Label" parent="visual_root"]
+[node name="status_label" type="Label" parent="visual_root" unique_id=373116968]
 offset_left = -100.0
 offset_top = -100.0
 offset_right = 100.0

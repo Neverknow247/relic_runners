@@ -13,7 +13,7 @@
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_dbgml"]
 
-[node name="new_version_screen" type="Control" unique_id=1539831339]
+[node name="new_version_screen" type="Control"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -23,7 +23,7 @@ grow_vertical = 2
 theme = ExtResource("1_8nx1o")
 script = ExtResource("2_jltg0")
 
-[node name="TextureRect" type="TextureRect" parent="." unique_id=737368898]
+[node name="TextureRect" type="TextureRect" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -31,7 +31,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="CenterContainer" type="CenterContainer" parent="." unique_id=1873757431]
+[node name="CenterContainer" type="CenterContainer" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -39,10 +39,10 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer" unique_id=239943035]
+[node name="VBoxContainer" type="VBoxContainer" parent="CenterContainer"]
 layout_mode = 2
 
-[node name="warning" type="Label" parent="CenterContainer/VBoxContainer" unique_id=1166786434]
+[node name="warning" type="Label" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
 text = "I'm sorry.
 The version of your save is newer than
@@ -50,11 +50,11 @@ this version of the game. Please update
 your game and restart. Thank you!"
 horizontal_alignment = 1
 
-[node name="exit_button" type="Button" parent="CenterContainer/VBoxContainer" unique_id=1743381140]
+[node name="exit_button" type="Button" parent="CenterContainer/VBoxContainer"]
 layout_mode = 2
 text = "Exit Game"
 
-[node name="Button" type="Button" parent="." unique_id=501341879]
+[node name="Button" type="Button" parent="."]
 layout_mode = 0
 offset_left = 1456.0
 offset_top = 504.0
@@ -66,7 +66,7 @@ theme_override_styles/hover = SubResource("StyleBoxEmpty_yo40b")
 theme_override_styles/disabled = SubResource("StyleBoxEmpty_ebbfc")
 theme_override_styles/focus = SubResource("StyleBoxEmpty_dbgml")
 
-[node name="TextEdit" type="TextEdit" parent="." unique_id=1206566288]
+[node name="TextEdit" type="TextEdit" parent="."]
 visible = false
 layout_mode = 0
 offset_left = 1408.0

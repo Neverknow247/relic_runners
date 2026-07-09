@@ -95,9 +95,10 @@ func _build_element_section(weapon: Weapon) -> void:
 		btn.custom_minimum_size = Vector2(300, 110)
 		btn.add_theme_font_size_override("font_size", 32)
 		var crystal: String = "crystal_" + element
-		var has_crystal: bool = _has_item(crystal)
+		var crystal_count: int = _count_of(crystal)
+		var has_crystal: bool = crystal_count > 0
 		var is_current: bool = weapon.element == element
-		btn.text = "%s\n%s" % [element.capitalize(), "current" if is_current else ("have crystal" if has_crystal else "need crystal")]
+		btn.text = "%s\n%s" % [element.capitalize(), "current" if is_current else ("have x%d" % crystal_count if has_crystal else "need crystal")]
 		btn.disabled = is_current or !has_crystal
 		# Tint toward the element's own color so the choice reads like the
 		# fire/holy/air it'll become (same colors used on projectiles/enemies).
@@ -128,8 +129,9 @@ func _build_forms_section(weapon: Weapon) -> void:
 			btn.text = "Detach"
 			btn.pressed.connect(_on_detach_pressed.bind(form))
 		else:
-			var has_stone := _has_item(ItemData.stone_for_form(form))
-			btn.text = "Attach" if has_stone else "Attach (no stone)"
+			var stone_count := _count_of(ItemData.stone_for_form(form))
+			var has_stone: bool = stone_count > 0
+			btn.text = ("Attach (x%d)" % stone_count) if has_stone else "Attach (no stone)"
 			btn.disabled = !has_stone
 			if has_stone:
 				btn.pressed.connect(_on_attach_pressed.bind(form))
@@ -159,12 +161,25 @@ func _on_attach_pressed(form: String) -> void:
 
 func _on_detach_pressed(form: String) -> void:
 	if player.workbench_detach_form(selected_slot, form):
-		status_label.text = "%s form detached — stone returned to your bag." % form.capitalize()
+		status_label.text = "%s form detached — stone banked to Materials." % form.capitalize()
 	else:
-		status_label.text = "No room in your bag to return the stone."
+		status_label.text = "Couldn't detach %s." % form.capitalize()
 	refresh()
 
+# Total available of a material: banked in the Materials tab (consumed first)
+# plus any loose stacks still in the backpack.
+func _count_of(type: String) -> int:
+	var total: int = player.material_count(type)
+	for entry in player.inventory.placements:
+		var item: Item = entry["item"]
+		if item.type == type:
+			total += item.quantity
+	return total
+
 func _has_item(type: String) -> bool:
+	# Banked materials count too (workbench consumes those first).
+	if player.material_count(type) > 0:
+		return true
 	for entry in player.inventory.placements:
 		var item: Item = entry["item"]
 		if item.type == type and item.quantity > 0:

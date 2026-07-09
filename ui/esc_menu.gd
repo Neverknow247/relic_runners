@@ -5,17 +5,28 @@ extends CanvasLayer
 # peer's own local world.tscn instance gets exactly one of these.
 
 @onready var resume_button: Button = $panel_container/margin_container/v_box_container/resume_button
+@onready var settings_button: Button = $panel_container/margin_container/v_box_container/settings_button
 @onready var quit_button: Button = $panel_container/margin_container/v_box_container/quit_button
 @onready var leave_button: Button = $panel_container/margin_container/v_box_container/leave_button
+@onready var settings_menu: CanvasLayer = $settings_menu
 
 func _ready() -> void:
 	visible = false
-	resume_button.pressed.connect(func(): visible = false)
+	resume_button.pressed.connect(_close)
+	settings_button.pressed.connect(func(): settings_menu.open())
 	quit_button.pressed.connect(_on_quit_pressed)
 	leave_button.pressed.connect(_on_leave_pressed)
 
+func _close() -> void:
+	visible = false
+	# settings_menu is its own CanvasLayer, so hiding this one doesn't hide it —
+	# do it explicitly so it never gets orphaned on screen.
+	settings_menu.visible = false
+
 func toggle() -> void:
 	visible = !visible
+	if !visible:
+		settings_menu.visible = false
 
 func _on_quit_pressed() -> void:
 	await _apply_death_penalty_and_save()

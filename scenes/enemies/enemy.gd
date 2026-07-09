@@ -27,41 +27,12 @@ func _spawn_damage_number(amount: float, color: Color, is_crit: bool = false) ->
 
 @export var max_health := 100.0
 
-# Each entry rolled independently (its own chance to drop at all, then a
-# min-max quantity if it does) into one shared ground pile — LootPickup's
-# pile is already a small generic grid (see world_loot.gd's LOOT_PILE_SIZE),
-# built exactly to hold more than one item type per kill. Crystal/gear
-# quantities are capped at 1 (matches their max_stack, and gear doesn't
-# stack at all) so a roll never tries to cram "2" of a single-cell-or-less
-# item into one entry.
-# Chance the guaranteed "scrap" roll below gets replaced entirely by the
-# enemy's own equipped weapon instead — see die()'s loot_table.duplicate().
-const WEAPON_DROP_CHANCE := 0.1
-
-const LOOT_TABLE := [
-	{"type": "scrap", "chance": 1.0, "min": 1, "max": 3},
-	# min 0 means this simply rolls 0 (skipped — see world_loot.gd's
-	# qty <= 0 continue) on some kills rather than needing a separate
-	# "chance to drop at all" gate on top of the quantity roll.
-	{"type": "gold", "chance": 1.0, "min": 0, "max": 3},
-	{"type": "crystal_fire", "chance": 0.15, "min": 1, "max": 1},
-	{"type": "crystal_holy", "chance": 0.15, "min": 1, "max": 1},
-	{"type": "crystal_air", "chance": 0.15, "min": 1, "max": 1},
-	# Form Stones — the lootable way to add forms to weapons now. Each rolls
-	# independently at a low rate so a stone is a real find, not a per-kill
-	# handout.
-	{"type": "form_stone_ball", "chance": 0.05, "min": 1, "max": 1},
-	{"type": "form_stone_bolt", "chance": 0.05, "min": 1, "max": 1},
-	{"type": "form_stone_rain", "chance": 0.05, "min": 1, "max": 1},
-	{"type": "form_stone_beam", "chance": 0.05, "min": 1, "max": 1},
-	{"type": "form_stone_burst", "chance": 0.05, "min": 1, "max": 1},
-	{"type": "form_stone_cone", "chance": 0.05, "min": 1, "max": 1},
-	{"type": "mana_crystal", "chance": 0.25, "min": 1, "max": 3},
-	{"type": "health_potion", "chance": 0.1, "min": 1, "max": 1},
-	{"type": "belt_basic", "chance": 0.05, "min": 1, "max": 1},
-	{"type": "cloak_basic", "chance": 0.05, "min": 1, "max": 1},
-	{"type": "backpack_basic", "chance": 0.05, "min": 1, "max": 1},
-]
+# Loot: which pool (in ItemData.ENEMY_LOOT_POOLS) this enemy type draws from, and
+# how many rarity-weighted rolls a kill yields. Different enemy types will set a
+# different pool/range later; "basic" is the only pool for now.
+@export var loot_pool := "basic"
+@export var loot_rolls_min := 1
+@export var loot_rolls_max := 3
 var health := max_health:
 	set(value):
 		health = value
@@ -95,6 +66,16 @@ func _defer_free() -> void:
 
 @export var move_speed := 240.0
 
+# While in range and firing, an enemy strafes sideways relative to the target
+# (flipping direction at random intervals) so it's a moving target that's harder
+# to line up a shot on — a light "try to avoid damage" behavior. Firing rate is
+# unaffected: it keeps casting every frame it can still see the target.
+@export var strafe_speed := 150.0
+const STRAFE_FLIP_MIN := 0.6
+const STRAFE_FLIP_MAX := 1.5
+var _strafe_sign := 1.0
+var _strafe_timer := 0.0
+
 # Casting behavior: stays put and casts while the target is within
 # cast_range and in line of sight; otherwise closes the distance. Fire rate
 # is no longer a flat timer — it's set per-shot from the same
@@ -102,11 +83,38 @@ func _defer_free() -> void:
 # spells exactly as often as a player with the same weapon/form could.
 @export var cast_range := 640.0
 @export var tap_interval := 0.35
-@export var normal_cast_chance := 0.4
 var cast_timer := 0.0
 var tap_timer := 0.0
 var spell_input_sequence: Array[int] = []
 var target_recipe_sequence: Array = []
+# Fire this many plain default attacks between sequence spells (re-rolled each
+# time a sequence goes off) so enemies don't just spam sequences.
+const MIN_DEFAULTS_BETWEEN_SEQUENCES := 3
+const MAX_DEFAULTS_BETWEEN_SEQUENCES := 5
+var _default_shots_remaining := 0
+# The distance the cast we're about to make can actually reach (its projectile's
+# real travel range, or a short-range form's declared reach). The combat movement
+# closes in instead of strafing until the target is inside it, so shots always
+# connect instead of fizzling short.
+var _advance_range := 0.0
+# The next cast is decided (planned) up front so we know how close to get, then
+# only fired once we're in range — see _plan_next_cast / _execute_planned_cast.
+var _planned_form := ""
+var _planned_recipe: Dictionary = {}
+# Stand a bit inside a cast's max reach so shots comfortably land, not right at
+# the fizzle edge.
+const ENGAGE_MARGIN := 0.85
+# This enemy's default-attack reach (set in _ready). While closing in for a
+# shorter-range sequence, it keeps firing defaults out to this range so it's
+# applying pressure, not just tanking damage during the approach.
+var _default_range := 0.0
+# Small ± random spread on every shot's aim, so a stream of shots isn't a single
+# dodge-one-dodge-them-all line.
+const AIM_VARIANCE := deg_to_rad(5.0)
+# Cheap first-order target leading: aim where the target will be by the time the
+# shot reaches it, from a smoothed estimate of its velocity (target_velocities).
+const VELOCITY_SMOOTHING := 0.25
+var target_velocities: Dictionary = {}
 
 # Facing/vision cone: LOS is only granted within fov_degrees of the
 # direction the enemy is currently facing, and facing turns toward whatever
@@ -181,6 +189,25 @@ const STUCK_DISTANCE := 32.0
 const BODY_RADIUS := 28.0
 const SEPARATION_CHECK_RADIUS := 160.0
 const SEPARATION_RESPONSE := 6.0
+
+# --- Performance ----------------------------------------------------------
+# Distance LOD: an enemy with no target and no player within SLEEP_RANGE does no
+# per-frame work at all (no LOS/separation physics queries, no pathing) until a
+# player comes near. SLEEP_RANGE is comfortably beyond the detection radius, so
+# an enemy always wakes well before it could ever need to notice anyone.
+const SLEEP_RANGE := 1200.0
+var _world: Node = null
+# Separation runs a physics query; recompute it only every few frames and reuse
+# the cached push in between (positions barely change frame-to-frame).
+const SEPARATION_RECALC_FRAMES := 3
+var _separation_cache := Vector2.ZERO
+var _separation_countdown := 0
+# Preallocated query objects, reused every frame — building a Shape2D + query
+# params on every call was needless per-frame garbage across every enemy.
+var _sep_shape: CircleShape2D
+var _sep_query: PhysicsShapeQueryParameters2D
+var _los_shape: CircleShape2D
+var _los_query: PhysicsShapeQueryParameters2D
 
 # When we give up on a target (arrived at their last known position without
 # re-spotting them), that same target is ineligible for re-acquisition for a
@@ -349,22 +376,54 @@ func _ready() -> void:
 	hurtbox.hurt.connect(_on_hurtbox_hurt)
 	detection_area.area_entered.connect(_on_detection_area_entered)
 	detection_area.area_exited.connect(_on_detection_area_exited)
+	# Vision radius and the projectile travel cap are the same number by design
+	# (SpellData.ENGAGEMENT_RANGE) so you can't hit an enemy from beyond where it
+	# could ever spot you. Drive it from the constant here — duplicate the shape
+	# first so we're not mutating the shared resource every other enemy uses.
+	var det_shape := detection_area.get_node("collision_shape_2d") as CollisionShape2D
+	if det_shape != null and det_shape.shape is CircleShape2D:
+		det_shape.shape = det_shape.shape.duplicate()
+		(det_shape.shape as CircleShape2D).radius = SpellData.ENGAGEMENT_RANGE
 	# name.hash() (not get_instance_id()) so this identifier is identical on
 	# every peer's local copy of this same static, room-baked enemy —
 	# get_instance_id() is process-local and would differ per peer, silently
 	# breaking self-hit exclusion on whichever clients don't match.
 	hurtbox.owner_id = name.hash()
+	# In the "enemies" group on every peer so a beam this enemy casts can resolve
+	# it as its caster (by matching name.hash()) the same way a player beam finds
+	# its caster in world.players — see beam_projectile.gd.
+	add_to_group("enemies")
 	health_bar.max_value = max_health
 	health_bar.value = health
 	if is_multiplayer_authority():
 		attacker_weapon = WEAPON_TYPES.pick_random()
 		attacker_element = ELEMENT_TYPES.pick_random()
 		attacker_forms = _roll_forms(attacker_weapon)
+		# How far this enemy's plain default attack reaches — used to keep up
+		# default-attack pressure while closing in for a shorter-range sequence.
+		_default_range = SpellData.get_effective_range(attacker_weapon, attacker_element, "default", true) * ENGAGE_MARGIN
 		spawn_position = global_position
 		actual_search_turn_speed = max(0.1, search_turn_speed + randf_range(-search_turn_speed_variance, search_turn_speed_variance))
 		# Start idle by looking around rather than immediately wandering off.
 		idle_state = IdleState.SEARCH
 		search_timer = search_duration + randf_range(-search_duration_variance, search_duration_variance)
+		# Open an engagement with a run of default attacks before the first
+		# sequence, rather than possibly leading with a sequence.
+		_default_shots_remaining = randi_range(MIN_DEFAULTS_BETWEEN_SEQUENCES, MAX_DEFAULTS_BETWEEN_SEQUENCES)
+		# Build the reusable physics-query objects once (only the authority runs
+		# the queries that use them — see _physics_process's early-out above).
+		_sep_shape = CircleShape2D.new()
+		_sep_shape.radius = SEPARATION_CHECK_RADIUS
+		_sep_query = PhysicsShapeQueryParameters2D.new()
+		_sep_query.shape = _sep_shape
+		_sep_query.collision_mask = 32
+		_sep_query.exclude = [get_rid()]
+		_los_shape = CircleShape2D.new()
+		_los_shape.radius = 16.0
+		_los_query = PhysicsShapeQueryParameters2D.new()
+		_los_query.shape = _los_shape
+		_los_query.collision_mask = 1
+		_los_query.exclude = [get_rid()]
 	_update_visual()
 
 # 1-3 distinct forms from the weapon type's capable list, shuffled so it's a
@@ -424,6 +483,13 @@ func _physics_process(delta: float) -> void:
 		promote_new_leader()
 	cast_timer = max(cast_timer - delta, 0.0)
 	lost_target_cooldown = max(lost_target_cooldown - delta, 0.0)
+	# Distance LOD: with nothing to fight and no player anywhere near, skip the
+	# whole expensive frame (target scan, LOS/separation queries, pathing). The
+	# enemy just holds still until a player closes to SLEEP_RANGE — which is well
+	# outside its detection radius, so it never sleeps through a real encounter.
+	if current_target == null and _nearest_player_distance() > SLEEP_RANGE:
+		velocity = Vector2.ZERO
+		return
 	update_current_target()
 	if current_target != null:
 		is_investigating = false
@@ -439,8 +505,12 @@ func _physics_process(delta: float) -> void:
 			facing_indicator.position = facing_direction * FACING_INDICATOR_DISTANCE
 		return
 	var visible_point = get_visible_point(current_target)
-	# Cloak stealth: unseen while standing still, and/or never heard.
-	var can_see := visible_point != null and not _hidden_by_stillness(current_target)
+	# Stillness stealth (cloak_unseen_still) only prevents an enemy from SPOTTING
+	# you in the first place (see the acquisition check in update_current_target) —
+	# it does NOT hide you from an enemy already locked onto you. Once it's in
+	# combat with you, freezing won't break its line of sight; you have to actually
+	# break LOS / range and let it give up. Hearing-silence still gates can_hear.
+	var can_see := visible_point != null
 	var distance := global_position.distance_to(current_target.global_position)
 	var can_hear := distance <= hearing_radius and not _target_silent(current_target)
 	# Hearing reveals location the same as sight would (no wall/FOV check),
@@ -453,9 +523,24 @@ func _physics_process(delta: float) -> void:
 		current_visible_point = visible_point
 
 	if can_see and distance <= cast_range:
-		velocity = compute_separation()
+		var to_target := current_visible_point - global_position
+		if _advance_range > 0.0 and distance > _advance_range:
+			# The sequence we're building is a short-range form (beam/burst) and
+			# the target is out of its range — close the gap instead of strafing.
+			velocity = to_target.normalized() * move_speed + compute_separation()
+		else:
+			# Strafe sideways while firing so we're a moving target — flip direction
+			# at random intervals so it isn't a predictable pendulum. Casting
+			# continues regardless (update_casting below), so movement never slows
+			# our fire.
+			_strafe_timer -= delta
+			if _strafe_timer <= 0.0:
+				_strafe_sign = 1.0 if randf() < 0.5 else -1.0
+				_strafe_timer = randf_range(STRAFE_FLIP_MIN, STRAFE_FLIP_MAX)
+			var perp := Vector2(-to_target.y, to_target.x).normalized()
+			velocity = perp * _strafe_sign * strafe_speed + compute_separation()
 		update_facing(delta, current_visible_point - global_position)
-		update_casting(delta)
+		update_casting(delta, distance)
 		stuck_check_timer = 0.0
 		is_easing_around_corner = false
 	else:
@@ -529,15 +614,16 @@ func follow_nav_path(delta: float, target_position: Vector2) -> bool:
 # Continuous and additive rather than a hard stop, so a group moving
 # together drifts apart smoothly instead of jamming against each other.
 func compute_separation() -> Vector2:
+	# Throttled: the shape query is the single most-run physics cost across a
+	# crowd of enemies, and the push barely changes frame-to-frame. Recompute
+	# every few frames and reuse the cached value in between.
+	_separation_countdown -= 1
+	if _separation_countdown > 0:
+		return _separation_cache
+	_separation_countdown = SEPARATION_RECALC_FRAMES
 	var space_state := get_world_2d().direct_space_state
-	var shape := CircleShape2D.new()
-	shape.radius = SEPARATION_CHECK_RADIUS
-	var query := PhysicsShapeQueryParameters2D.new()
-	query.shape = shape
-	query.transform = Transform2D(0.0, global_position)
-	query.collision_mask = 32
-	query.exclude = [get_rid()]
-	var results := space_state.intersect_shape(query, 8)
+	_sep_query.transform = Transform2D(0.0, global_position)
+	var results := space_state.intersect_shape(_sep_query, 8)
 	var desired_min := BODY_RADIUS * 2.0 + min_enemy_separation
 	var push := Vector2.ZERO
 	for result in results:
@@ -556,7 +642,23 @@ func compute_separation() -> Vector2:
 		var dir := offset.normalized() if dist > 0.001 \
 			else Vector2.RIGHT.rotated(float(get_instance_id() - other.get_instance_id()))
 		push += dir * (desired_min - dist)
-	return push * SEPARATION_RESPONSE
+	_separation_cache = push * SEPARATION_RESPONSE
+	return _separation_cache
+
+# Distance to the closest player (INF if none / world not ready). Cheap loop over
+# the handful of players — used by the frame's distance-LOD early-out.
+func _nearest_player_distance() -> float:
+	if _world == null or not is_instance_valid(_world):
+		_world = get_tree().get_first_node_in_group("world")
+	if _world == null or _world.players == null:
+		return INF
+	var nearest := INF
+	for p in _world.players.get_children():
+		if p is Node2D:
+			var d := global_position.distance_to(p.global_position)
+			if d < nearest:
+				nearest = d
+	return nearest
 
 func start_investigating(direction: Vector2) -> void:
 	# 95% of the time head roughly toward the shot (the original behavior);
@@ -727,13 +829,10 @@ func get_visible_point(target: Hurtbox) -> Variant:
 	# the whole way, so it can't pass through a gap smaller than its
 	# diameter — geometrically closes off the pinhole case entirely.
 	var space_state := get_world_2d().direct_space_state
-	var shape := CircleShape2D.new()
-	shape.radius = 16.0
-	var query := PhysicsShapeQueryParameters2D.new()
-	query.shape = shape
-	query.collision_mask = 1
-	query.exclude = [get_rid()]
 	var half_fov := deg_to_rad(fov_degrees * 0.5)
+	# Reuses the preallocated _los_query/_los_shape (mask + exclude set once in
+	# _ready) instead of building new ones each of the up-to-5 peek casts.
+	_los_query.transform = Transform2D(0.0, global_position)
 	# Check center-to-center first, then a few points around the target's
 	# body (peek offsets) rather than just its dead center — someone peeking
 	# out from behind a corner has their center still hidden but an edge of
@@ -744,9 +843,8 @@ func get_visible_point(target: Hurtbox) -> Variant:
 		var to_point := point - global_position
 		if to_point.length_squared() > 0.0001 and absf(facing_direction.angle_to(to_point)) > half_fov:
 			continue
-		query.transform = Transform2D(0.0, global_position)
-		query.motion = to_point
-		var result := space_state.cast_motion(query)
+		_los_query.motion = to_point
+		var result := space_state.cast_motion(_los_query)
 		if result.is_empty() or result[0] >= 1.0:
 			return point
 	return null
@@ -759,9 +857,14 @@ func update_current_target() -> void:
 	# it measuring "since last frame" instead of "since we last happened to
 	# check", which would misreport a player who just walked up and stopped
 	# as still moving.
+	var pdelta := get_physics_process_delta_time()
 	for h in targets_in_range:
 		var last: Vector2 = last_target_positions.get(h, h.global_position)
 		target_is_moving[h] = h.global_position.distance_to(last) >= MOVEMENT_THRESHOLD
+		# Smoothed velocity estimate for shot leading (see fire_spell). Smoothing
+		# rides out single-frame jitter so the lead point doesn't jump around.
+		var inst_vel: Vector2 = (h.global_position - last) / pdelta
+		target_velocities[h] = target_velocities.get(h, Vector2.ZERO).lerp(inst_vel, VELOCITY_SMOOTHING)
 		last_target_positions[h] = h.global_position
 	# Leaving detection_area's radius must NOT clear current_target — that's
 	# exactly the "walked around a corner" case we want to keep chasing the
@@ -817,26 +920,56 @@ func reset_casting() -> void:
 	spell_input_sequence.clear()
 	target_recipe_sequence.clear()
 	tap_timer = 0.0
+	_advance_range = 0.0
+	_planned_form = ""
+	_planned_recipe = {}
 
-func update_casting(delta: float) -> void:
+func update_casting(delta: float, distance: float) -> void:
+	# Mid-sequence: keep tapping it out.
 	if !target_recipe_sequence.is_empty():
 		tap_timer -= delta
 		if tap_timer <= 0.0:
 			enter_next_tap()
 		return
-	if cast_timer <= 0.0:
-		start_new_cast()
-
-func start_new_cast() -> void:
-	# Only the forms this enemy's weapon actually holds — not every form the
-	# type is capable of — so its cast repertoire matches the weapon that drops.
-	var recipes: Array = all_spell_recipes.get_available_recipes(attacker_element, attacker_forms)
-	if recipes.is_empty() or randf() < normal_cast_chance:
-		cast_default()
+	if cast_timer > 0.0:
 		return
-	var recipe: Dictionary = recipes.pick_random()
-	target_recipe_sequence = recipe["sequence"].duplicate()
-	tap_timer = tap_interval
+	# Decide the next cast first (so we know its reach).
+	if _planned_form == "":
+		_plan_next_cast()
+	if distance <= _advance_range:
+		# In range for the planned cast — fire it (or start warming up a sequence).
+		_execute_planned_cast()
+	elif _planned_form != "default" and distance <= _default_range:
+		# Still closing in for a shorter-range sequence but the target is within
+		# plain-default reach — keep peppering them with default attacks so we're
+		# not just eating shots during the approach. Doesn't consume the planned
+		# sequence; it fires once we've closed the rest of the gap.
+		cast_default()
+
+# Choose what to cast next (a run of default attacks between sequences) and record
+# how close we need to be for it to land, WITHOUT firing yet.
+func _plan_next_cast() -> void:
+	# Only the forms this enemy's weapon actually holds — so its repertoire matches
+	# the weapon that drops.
+	var recipes: Array = all_spell_recipes.get_available_recipes(attacker_element, attacker_forms)
+	if recipes.is_empty() or _default_shots_remaining > 0:
+		_planned_form = "default"
+		_planned_recipe = {}
+	else:
+		_planned_recipe = recipes.pick_random()
+		_planned_form = _planned_recipe.get("form", "default")
+	_advance_range = SpellData.get_effective_range(attacker_weapon, attacker_element, _planned_form, true) * ENGAGE_MARGIN
+
+func _execute_planned_cast() -> void:
+	if _planned_recipe.is_empty():
+		_default_shots_remaining = max(_default_shots_remaining - 1, 0)
+		cast_default()
+	else:
+		_default_shots_remaining = randi_range(MIN_DEFAULTS_BETWEEN_SEQUENCES, MAX_DEFAULTS_BETWEEN_SEQUENCES)
+		target_recipe_sequence = _planned_recipe["sequence"].duplicate()
+		tap_timer = tap_interval
+	_planned_form = ""
+	_planned_recipe = {}
 
 func enter_next_tap() -> void:
 	var next_index := spell_input_sequence.size()
@@ -862,30 +995,53 @@ func cast_default() -> void:
 func fire_spell(weapon: String, element: String, form: String) -> void:
 	if current_target == null:
 		return
-	# Aim at the actual point of them we can see (may be an edge peeking
-	# past a corner) rather than their dead center, which could still be
-	# behind cover even while some part of them is exposed.
-	var direction := global_position.direction_to(current_visible_point)
-	var spell_data := all_spell_data.build_spell_data(weapon, element, form)
+	var spell_data := all_spell_data.build_spell_data(weapon, element, form, "common", true)
+	# Aim at the actual point of them we can see (may be an edge peeking past a
+	# corner) rather than their dead center, which could still be behind cover.
+	var aim_point := current_visible_point
+	var direction: Vector2
+	var spawn_dist := -1.0
+	if spell_data.get("targeted", false):
+		# Targeted forms (rain) land ON the target's spot, clamped to the form's
+		# range — no lead or spread, it's a placed cast. rain_projectile.gd then
+		# LOS-clamps it to a wall if one's in the way.
+		var to_target := aim_point - global_position
+		spawn_dist = minf(to_target.length(), spell_data["spawn_offset"])
+		direction = to_target.normalized()
+	else:
+		# Predictive leading: shift the aim to where the target will be by the time
+		# a moving shot reaches it (time ≈ distance / projectile speed). Cheap
+		# first-order lead. Skipped for the speed-0 AoE forms (they don't travel).
+		var proj_speed: float = spell_data["speed"]
+		if proj_speed > 0.0:
+			var lead_time := global_position.distance_to(aim_point) / proj_speed
+			aim_point += target_velocities.get(current_target, Vector2.ZERO) * lead_time
+		# Small random spread so a burst of shots fans out slightly instead of
+		# stacking into one dodgeable line.
+		direction = global_position.direction_to(aim_point).rotated(randf_range(-AIM_VARIANCE, AIM_VARIANCE))
 	# Rolled once here (only ever runs on this enemy's own authoritative
 	# peer) and sent as a plain bool below — every peer must apply the same
 	# crit result, so it can't be re-rolled independently inside
 	# spawn_projectile(), which runs once per peer as the RPC lands.
 	var is_crit := SpellData.roll_crit(weapon)
-	spawn_projectile.rpc(weapon, element, form, direction, is_crit)
-	# Same per-form cooldown table the player's attack_check() uses, so the
-	# enemy fires exactly as often as a player equipped with this weapon/
-	# form could — not a flat, unrelated timer.
+	spawn_projectile.rpc(weapon, element, form, direction, is_crit, spawn_dist)
+	# Per-form cooldown, but halved for enemies (ENEMY_COOLDOWN_MULT is baked into
+	# spell_data via the is_enemy flag above) so they fire about twice as fast as
+	# a player with the same weapon/form — paired with their slower projectiles.
 	cast_timer = spell_data["attack_cooldown"]
 
 @rpc("authority", "call_local", "reliable")
-func spawn_projectile(weapon: String, element: String, form: String, direction: Vector2, is_crit: bool = false) -> void:
-	var spell_data := all_spell_data.build_spell_data(weapon, element, form)
-	if is_crit:
+func spawn_projectile(weapon: String, element: String, form: String, direction: Vector2, is_crit: bool = false, spawn_dist: float = -1.0) -> void:
+	var spell_data := all_spell_data.build_spell_data(weapon, element, form, "common", true)
+	# Dot forms roll crit per-tick, so leave their base damage un-crit here.
+	if is_crit and not spell_data.get("dot", false):
 		spell_data["damage"] *= SpellData.CRIT_MULTIPLIER
 	var projectile = spell_data["scene"].instantiate()
 	get_tree().current_scene.add_child(projectile)
-	projectile.global_position = global_position + direction * spell_data["spawn_offset"]
+	# spawn_dist is set for targeted forms (rain lands on the player, clamped to
+	# range); otherwise fall back to the form's fixed spawn_offset.
+	var dist: float = spawn_dist if spawn_dist >= 0.0 else spell_data["spawn_offset"]
+	projectile.global_position = global_position + direction * dist
 	projectile.setup_spell(direction, spell_data, name.hash(), is_crit)
 
 func _on_detection_area_entered(area: Area2D) -> void:
@@ -897,6 +1053,12 @@ func _on_detection_area_exited(area: Area2D) -> void:
 		targets_in_range.erase(area)
 
 func _on_hurtbox_hurt(hitbox, damage) -> void:
+	# Authoritative damage number: only the enemy's authority (the server, which
+	# has this enemy's real attacker_weapon/element) computes it, then broadcasts
+	# so every peer shows the same value instead of recomputing from data clients
+	# may not have.
+	if !is_multiplayer_authority():
+		return
 	var final_damage: float = damage
 	if hitbox != null and "attacker_weapon" in hitbox and "attacker_element" in hitbox:
 		var multiplier := SpellData.get_damage_multiplier(
@@ -906,12 +1068,7 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 			attacker_element
 		)
 		final_damage = damage * multiplier
-	# Damage math above is pure/deterministic from data every peer already
-	# has, so the number is spawned for everyone watching regardless of
-	# authority — only the actual health change below is authority-only.
-	_spawn_damage_number(final_damage, Color(1, 0.9, 0.3), hitbox != null and hitbox.is_crit)
-	if !is_multiplayer_authority():
-		return
+	_broadcast_damage_number.rpc(final_damage, hitbox != null and hitbox.is_crit)
 	# Getting hit is an instant, unmissable cue of where the attack came
 	# from — snap facing straight there instead of easing over with
 	# turn_speed like normal tracking does.
@@ -932,6 +1089,12 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 			alert_nearby_group(current_target, alert_point)
 	take_damage(final_damage)
 
+# Shows the authoritative damage number on every peer (call_local so the server
+# shows it too) — the single place an enemy's damage number is spawned now.
+@rpc("authority", "call_local", "unreliable")
+func _broadcast_damage_number(amount: float, is_crit: bool) -> void:
+	_spawn_damage_number(amount, Color(1, 0.9, 0.3), is_crit)
+
 func take_damage(amount: float) -> void:
 	if is_dead:
 		return
@@ -950,26 +1113,14 @@ func die() -> void:
 	# only runs once.
 	var world = get_tree().get_first_node_in_group("world")
 	if world:
-		# 10% chance to drop the weapon this enemy was actually using instead
-		# of scrap (everything else in the table — crystals, potions, gear —
-		# still rolls independently either way). attacker_weapon/element are
-		# live per-instance values, not static strings, so this table can't
-		# just live in the LOOT_TABLE const like the rest — the "element" key
-		# here is what tells world_loot.gd to override the dropped Weapon's
-		# element away from its generic type default (see Weapon._init(),
-		# which otherwise always defaults every weapon type to "fire").
-		var loot_table: Array = []
-		for entry in LOOT_TABLE:
-			if entry["type"] == "scrap" and randf() < WEAPON_DROP_CHANCE:
-				loot_table.append({
-					"type": attacker_weapon, "chance": 1.0, "min": 1, "max": 1,
-					"element": attacker_element,
-					# The dropped weapon carries exactly the forms this enemy was
-					# fighting with — world_loot.gd copies this onto the Weapon,
-					# same override mechanism as "element" above.
-					"forms": attacker_forms.duplicate(),
-				})
-			else:
-				loot_table.append(entry)
-		world.spawn_loot(global_position, loot_table)
+		# Rarity-weighted rolls from this enemy type's pool. If the pool's "@weapon"
+		# slot is rolled, the drop is this enemy's actual weapon — its live
+		# element/forms are passed so world_loot.gd stamps them onto the dropped
+		# Weapon (which otherwise defaults every type to "fire" and no forms).
+		var weapon_override := {
+			"type": attacker_weapon,
+			"element": attacker_element,
+			"forms": attacker_forms.duplicate(),
+		}
+		world.spawn_pool_loot(global_position, loot_pool, loot_rolls_min, loot_rolls_max, weapon_override)
 	is_dead = true

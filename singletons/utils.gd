@@ -22,6 +22,20 @@ const voice_bus_name = "Voice"
 func _ready():
 	if DisplayServer.window_get_mode() != window_mode:
 		DisplayServer.window_set_mode(window_mode)
+	_apply_mouse_mode()
+
+# Confine the cursor to the game window so it can't accidentally click out
+# (kept VISIBLE, not fully captured, since this is a mouse-aim game — the cursor
+# position still matters for aiming). The OS releases confinement on alt-tab.
+var mouse_capture = true:
+	get:
+		return mouse_capture
+	set(value):
+		mouse_capture = value
+		_apply_mouse_mode()
+
+func _apply_mouse_mode():
+	Input.mouse_mode = Input.MOUSE_MODE_CONFINED if mouse_capture else Input.MOUSE_MODE_VISIBLE
 
 func set_volume():
 	AudioServer.set_bus_volume_db(master_bus, linear_to_db(volume_settings["master_volume"]))
