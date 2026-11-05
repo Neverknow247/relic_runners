@@ -240,6 +240,7 @@ var _flicker_tween: Tween
 const SHOVE_COOLDOWN := 3.0
 const SHOVE_RANGE := 520.0
 var _shove_cooldown_timer := 0.0
+const ControlsOverlay := preload("res://ui/controls_overlay.gd")
 
 var default_max_velocity = 1000
 var default_acceleration = 6000
@@ -1828,6 +1829,8 @@ func _ready() -> void:
 	hurtbox.hurt.connect(_on_hurtbox_hurt)
 	if is_multiplayer_authority():
 		player_camera.make_current()
+		# First-run controls card (F1 brings it back).
+		add_child(ControlsOverlay.new())
 		spell_list_ui.visible = true
 		spell_list_ui.setup(self)
 		health_ui.visible = true

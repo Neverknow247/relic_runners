@@ -23,12 +23,31 @@ func _ready() -> void:
 		GlobalSteam.multiplayer_ready.connect(_on_multiplayer_ready)
 	# Wire the buttons here (rather than in the scene) so the paths live in one
 	# place with the @onready refs above.
+	_add_play_solo_button()
 	host_public_button.pressed.connect(_on_host_public_pressed)
 	host_private_button.pressed.connect(_on_host_private_pressed)
 	refresh_button.pressed.connect(_on_refresh_pressed)
 	join_private_button.pressed.connect(_on_join_private_pressed)
 	# Populate the public list right away.
 	GlobalSteam.requestLobbyList()
+
+# "Play Solo": a private, non-joinable game with a throwaway name/password, so a
+# solo run is one click instead of filling in the private-host form. Reuses the
+# normal host path (GlobalSteam.host_lobby), which still needs Steam running.
+func _add_play_solo_button() -> void:
+	var col := host_public_button.get_parent()
+	var solo := Button.new()
+	solo.name = "play_solo_button"
+	solo.text = "Play Solo"
+	solo.custom_minimum_size = Vector2(0, 200)
+	solo.theme = host_public_button.theme
+	col.add_child(solo)
+	col.move_child(solo, host_public_button.get_index())
+	solo.pressed.connect(_on_play_solo_pressed)
+
+func _on_play_solo_pressed() -> void:
+	_set_status("Starting a solo game…")
+	GlobalSteam.host_lobby("solo", "solo_%d" % randi(), str(randi()))
 
 func _on_host_public_pressed() -> void:
 	_set_status("Creating public game…")

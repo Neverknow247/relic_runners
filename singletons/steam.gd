@@ -166,7 +166,11 @@ func _on_lobby_created(result: int, _lobby_id: int):
 	if result == Steam.Result.RESULT_OK:
 		self.lobby_id = _lobby_id
 		
-		Steam.setLobbyJoinable(_lobby_id,true)
+		# A solo game is a private lobby nobody else can join.
+		var solo := pending_lobby_visibility == "solo"
+		Steam.setLobbyJoinable(_lobby_id, !solo)
+		if solo:
+			pending_lobby_visibility = "private"
 		
 		var final_name = pending_lobby_name
 		if final_name == "":
