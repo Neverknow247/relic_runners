@@ -379,7 +379,7 @@ const VENDOR_SELL := {
 	"form_stone_ball": 18, "form_stone_bolt": 18, "form_stone_rain": 18,
 	"form_stone_beam": 18, "form_stone_burst": 18, "form_stone_cone": 18,
 	"minnow": 2, "river_bass": 4, "silverscale": 8, "old_boot": 1, "mana_eel": 10,
-	"river_pearl": 25, "golden_koi": 40, "cracked_crucible": 20, "runed_anvil": 60,
+	"river_pearl": 25, "golden_koi": 40,
 	"health_potion": 10, "greater_health_potion": 25, "mana_crystal": 15, "refined_mana_crystal": 30,
 }
 const VENDOR_SELL_BY_RARITY := {"common": 8, "uncommon": 22, "rare": 55, "epic": 120, "legendary": 250, "mythic": 500}
@@ -395,13 +395,19 @@ const VENDOR_STOCK := [
 	["cloak_basic", 1, 70],
 ]
 
+# Gold for ONE unit (the vendor sells one per click so a misclick can't dump a
+# stack). Keystone junk isn't listed: it's for the bench, not for gold.
 static func vendor_sell_price(item) -> int:
 	if item == null:
 		return 0
-	if is_gear(item.type) or get_equip_slot(item.type) == "weapon":
+	if get_equip_slot(item.type) == "weapon":
+		# A weapon Item's real rarity lives on its Weapon, not on the Item.
+		var wr: String = item.weapon.rarity if item.weapon != null else "common"
+		return VENDOR_SELL_BY_RARITY.get(wr, 8)
+	if is_gear(item.type):
 		var r: String = item.rarity if item.rarity != "" else "common"
 		return VENDOR_SELL_BY_RARITY.get(r, 8)
-	return int(VENDOR_SELL.get(item.type, 0)) * maxi(1, item.quantity)
+	return int(VENDOR_SELL.get(item.type, 0))
 
 static func get_def(item_type: String) -> Dictionary:
 	if !ITEMS.has(item_type):
@@ -554,7 +560,7 @@ const CRAFTING_RECIPES := [
 	{"inputs": [["water_dust", 3], ["mana_dust", 1]], "output": ["crystal_water", 1], "level": 2},
 	{"inputs": [["earth_dust", 3], ["mana_dust", 1]], "output": ["crystal_earth", 1], "level": 2},
 	{"inputs": [["mana_crystal", 1], ["pure_mana_shard", 1]], "output": ["refined_mana_crystal", 1], "level": 3},
-	{"inputs": [["crystal_fire", 1], ["herbs", 3]], "output": ["phoenix_ash", 1], "level": 3},
+	{"inputs": [["crystal_fire", 1], ["herbs", 3]], "output": ["phoenix_ash", 1], "level": 2},
 ]
 
 # Crafting bench levels (persistent, never lost on death). Upgrading costs

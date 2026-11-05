@@ -119,7 +119,7 @@ func _refresh() -> void:
 			continue
 		any_sellable = true
 		var label := "%s x%d" % [ItemData.get_def(item.type).get("display_name", item.type), item.quantity]
-		_row(_sell_list, label, "Sell %dg" % price, true, _on_sell.bind(item.instance_id))
+		_row(_sell_list, label, "Sell 1: %dg" % price, true, _on_sell.bind(item.instance_id))
 	if !any_sellable:
 		var none := Label.new()
 		none.text = "(nothing in your bag the vendor wants)"

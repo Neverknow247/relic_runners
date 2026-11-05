@@ -72,6 +72,8 @@ func _process(_delta: float) -> void:
 			if Stats.expedition_looted_containers.has(id):
 				looted = true
 				_update_visual()
+	if multiplayer.multiplayer_peer != null:
+		_check_regrow()
 	if !can_use or looted:
 		return
 	if Input.is_action_just_pressed("interact"):
@@ -102,7 +104,9 @@ func _do_open(open_for_peer: int = 0) -> void:
 	looted = true
 	var world = get_tree().get_first_node_in_group("world")
 	if world:
-		var context := {"tier": tier}
+		# Source tier drives keystone drops (world_loot.KEYSTONE_ENTRIES), but not
+		# from containers that regrow, or keystones could be farmed off one bush.
+		var context := {} if _is_renewable() else {"tier": tier}
 		if _is_elemental() and element != "":
 			context["element"] = element
 		# New base types use the tiered per-entry table; old v1 types fall back.
@@ -114,15 +118,30 @@ func _do_open(open_for_peer: int = 0) -> void:
 	_schedule_regrow()
 
 # Survival maps: renewable types (MapDef.renewable_types) refill after
-# container_respawn_sec, so you keep foraging across the days. Server-only timer;
-# the refill is broadcast to the room like the looted state.
-func _schedule_regrow() -> void:
+# container_respawn_sec. The deadline is kept server-side in Stats (survives the
+# room being freed/reloaded) and checked in _process; the refill is broadcast to
+# the room like the looted state.
+func _is_renewable() -> bool:
 	var map := Stats.current_map()
-	if map == null or map.container_respawn_sec <= 0.0 or !map.renewable_types.has(container_type):
+	return map != null and map.container_respawn_sec > 0.0 and map.renewable_types.has(container_type)
+
+func _schedule_regrow() -> void:
+	if !is_multiplayer_authority() or !_is_renewable():
 		return
-	await get_tree().create_timer(map.container_respawn_sec).timeout
-	if !is_inside_tree() or !looted:
+	var id := _container_id()
+	if id == "":
 		return
+	Stats.expedition_regrow_at[id] = Time.get_ticks_msec() + int(Stats.current_map().container_respawn_sec * 1000.0)
+
+func _check_regrow() -> void:
+	if !looted or !is_multiplayer_authority():
+		return
+	var id := _container_id()
+	if id == "" or !Stats.expedition_regrow_at.has(id):
+		return
+	if Time.get_ticks_msec() < int(Stats.expedition_regrow_at[id]):
+		return
+	Stats.expedition_regrow_at.erase(id)
 	looted = false
 	var world = get_tree().get_first_node_in_group("world")
 	var room_key := _my_room_key(world)

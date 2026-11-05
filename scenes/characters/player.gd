@@ -903,7 +903,9 @@ func _consume_ingredient(ingredient: String, count: int) -> void:
 func gold_available() -> int:
 	return ingredient_available("gold")
 
-# Sell a whole bag stack for gold. Returns gold received (0 = nothing sold).
+# Sell ONE unit of a bag stack (the whole thing if it doesn't stack). Gold goes to
+# the stash first (it's the hub), so it isn't carried into a run by accident.
+# Returns gold received (0 = nothing sold, nothing changed).
 func vendor_sell(instance_id: String) -> int:
 	var target: Item = null
 	for entry in inventory.placements:
@@ -913,8 +915,14 @@ func vendor_sell(instance_id: String) -> int:
 	var price := ItemData.vendor_sell_price(target)
 	if price <= 0:
 		return 0
-	inventory.remove_item(instance_id)
-	_give_item(Item.create("gold", price))
+	var gold := Item.create("gold", price)
+	if !_can_receive(gold):
+		return 0
+	if ItemData.is_stackable(target.type) and target.quantity > 1:
+		target.quantity -= 1
+	else:
+		inventory.remove_item(instance_id)
+	_give_item(gold, true)
 	persist_inventory()
 	inventory_ui.refresh()
 	return price
@@ -927,8 +935,11 @@ func vendor_buy(index: int) -> bool:
 	var price: int = entry[2]
 	if gold_available() < price:
 		return false
+	var bought := Item.create(entry[0], entry[1])
+	if !_can_receive(bought):
+		return false
 	_consume_ingredient("gold", price)
-	_give_item(Item.create(entry[0], entry[1]))
+	_give_item(bought)
 	persist_inventory()
 	persist_materials()
 	inventory_ui.refresh()
@@ -968,15 +979,33 @@ func repair_all() -> bool:
 	inventory_ui.refresh()
 	return true
 
-# Put an item in the bag, or the stash if the bag is full (hub only).
-func _give_item(item: Item) -> void:
+# Put an item in the bag, else the stash, else the overflow chest (stash first
+# when prefer_stash). Callers check _can_receive first so nothing is ever lost.
+func _give_item(item: Item, prefer_stash := false) -> bool:
+	if prefer_stash and _bank_item_to_stash(item, 0):
+		persist_stash()
+		return true
 	if inventory.try_stack_or_place(item):
-		return
+		return true
 	if _bank_item_to_stash(item, 0):
 		persist_stash()
-	else:
-		overflow.try_stack_or_place(item)
+		return true
+	if overflow.try_stack_or_place(item):
 		persist_overflow()
+		return true
+	push_warning("player: no room anywhere for %s" % item.type)
+	return false
+
+# Would `item` fit in the bag, a stash tab or the overflow chest? Tried on
+# throwaway copies, so nothing changes.
+func _can_receive(item: Item) -> bool:
+	var containers: Array = [inventory, overflow]
+	containers.append_array(stash_tabs)
+	for c in containers:
+		var copy := Inventory.from_dict(c.to_dict())
+		if copy.try_stack_or_place(Item.from_dict(item.to_dict())):
+			return true
+	return false
 
 func craft(recipe_index: int) -> bool:
 	if recipe_index < 0 or recipe_index >= ItemData.CRAFTING_RECIPES.size():
@@ -984,12 +1013,20 @@ func craft(recipe_index: int) -> bool:
 	var recipe: Dictionary = ItemData.CRAFTING_RECIPES[recipe_index]
 	if not can_craft(recipe):
 		return false
-	# Consuming inputs (which include bag items) frees grid cells, so the single
-	# output item reliably fits afterward.
+	var out: Array = recipe["output"]
+	var made := Item.create(out[0], out[1])
+	# Crystals/stones bank straight into Materials (always fits); anything else must
+	# have room in the bag/stash/overflow BEFORE we consume the inputs, or crafting
+	# (e.g. a 1x3 fishing rod into the 2x2 default bag) would eat them for nothing.
+	var to_materials := ItemData.is_material(out[0])
+	if !to_materials and !_can_receive(made):
+		return false
 	for pair in recipe["inputs"]:
 		_consume_ingredient(pair[0], pair[1])
-	var out: Array = recipe["output"]
-	inventory.try_stack_or_place(Item.create(out[0], out[1]))
+	if to_materials:
+		materials[out[0]] = materials.get(out[0], 0) + out[1]
+	else:
+		_give_item(made)
 	persist_inventory()
 	persist_materials()
 	inventory_ui.refresh()

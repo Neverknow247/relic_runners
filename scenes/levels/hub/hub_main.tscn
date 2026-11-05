@@ -115,7 +115,7 @@ position = Vector2(1344, -1632)
 position = Vector2(2176, -1632)
 
 [node name="vendor" parent="." unique_id=1840933299 instance=ExtResource("20_vendor")]
-position = Vector2(1560, -1632)
+position = Vector2(2192, -192)
 
 [node name="overflow_chest" parent="." unique_id=573612619 instance=ExtResource("9_overflow_chest")]
 position = Vector2(-128, -3552)

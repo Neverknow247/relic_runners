@@ -561,6 +561,33 @@ func server_change_player_location(peer_id: int, zone: String, room: String, spa
 				)
 	await get_tree().physics_frame
 	refresh_visibility_for_all()
+	_sync_room_containers(peer_id, "%s/%s" % [zone, room])
+
+# Server: tell a peer that just entered a room the real looted state of every
+# container there. Each peer keeps its own looted record, so a peer who was away
+# when a container was looted (or refilled) otherwise saw the wrong state and
+# couldn't open it, or saw an empty one as full.
+func _sync_room_containers(peer_id: int, room_key: String) -> void:
+	if !multiplayer.is_server() or peer_id == multiplayer.get_unique_id():
+		return
+	if !player_locations.has(peer_id):
+		return
+	var room = world_rooms.loaded_rooms.get(room_key, {}).get("scene")
+	if room == null or !is_instance_valid(room):
+		return
+	var found: Array = []
+	_collect_containers(room, found)
+	for c in found:
+		if c.looted:
+			c.set_looted.rpc_id(peer_id)
+		else:
+			c.set_unlooted.rpc_id(peer_id)
+
+func _collect_containers(n: Node, out: Array) -> void:
+	if n is LootContainer:
+		out.append(n)
+	for child in n.get_children():
+		_collect_containers(child, out)
 
 @rpc("authority","call_remote","reliable")
 func client_change_location(zone: String, room: String, spawn_point:= "default"):
@@ -945,6 +972,7 @@ func broadcast_expedition_seed(seed_value: int, map_id: String):
 	Stats.expedition_room_state = {}
 	# Looted containers refill for a fresh expedition too.
 	Stats.expedition_looted_containers = {}
+	Stats.expedition_regrow_at = {}
 
 func launch_expedition(expedition_id: String):
 	world_expeditions.launch_expedition(expedition_id)

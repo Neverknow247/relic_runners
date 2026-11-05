@@ -31,6 +31,11 @@ var expedition_room_state: Dictionary = {}
 # Cleared alongside expedition_seed in world.gd's broadcast_expedition_seed.
 var expedition_looted_containers: Dictionary = {}
 
+# Server: container id -> Time.get_ticks_msec() when a renewable container refills.
+# Lives here (not in the container node) so a room being freed and reloaded doesn't
+# lose the pending regrow. Cleared with the other expedition state.
+var expedition_regrow_at: Dictionary = {}
+
 var new_save_data = {
 	"version" : ProjectSettings.get_setting("application/config/version"),
 	"stats" : {
