@@ -2105,6 +2105,11 @@ func _finish_death() -> void:
 # immediately without the 60s wait or the teleport-to-hub — you're leaving
 # either way.
 func _drop_death_bag_and_reset_gear() -> void:
+	# A real death (or a deliberate mid-run quit) is final: forget the pre-run
+	# snapshot so a host disconnect afterwards can't hand the loadout back.
+	var world_node = get_tree().get_first_node_in_group("world")
+	if world_node != null and world_node.has_method("clear_pre_run_loadout"):
+		world_node.clear_pre_run_loadout()
 	var dropped_items: Array = []
 	if equipped_backpack != null:
 		dropped_items.append(equipped_backpack.to_dict())

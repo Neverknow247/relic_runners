@@ -170,7 +170,24 @@ func _on_leave_pressed():
 	GlobalSteam.leave_lobby()
 	get_tree().change_scene_to_file("res://scenes/menus/main_menu.tscn")
 
+# The save keys that make up the loadout you carry on a run — wiped from disk on
+# leaving the hub (crash = death) and dropped on death.
+const RUN_LOADOUT_KEYS := ["items", "equipment", "weapons", "active_slot", "quick_slots"]
+# In-memory copy of the loadout this peer carried out of the hub (never written to
+# disk, so a real crash still loses it). Restored if the HOST drops mid-run —
+# losing the server isn't the player's fault. Cleared on death / deliberate quit
+# (player._drop_death_bag_and_reset_gear) and on returning to the hub.
+var _pre_run_loadout: Dictionary = {}
+
+func clear_pre_run_loadout() -> void:
+	_pre_run_loadout.clear()
+
 func _on_server_disconnected():
+	if my_zone != "hub" and !_pre_run_loadout.is_empty():
+		for key in _pre_run_loadout:
+			Stats.save_data[key] = _pre_run_loadout[key]
+		_pre_run_loadout.clear()
+		SaveAndLoad.save_all()
 	cleanup_world()
 	GlobalSteam.leave_lobby()
 	get_tree().change_scene_to_file("res://scenes/menus/main_menu.tscn")
@@ -418,6 +435,16 @@ func client_change_location(zone: String, room: String, spawn_point:= "default")
 		var local_player = get_local_player()
 		if local_player != null:
 			local_player.apply_pending_kit()
+			# Make sure save_data holds exactly what's being carried out (a custom
+			# kit is just the live loadout), then remember it for a host-drop restore.
+			local_player.persist_inventory()
+			local_player.persist_equipment()
+			local_player.persist_quick_slots()
+			local_player.persist_weapon_slots()
+		_pre_run_loadout.clear()
+		for key in RUN_LOADOUT_KEYS:
+			var value = Stats.save_data.get(key)
+			_pre_run_loadout[key] = value.duplicate(true) if value is Dictionary or value is Array else value
 		# Optimistically wipe the ON-DISK save the instant you head out —
 		# not just when you actually die or use the Quit/Leave buttons —
 		# so ANY ungraceful way the game stops running mid-expedition
@@ -444,6 +471,7 @@ func client_change_location(zone: String, room: String, spawn_point:= "default")
 		Stats.save_data["quick_slots"] = []
 		SaveAndLoad.save_all()
 	if arriving_in_hub:
+		_pre_run_loadout.clear()
 		var local_player = get_local_player()
 		if local_player != null:
 			# Covers returning through an exit portal, not just dying (death
