@@ -206,6 +206,59 @@ func _broadcast_spawn_wave(wave: int) -> void:
 func spawn_portal_wave(wave: int) -> void:
 	_do_spawn_wave(wave)
 
+# Server: every wave index this portal has spawned this expedition, so a peer who
+# enters the room later can be caught up (see catch_up_peer).
+var _spawned_waves: Array = []
+
+# Unique per portal: rooms have several portals, and two charging portals used to
+# both name their members "portalwave_<wave>_<i>". Godot auto-renames clashing
+# siblings differently on each peer, which broke enemy sync.
+func _wave_member_name(wave: int, i: int) -> String:
+	return "portalwave_%s_%d_%d" % [name, wave, i]
+
+# Server: a peer just finished loading this room. Waves spawned before it arrived
+# never reached it, so send the list plus which members are still alive; the peer
+# re-creates them deterministically and frees the dead ones (otherwise it would
+# have no node for enemies the server then starts syncing to it).
+func catch_up_peer(peer_id: int) -> void:
+	if !multiplayer.is_server() or _spawned_waves.is_empty():
+		return
+	if peer_id == multiplayer.get_unique_id():
+		return
+	var enemies_node = _room_enemies_node()
+	if enemies_node == null:
+		return
+	var alive: Array = []
+	var prefix := "portalwave_%s_" % name
+	for e in enemies_node.get_children():
+		if e is Enemy and !e.is_dead and String(e.name).begins_with(prefix):
+			alive.append(String(e.name))
+	client_catch_up_waves.rpc_id(peer_id, _spawned_waves, alive)
+
+@rpc("authority", "call_remote", "reliable")
+func client_catch_up_waves(waves: Array, alive: Array) -> void:
+	var enemies_node = _room_enemies_node()
+	if enemies_node == null:
+		return
+	for wave in waves:
+		if enemies_node.has_node(_wave_member_name(int(wave), 0)):
+			continue
+		_do_spawn_wave(int(wave))
+	var prefix := "portalwave_%s_" % name
+	for e in enemies_node.get_children():
+		if e is Enemy and String(e.name).begins_with(prefix) and !alive.has(String(e.name)):
+			e.queue_free()
+
+func _room_enemies_node():
+	var world = get_tree().get_first_node_in_group("world")
+	var room_key := _my_room_key()
+	if world == null or room_key == "":
+		return null
+	var room = world.world_rooms.loaded_rooms.get(room_key, {}).get("scene")
+	if room == null or not is_instance_valid(room):
+		return null
+	return room.get_node_or_null("enemies")
+
 # Deterministically spawn one wave's enemy group into this room's "enemies" node,
 # anchored to the portal. Runs on every peer with the same seed, so each ends up
 # with byte-identical enemies (matching node names) that the server then
@@ -221,6 +274,8 @@ func _do_spawn_wave(wave: int) -> void:
 	var enemies_node = room.get_node_or_null("enemies")
 	if enemies_node == null:
 		return
+	if multiplayer.is_server() and !_spawned_waves.has(wave):
+		_spawned_waves.append(wave)
 	var map_rid: RID = enemies_node.get_world_2d().navigation_map
 	var space: PhysicsDirectSpaceState2D = enemies_node.get_world_2d().direct_space_state
 	var rng := RandomNumberGenerator.new()
@@ -239,7 +294,7 @@ func _do_spawn_wave(wave: int) -> void:
 		var pos := _pick_wave_member_position(group_center, rng, map_rid, space, placed)
 		placed.append(pos)
 		var enemy := EnemyScene.instantiate() as Enemy
-		enemy.name = "portalwave_%d_%d" % [wave, i]
+		enemy.name = _wave_member_name(wave, i)
 		enemy.position = enemies_node.to_local(pos)
 		enemy.group = members
 		enemy.group_elements = group_element_palette

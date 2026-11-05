@@ -613,6 +613,15 @@ func _mark_room_ready(peer_id: int, room_key: String) -> void:
 	if !room_ready_peers.has(room_key):
 		room_ready_peers[room_key] = {}
 	room_ready_peers[room_key][peer_id] = true
+	# Catch the peer up on portal waves spawned before it arrived, BEFORE turning on
+	# enemy sync for it (it needs those nodes to exist to receive their updates).
+	var room = world_rooms.loaded_rooms.get(room_key, {}).get("scene")
+	if room != null and is_instance_valid(room):
+		var portals = room.get_node_or_null("doors/portals")
+		if portals != null:
+			for portal in portals.get_children():
+				if portal.has_method("catch_up_peer"):
+					portal.catch_up_peer(peer_id)
 	# Now that this peer's copy of the room's enemies exists, (re)compute enemy
 	# visibility so it starts receiving their sync.
 	world_rooms.refresh_all_entity_visibility()
