@@ -80,6 +80,13 @@ func roll_loot_pool(
 # supplies the dead enemy's identity for the @tokens:
 #   {"element": String, "weapon": {type,element,forms}, "rarity": String (tier rarity)}
 # Chests pass {} (they use no @tokens). Server-only, like the rest of loot.
+# Keystone junk (bench upgrades) by source tier; added to every enemy/container
+# roll whose context carries a "tier".
+const KEYSTONE_ENTRIES := {
+	"silver": [{"src": "cracked_crucible", "chance": 8}],
+	"gold": [{"src": "cracked_crucible", "chance": 25}, {"src": "runed_anvil", "chance": 20}],
+}
+
 const SURVIVAL_FOOD_ENTRIES := [
 	{"src": "minnow", "chance": 35, "qty": [1, 2]},
 	{"src": "river_bass", "chance": 14},
@@ -99,6 +106,10 @@ func roll_loot_table(world_pos: Vector2, table: Array, context: Dictionary, open
 	if map != null and map.style == "survival":
 		table = table.duplicate()
 		table.append_array(SURVIVAL_FOOD_ENTRIES)
+	var keystones: Array = KEYSTONE_ENTRIES.get(String(context.get("tier", "")), [])
+	if !keystones.is_empty():
+		table = table.duplicate()
+		table.append_array(keystones)
 	for entry in table:
 		var chance := int(round(float(entry.get("chance", 100)) * chance_mult))
 		if world.rng.randi_range(1, 100) > chance:

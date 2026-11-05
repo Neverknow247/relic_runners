@@ -2225,7 +2225,7 @@ func die() -> void:
 		# Elemental enemies drop NO weapons/gear, so their tables carry no @weapon/
 		# @gear tokens — the context only needs the element to resolve @crystal
 		# (crystal_<element>), which fits the elemental theme.
-		var context := {"element": attacker_element}
+		var context := {"element": attacker_element, "tier": tier}
 		world.spawn_loot(global_position, ItemData.get_loot_table(archetype, tier), context)
 		world.credit_kill(_last_attacker_peer)
 	is_dead = true

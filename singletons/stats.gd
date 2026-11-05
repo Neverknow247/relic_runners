@@ -55,6 +55,8 @@ var new_save_data = {
 	# Meta-progression: {"extracted": {map_id: times extracted}}. Drives the map
 	# board's ladder unlocks (MapDef.unlock_after). Never wiped by death.
 	"unlocks" : {"extracted" : {}},
+	# Crafting bench level (1..ItemData.BENCH_MAX_LEVEL), meta-progression.
+	"bench_level" : 1,
 }
 
 var save_data = return_new_save_data()

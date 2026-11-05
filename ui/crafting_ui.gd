@@ -20,8 +20,39 @@ func refresh() -> void:
 	if player == null:
 		return
 	_clear(recipes_section)
+	_build_upgrade_row()
 	for i in ItemData.CRAFTING_RECIPES.size():
 		_build_recipe_row(i)
+
+# "Bench Lv 1  ->  Lv 2: 2 Cracked Crucible (0) + 15 Scrap (8)  [Upgrade]"
+func _build_upgrade_row() -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 16)
+	var lvl: int = player.bench_level()
+	var label := Label.new()
+	label.custom_minimum_size = Vector2(1120, 0)
+	label.add_theme_font_size_override("font_size", 28)
+	label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.4))
+	if lvl >= ItemData.BENCH_MAX_LEVEL:
+		label.text = "Bench Lv %d (max)" % lvl
+		row.add_child(label)
+	else:
+		label.text = "Bench Lv %d  ->  Lv %d: %s" % [lvl, lvl + 1, _inputs_text({"inputs": ItemData.BENCH_UPGRADES[lvl + 1]})]
+		row.add_child(label)
+		var btn := Button.new()
+		btn.custom_minimum_size = Vector2(200, 80)
+		btn.add_theme_font_size_override("font_size", 28)
+		btn.text = "Upgrade"
+		btn.disabled = not player.can_upgrade_bench()
+		if not btn.disabled:
+			btn.pressed.connect(_on_upgrade_pressed)
+		row.add_child(btn)
+	recipes_section.add_child(row)
+
+func _on_upgrade_pressed() -> void:
+	if player.upgrade_bench():
+		status_label.text = "Bench upgraded to Lv %d." % player.bench_level()
+	refresh()
 
 func _build_recipe_row(index: int) -> void:
 	var recipe: Dictionary = ItemData.CRAFTING_RECIPES[index]
@@ -45,7 +76,8 @@ func _build_recipe_row(index: int) -> void:
 	var btn := Button.new()
 	btn.custom_minimum_size = Vector2(200, 80)
 	btn.add_theme_font_size_override("font_size", 28)
-	btn.text = "Craft"
+	var need_level := int(recipe.get("level", 1))
+	btn.text = "Craft" if need_level <= player.bench_level() else "Bench Lv %d" % need_level
 	btn.disabled = not player.can_craft(recipe)
 	if not btn.disabled:
 		btn.pressed.connect(_on_craft_pressed.bind(index))

@@ -102,7 +102,7 @@ func _do_open(open_for_peer: int = 0) -> void:
 	looted = true
 	var world = get_tree().get_first_node_in_group("world")
 	if world:
-		var context := {}
+		var context := {"tier": tier}
 		if _is_elemental() and element != "":
 			context["element"] = element
 		# New base types use the tiered per-entry table; old v1 types fall back.

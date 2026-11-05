@@ -100,6 +100,17 @@ const ITEMS := {
 	# Crafting materials + crafted odds and ends (see CRAFTING_RECIPES). Plain
 	# stackable bag items whose only role (beyond the two usable consumables) is
 	# being recipe ingredients.
+	# Keystone junk: rare carry-outs that level the crafting bench (BENCH_UPGRADES).
+	"cracked_crucible": {
+		"display_name": "Cracked Crucible", "stackable": true, "max_stack": 10,
+		"footprint": Vector2i(1, 1), "color": Color(0.75, 0.5, 0.3), "icon_label": "C",
+		"rarity": "uncommon",
+	},
+	"runed_anvil": {
+		"display_name": "Runed Anvil", "stackable": true, "max_stack": 10,
+		"footprint": Vector2i(1, 1), "color": Color(0.55, 0.6, 0.85), "icon_label": "A",
+		"rarity": "rare",
+	},
 	"berries": {
 		"usable": true, "food_amount": 15.0,
 		"display_name": "Berries", "stackable": true, "max_stack": 20,
@@ -368,7 +379,7 @@ const VENDOR_SELL := {
 	"form_stone_ball": 18, "form_stone_bolt": 18, "form_stone_rain": 18,
 	"form_stone_beam": 18, "form_stone_burst": 18, "form_stone_cone": 18,
 	"minnow": 2, "river_bass": 4, "silverscale": 8, "old_boot": 1, "mana_eel": 10,
-	"river_pearl": 25, "golden_koi": 40,
+	"river_pearl": 25, "golden_koi": 40, "cracked_crucible": 20, "runed_anvil": 60,
 	"health_potion": 10, "greater_health_potion": 25, "mana_crystal": 15, "refined_mana_crystal": 30,
 }
 const VENDOR_SELL_BY_RARITY := {"common": 8, "uncommon": 22, "rare": 55, "epic": 120, "legendary": 250, "mythic": 500}
@@ -528,15 +539,32 @@ static func get_description(item_type: String) -> String:
 const CRAFTING_WILDCARDS := {
 	"@element_crystal": ["crystal_fire", "crystal_lightning", "crystal_ice", "crystal_wind", "crystal_nature", "crystal_water", "crystal_earth"],
 }
+# "level" = crafting bench level required (see BENCH_UPGRADES; default 1).
 const CRAFTING_RECIPES := [
-	{"inputs": [["cloth", 1], ["crystal_nature", 1]], "output": ["blessed_band", 1]},
-	{"inputs": [["crystal_fire", 1], ["herbs", 3]], "output": ["phoenix_ash", 1]},
-	{"inputs": [["herbs", 2], ["water_flask", 1]], "output": ["health_potion", 1]},
-	{"inputs": [["health_potion", 1], ["red_moss", 2]], "output": ["greater_health_potion", 1]},
-	{"inputs": [["mana_dust", 3], ["@element_crystal", 1]], "output": ["mana_crystal", 1]},
-	{"inputs": [["mana_crystal", 1], ["pure_mana_shard", 1]], "output": ["refined_mana_crystal", 1]},
-	{"inputs": [["cloth", 2], ["scrap", 2]], "output": ["fishing_rod", 1]},
+	{"inputs": [["herbs", 2], ["water_flask", 1]], "output": ["health_potion", 1], "level": 1},
+	{"inputs": [["cloth", 2], ["scrap", 2]], "output": ["fishing_rod", 1], "level": 1},
+	{"inputs": [["mana_dust", 3], ["@element_crystal", 1]], "output": ["mana_crystal", 1], "level": 2},
+	{"inputs": [["health_potion", 1], ["red_moss", 2]], "output": ["greater_health_potion", 1], "level": 2},
+	{"inputs": [["cloth", 1], ["crystal_nature", 1]], "output": ["blessed_band", 1], "level": 2},
+	{"inputs": [["fire_dust", 3], ["mana_dust", 1]], "output": ["crystal_fire", 1], "level": 2},
+	{"inputs": [["lightning_dust", 3], ["mana_dust", 1]], "output": ["crystal_lightning", 1], "level": 2},
+	{"inputs": [["ice_dust", 3], ["mana_dust", 1]], "output": ["crystal_ice", 1], "level": 2},
+	{"inputs": [["wind_dust", 3], ["mana_dust", 1]], "output": ["crystal_wind", 1], "level": 2},
+	{"inputs": [["nature_dust", 3], ["mana_dust", 1]], "output": ["crystal_nature", 1], "level": 2},
+	{"inputs": [["water_dust", 3], ["mana_dust", 1]], "output": ["crystal_water", 1], "level": 2},
+	{"inputs": [["earth_dust", 3], ["mana_dust", 1]], "output": ["crystal_earth", 1], "level": 2},
+	{"inputs": [["mana_crystal", 1], ["pure_mana_shard", 1]], "output": ["refined_mana_crystal", 1], "level": 3},
+	{"inputs": [["crystal_fire", 1], ["herbs", 3]], "output": ["phoenix_ash", 1], "level": 3},
 ]
+
+# Crafting bench levels (persistent, never lost on death). Upgrading costs
+# keystone junk carried out of runs: Cracked Crucibles drop from silver sources,
+# Runed Anvils from gold ones (see world_loot KEYSTONE_ENTRIES).
+const BENCH_MAX_LEVEL := 3
+const BENCH_UPGRADES := {
+	2: [["cracked_crucible", 2], ["scrap", 15]],
+	3: [["runed_anvil", 3], ["scrap", 30], ["@element_crystal", 3]],
+}
 
 # True if item_type can satisfy a recipe ingredient (direct match or wildcard).
 static func ingredient_matches(item_type: String, ingredient: String) -> bool:

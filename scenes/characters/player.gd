@@ -850,7 +850,33 @@ func ingredient_available(ingredient: String) -> int:
 		total += item_available(t)
 	return total
 
+func bench_level() -> int:
+	return int(stats.save_data.get("bench_level", 1))
+
+func can_upgrade_bench() -> bool:
+	var next := bench_level() + 1
+	if next > ItemData.BENCH_MAX_LEVEL:
+		return false
+	for pair in ItemData.BENCH_UPGRADES[next]:
+		if ingredient_available(pair[0]) < pair[1]:
+			return false
+	return true
+
+func upgrade_bench() -> bool:
+	if !can_upgrade_bench():
+		return false
+	var next := bench_level() + 1
+	for pair in ItemData.BENCH_UPGRADES[next]:
+		_consume_ingredient(pair[0], pair[1])
+	stats.save_data["bench_level"] = next
+	persist_inventory()
+	persist_materials()
+	inventory_ui.refresh()
+	return true
+
 func can_craft(recipe: Dictionary) -> bool:
+	if int(recipe.get("level", 1)) > bench_level():
+		return false
 	for pair in recipe["inputs"]:
 		if ingredient_available(pair[0]) < pair[1]:
 			return false
