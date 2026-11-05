@@ -440,4 +440,7 @@ E3 and S3 defs + scenes; more guardians; enemy art polish (glow/outline shaders 
 - Survival foraging: berry bushes + renewable containers (S1 regrows bushes/mining nodes every 150 s); village gets 10 more container markers.
 - **Hub vendor** (gold finally spent): sell fish/junk/dusts/crystals/gear, buy potions/food/basic gear, and repair everything.
 
+- **Crafting bench Lv1–3** (keystone junk: Cracked Crucible from silver sources, Runed Anvil from gold); dust → crystal recipes.
+- Second independent review: 8 more issues fixed in 3d34ef4.
+
 **Next once the designer has playtested:** tune from feedback, then the deferred Phase 2 refactors (EnemyDef/FSM, player.gd split), then Phase 5 economy (vendor, repair, recycler, bench levels) and the rest of Phase 6 survival (renewable nodes, campfire, field crafting, S2 + bring-a-kit gate, run resume).
