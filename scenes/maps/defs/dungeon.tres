@@ -8,6 +8,7 @@ id = "dungeon"
 display_name = "E2 - Deep Ruins"
 style = "extraction"
 tier = 2
+unlock_after = "village"
 zone = "dungeon"
 room = "main"
 spawn = "random_portal"

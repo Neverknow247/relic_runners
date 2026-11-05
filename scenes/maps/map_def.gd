@@ -13,6 +13,9 @@ class_name MapDef
 @export_enum("extraction", "survival") var style := "extraction"
 ## Ladder rung within the style (E1 = 1, E2 = 2, ...).
 @export var tier := 1
+## Map id you must have EXTRACTED from at least once before this one unlocks on
+## the map board ("" = always open). The ladder: E2 unlocks after clearing E1.
+@export var unlock_after := ""
 
 @export_group("Entry")
 @export var zone := ""

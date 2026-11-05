@@ -98,6 +98,7 @@ func _process(delta: float) -> void:
 		State.OPEN:
 			var world = get_tree().get_first_node_in_group("world")
 			if world:
+				_record_extraction()
 				world.request_location_changes("hub", "main", "default")
 		_:
 			pass  # CHARGING, DISABLED, or SPAWN_POINT — interact does nothing
@@ -106,6 +107,18 @@ func _process(delta: float) -> void:
 # deterministically picked as this expedition's arrival point. Permanently
 # excludes it from ever functioning as an exit — _start_charging()'s own
 # "must be LOCKED" guard means it can never progress past this.
+# A successful extraction from this expedition's map counts toward the map-board
+# ladder (MapDef.unlock_after). Local save; written when we arrive in the hub.
+func _record_extraction() -> void:
+	var map_id: String = Stats.current_map_id
+	if map_id == "":
+		return
+	var unlocks: Dictionary = Stats.save_data.get("unlocks", {})
+	var extracted: Dictionary = unlocks.get("extracted", {})
+	extracted[map_id] = int(extracted.get(map_id, 0)) + 1
+	unlocks["extracted"] = extracted
+	Stats.save_data["unlocks"] = unlocks
+
 func mark_as_spawn_point() -> void:
 	state = State.SPAWN_POINT
 	_update_visual()

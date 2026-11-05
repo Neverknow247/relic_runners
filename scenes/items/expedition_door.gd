@@ -25,7 +25,12 @@ func _process(_delta):
 		# overflow container.
 		if local_player.overflow_has_items():
 			return
-		world.request_begin_kit_selection(expedition_id)
+		# Open the map board (pick a map/tier); it starts the kit flow on Launch.
+		# Falls back to this door's fixed expedition_id if the board is missing.
+		if local_player.has_method("open_map_board"):
+			local_player.open_map_board()
+		else:
+			world.request_begin_kit_selection(expedition_id)
 
 func _on_body_entered(body):
 	if body.is_multiplayer_authority():

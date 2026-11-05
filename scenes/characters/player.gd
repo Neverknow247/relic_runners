@@ -242,6 +242,12 @@ const SHOVE_RANGE := 520.0
 var _shove_cooldown_timer := 0.0
 const ControlsOverlay := preload("res://ui/controls_overlay.gd")
 const RaidTimerUI := preload("res://ui/raid_timer_ui.gd")
+const MapBoardUI := preload("res://ui/map_board_ui.gd")
+var map_board = null
+
+func open_map_board() -> void:
+	if map_board != null:
+		map_board.open_board()
 
 var default_max_velocity = 1000
 var default_acceleration = 6000
@@ -1833,6 +1839,8 @@ func _ready() -> void:
 		# First-run controls card (F1 brings it back).
 		add_child(ControlsOverlay.new())
 		add_child(RaidTimerUI.new())
+		map_board = MapBoardUI.new()
+		add_child(map_board)
 		spell_list_ui.visible = true
 		spell_list_ui.setup(self)
 		health_ui.visible = true
@@ -2302,7 +2310,7 @@ func _physics_process(delta):
 		# Any open menu (inventory OR the esc/pause menu) arms attack-suppression so the
 		# click that operates/closes it can't leak into a shot the frame it clears —
 		# attack_check() then ignores the still-held button until it's released.
-		if inventory_ui.visible or _esc_menu_open():
+		if inventory_ui.visible or _esc_menu_open() or (map_board != null and map_board.is_open()):
 			_block_attack_until_release = true
 		if inventory_ui.visible:
 			# Menu is up — no movement, no aiming, no attack input should

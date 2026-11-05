@@ -52,6 +52,9 @@ var new_save_data = {
 	# the defaults are explicit and update_data back-fills them on old saves).
 	"overflow" : {},
 	"materials" : {},
+	# Meta-progression: {"extracted": {map_id: times extracted}}. Drives the map
+	# board's ladder unlocks (MapDef.unlock_after). Never wiped by death.
+	"unlocks" : {"extracted" : {}},
 }
 
 var save_data = return_new_save_data()
