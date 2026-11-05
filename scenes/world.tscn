@@ -85,15 +85,6 @@ offset_bottom = 387.0
 theme = ExtResource("2_rwgxs")
 text = "Dungeon 1"
 
-[node name="go_dungeon_room2_button" type="Button" parent="canvas_layer"]
-visible = false
-offset_left = 728.0
-offset_top = 440.0
-offset_right = 1174.0
-offset_bottom = 563.0
-theme = ExtResource("2_rwgxs")
-text = "Dungeon 2"
-
 [node name="leave_button" type="Button" parent="canvas_layer"]
 visible = false
 offset_left = 3264.0

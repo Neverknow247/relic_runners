@@ -333,6 +333,12 @@ script = ExtResource("11_4wpo0")
 
 [node name="exit_portal" parent="doors/portals" unique_id=1753582184 instance=ExtResource("12_tumbt")]
 
+[node name="exit_portal_2" parent="doors/portals" unique_id=1753582185 instance=ExtResource("12_tumbt")]
+position = Vector2(17024, -10112)
+
+[node name="exit_portal_3" parent="doors/portals" unique_id=1753582186 instance=ExtResource("12_tumbt")]
+position = Vector2(16896, 14208)
+
 [node name="containers" type="Node2D" parent="." unique_id=113924845]
 script = ExtResource("14_8v5ir")
 

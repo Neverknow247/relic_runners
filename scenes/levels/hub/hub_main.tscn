@@ -99,7 +99,7 @@ shape = SubResource("RectangleShape2D_ik6cc")
 
 [node name="expedition_door2" parent="doors" unique_id=1427612954 instance=ExtResource("5_scjj4")]
 position = Vector2(3072, -1248)
-expedition_id = "cemetery"
+expedition_id = "dungeon"
 
 [node name="collision_shape_2d" type="CollisionShape2D" parent="doors/expedition_door2" unique_id=880579383]
 shape = SubResource("RectangleShape2D_qu7j1")

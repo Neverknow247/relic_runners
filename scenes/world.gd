@@ -12,11 +12,9 @@ const ZONE_SCENES = {
 	
 	"village/main" : "res://scenes/levels/village/village_main.tscn",
 	"village/room_1" : "res://scenes/levels/dungeon/dungeon_room_1.tscn",
-	"village/room_2" : "res://scenes/levels/dungeon/dungeon_room_2.tscn",
 	
 	"dungeon/main" : "res://scenes/levels/dungeon/dungeon_main.tscn",
 	"dungeon/room_1" : "res://scenes/levels/dungeon/dungeon_room_1.tscn",
-	"dungeon/room_2" : "res://scenes/levels/dungeon/dungeon_room_2.tscn",
 	
 	"cemetery/main" : "res://scenes/levels/cemetery/cemetery_main.tscn",
 }
@@ -162,7 +160,6 @@ func _connect_buttons():
 	$canvas_layer/go_hub_room2_button.pressed.connect(func():request_location_changes("hub","room_2","default"))
 	$canvas_layer/go_dungeon_main_button.pressed.connect(func():request_location_changes("dungeon","main","default"))
 	$canvas_layer/go_dungeon_room1_button.pressed.connect(func():request_location_changes("dungeon","room_1","default"))
-	$canvas_layer/go_dungeon_room2_button.pressed.connect(func():request_location_changes("dungeon","room_2","default"))
 
 func _connect_steam_client_signals():
 	if !GlobalSteam.remove_player.is_connected(_on_remove_player):

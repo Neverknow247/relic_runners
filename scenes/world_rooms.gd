@@ -261,10 +261,20 @@ func get_spawn_global_position(spawn_point: String) -> Vector2:
 			var portals = current_zone.get_node_or_null("doors/portals")
 			if portals and portals.has_method("get_spawn_global_position"):
 				return portals.get_spawn_global_position()
-		print("No doors/portals group found for random_portal spawn")
-		return Vector2(100, 100)
+		push_warning("No doors/portals group found for random_portal spawn in %s" % active_key)
+		return _fallback_spawn(current_zone)
 	var spawn_path = "spawn_points/%s" % spawn_point
 	if current_zone != null and current_zone.has_node(spawn_path):
 		return current_zone.get_node(spawn_path).global_position
-	print("Missing spawn point: ", spawn_path)
-	return Vector2(100, 100)
+	push_warning("Missing spawn point %s in %s; using the room's default" % [spawn_path, active_key])
+	return _fallback_spawn(current_zone)
+
+# Where to put a player whose requested spawn doesn't exist: the room's own
+# "default" marker, else the room's origin. The old absolute Vector2(100, 100)
+# ignored the room's world offset, dropping the player into the hub's slot.
+func _fallback_spawn(current_zone) -> Vector2:
+	if current_zone != null:
+		if current_zone.has_node("spawn_points/default"):
+			return current_zone.get_node("spawn_points/default").global_position
+		return current_zone.global_position
+	return _location_offset(active_key)
