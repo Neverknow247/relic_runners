@@ -430,3 +430,10 @@ E3 and S3 defs + scenes; more guardians; enemy art polish (glow/outline shaders 
 - Hexagon lobber (E2 only).
 - Raid clock (E1 25 min, E2 30 min; death at 0).
 - Map board on the expedition doors; E2 unlocks after one extraction from E1.
+- Pauper Kit replaces the free Starter Kit (no backpack, 1 potion, bottom-band common weapon).
+- Elite affixes (fast / armored / shielded / warder), drawn as glyph marks; pools per MapDef.
+- Wave threat pings (edge arrows) + waves drawn from the map roster.
+- Post-run summary card (extracted/died, map, time, kills, stacks carried).
+- **S1 Homestead** survival skeleton: 15-min days (last third night), night tint, night hunts, portals sealed at night and before day 3, hunger (fish are food; survival loot adds food).
+
+**Next once the designer has playtested:** tune from feedback, then the deferred Phase 2 refactors (EnemyDef/FSM, player.gd split), then Phase 5 economy (vendor, repair, recycler, bench levels) and the rest of Phase 6 survival (renewable nodes, campfire, field crafting, S2 + bring-a-kit gate, run resume).
