@@ -72,7 +72,11 @@ func refresh() -> void:
 			row.add_child(icon)
 
 		var label := Label.new()
-		label.text = " - %s" % recipe["form"].capitalize()
+		var cd_left: float = player.spell_cooldown_left(recipe["form"])
+		if cd_left > 0.0:
+			label.text = " - %s  %ds" % [recipe["form"].capitalize(), ceili(cd_left)]
+		else:
+			label.text = " - %s" % recipe["form"].capitalize()
 		label.add_theme_font_size_override("font_size", 64)
 		row.add_child(label)
 

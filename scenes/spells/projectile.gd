@@ -113,6 +113,9 @@ func setup_spell(_direction: Vector2, _spell_data: Dictionary, caster_id: int = 
 	# Enemy shots draw their colours explicitly (see _draw); tinting the whole node
 	# would muddy the dark rim and the white core.
 	modulate = Color.WHITE if _enemy_shot and speed > 0.0 else spell_data["color"]
+	# Moving enemy bullets are findable so a player's burst can clear them.
+	if _enemy_shot and speed > 0.0:
+		add_to_group("enemy_bullets")
 	queue_redraw()
 	pierce = spell_data.get("pierce", false)
 	stop_on_wall = spell_data.get("stop_on_wall", true)
@@ -144,6 +147,10 @@ func _on_hitbox_area_entered(area: Area2D) -> void:
 	if pierce:
 		return
 	Fx.puff(get_tree(), global_position, _tint, scale.x)
+	# A stratagem connecting should feel like one.
+	if !_enemy_shot and spell_data.get("form", "default") != "default":
+		Fx.shatter(get_tree(), global_position, _tint, 0.9)
+		Fx.shake_at(get_tree(), global_position, 0.3)
 	queue_free()
 
 func _on_hitbox_body_entered(_body: Node2D) -> void:

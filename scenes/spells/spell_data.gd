@@ -178,6 +178,10 @@ const ELEMENTS = {
 # roster / starter kit / workbench element list all read from, so it never drifts.
 const ELEMENT_ORDER := ["fire", "lightning", "ice", "wind", "nature", "water", "earth"]
 
+# Spells are STRATAGEMS (Helldivers model, see docs/master_plan.md §3): rare, big,
+# special attacks. Each non-default form has a `stratagem_cooldown` (seconds, per
+# form, per player; skipped in the hub for practice) on top of its mana cost, and a
+# damage multiplier (x the caster's Attack) far above the free basic.
 const FORMS = {
 	# "default" is the free, sequence-less fallback attack — no mana cost at
 	# all (not just cheap), and its damage is intentionally left alone (not
@@ -200,7 +204,8 @@ const FORMS = {
 	# exactly one explosion hit, not hit + explosion.
 	"ball": {
 		"scene": preload("res://scenes/spells/ball_projectile.tscn"),
-		"damage": 3.3,
+		"damage": 6.0,
+		"stratagem_cooldown": 20.0,
 		"speed": 0.65,
 		"size": 2.0,
 		"lifetime": 1.1,
@@ -211,7 +216,8 @@ const FORMS = {
 	},
 	"bolt": {
 		"scene": preload("res://scenes/spells/bolt_projectile.tscn"),
-		"damage": 2.6,
+		"damage": 4.0,
+		"stratagem_cooldown": 12.0,
 		"speed": 2.1,
 		"size": 0.8,
 		"lifetime": 0.85,
@@ -224,7 +230,8 @@ const FORMS = {
 	# damage is the DoT, pierce/no-wall-stop so the zone persists its lifetime.
 	"rain": {
 		"scene": preload("res://scenes/spells/rain_projectile.tscn"),
-		"damage": 2.3,
+		"damage": 15.0,
+		"stratagem_cooldown": 45.0,
 		"speed": 0.0,
 		"size": 8.0,
 		"lifetime": 5.0,
@@ -248,7 +255,8 @@ const FORMS = {
 	# ticked like rain) so sweeping it across enemies keeps hitting them.
 	"beam": {
 		"scene": preload("res://scenes/spells/beam_projectile.tscn"),
-		"damage": 2.4,
+		"damage": 10.0,
+		"stratagem_cooldown": 30.0,
 		"speed": 0.0,
 		"size": 0.7,
 		"lifetime": 1.2,
@@ -267,7 +275,8 @@ const FORMS = {
 	# (multi-hit, not consumed by the first target).
 	"burst": {
 		"scene": preload("res://scenes/spells/burst_projectile.tscn"),
-		"damage": 4.0,
+		"damage": 8.0,
+		"stratagem_cooldown": 25.0,
 		"speed": 0.0,
 		"size": 10.0,
 		"lifetime": 0.2,
@@ -286,7 +295,8 @@ const FORMS = {
 	# hit on line-of-sight (it won't cut through walls, same as the beam).
 	"cone": {
 		"scene": preload("res://scenes/spells/cone_projectile.tscn"),
-		"damage": 2.7,
+		"damage": 5.0,
+		"stratagem_cooldown": 15.0,
 		"speed": 0.0,
 		"size": 1.5,
 		"lifetime": 0.125,

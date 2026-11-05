@@ -2281,6 +2281,7 @@ func _physics_process(delta):
 		check_map_toggle()
 		attack_timer = max(attack_timer - delta, 0.0)
 		_roll_cooldown_timer = maxf(_roll_cooldown_timer - delta, 0.0)
+		_tick_spell_cooldowns(delta)
 		_iframe_timer = maxf(_iframe_timer - delta, 0.0)
 		# Any open menu (inventory OR the esc/pause menu) arms attack-suppression so the
 		# click that operates/closes it can't leak into a shot the frame it clears —
@@ -2332,11 +2333,33 @@ func record_attack_direction(input_num: int):
 	spell_input_sequence.append(input_num)
 	if spell_input_sequence.size() > 6:
 		spell_input_sequence.clear()
+		_code_feedback(false)
 		refresh_spell_ui()
 		return
 	if !has_relevant_spell_prefix(spell_input_sequence):
 		spell_input_sequence.clear()
+		_code_feedback(false)
+	elif _sequence_is_complete_spell():
+		_code_feedback(true)
 	refresh_spell_ui()
+
+# True when the taps so far exactly spell a castable stratagem (armed).
+func _sequence_is_complete_spell() -> bool:
+	var recipe := all_spell_recipes.get_spell_recipe_from_sequence(spell_input_sequence)
+	if recipe.is_empty():
+		return false
+	var equipped := get_equipped_weapon()
+	return equipped != null and recipe["element"] == equipped.element and equipped.forms.has(recipe["form"])
+
+# Armed: bright flash + a tiny kick. Wrong tap: a red blink.
+func _code_feedback(armed: bool) -> void:
+	if armed:
+		Fx.flash(sprite, true, 3.0, 0.18)
+		player_camera.add_trauma(0.12)
+	else:
+		sprite.self_modulate = Color(1.0, 0.25, 0.25)
+		var t := create_tween()
+		t.tween_property(sprite, "self_modulate", Color.WHITE, 0.2)
 
 func move_state(delta):
 	if Input.is_action_pressed("spell_mode_1"):
@@ -2574,6 +2597,32 @@ func get_spell_data():
 
 const DURABILITY_COST_PER_CAST := 0.1
 
+# --- Stratagem cooldowns ---------------------------------------------------
+# form -> seconds until it can be cast again (see SpellData.FORMS
+# stratagem_cooldown). Local to the caster, like mana; skipped in the hub.
+var spell_cooldowns: Dictionary = {}
+var _cooldown_ui_timer := 0.0
+
+func spell_cooldown_left(form: String) -> float:
+	return float(spell_cooldowns.get(form, 0.0))
+
+func _tick_spell_cooldowns(delta: float) -> void:
+	if spell_cooldowns.is_empty():
+		return
+	for form in spell_cooldowns.keys():
+		var left: float = spell_cooldowns[form] - delta
+		if left <= 0.0:
+			spell_cooldowns.erase(form)
+			# A spell just came back: refresh now so it lights up immediately.
+			_cooldown_ui_timer = 0.0
+		else:
+			spell_cooldowns[form] = left
+	# The countdown labels only need ~4 updates a second.
+	_cooldown_ui_timer -= delta
+	if _cooldown_ui_timer <= 0.0:
+		_cooldown_ui_timer = 0.25
+		refresh_spell_ui()
+
 var _beam_active_until := 0.0
 
 func cast_spell(spell_data: Dictionary, reset_sequence: bool = true):
@@ -2617,6 +2666,9 @@ func cast_spell(spell_data: Dictionary, reset_sequence: bool = true):
 		# applied via effective_mana_cost, matching the pre-check).
 		equipped.use_mana(effective_mana_cost(spell_data))
 		persist_weapon_slots()
+		var form_cd: float = SpellData.FORMS.get(spell_data.get("form", ""), {}).get("stratagem_cooldown", 0.0)
+		if form_cd > 0.0:
+			spell_cooldowns[spell_data["form"]] = form_cd
 	refresh_mana_ui()
 	# Mana just changed, so the spell list's affordability grayout needs to
 	# refresh too — not just on the reset_sequence path below, since a
@@ -2712,6 +2764,9 @@ func can_afford_recipe(recipe: Dictionary, equipped: Weapon) -> bool:
 		return false
 	if _is_in_hub():
 		return true
+	# A stratagem on cooldown isn't an option yet (its code won't hold open).
+	if spell_cooldown_left(recipe["form"]) > 0.0:
+		return false
 	var mana_cost: float = SpellData.FORMS.get(recipe["form"], {}).get("mana_cost", 0.0)
 	# Match the cloak_efficient discount applied at cast time so the spell list's
 	# affordability grayout doesn't disagree with what actually casts.
@@ -2819,8 +2874,13 @@ func attack_check():
 			_block_attack_until_release = false
 		return
 	var holding_spell_mode := Input.is_action_pressed("spell_mode_1") or Input.is_action_pressed("spell_mode_2")
+	# Punching in a stratagem code: no basic fire while the mode is held (you either
+	# call one in or shoot, like Helldivers). The armed code fires on the first click
+	# after you release the mode.
+	if holding_spell_mode:
+		return
 	if Input.is_action_pressed("attack") and attack_timer <= 0.0:
-		var spell_data = get_default_spell_data() if holding_spell_mode else get_spell_data()
+		var spell_data = get_spell_data()
 		# Not enough mana — the cast just fizzles (no cooldown, no
 		# durability, no projectile) rather than firing anyway, since mana
 		# is meant to actually gate how often sequences can be thrown out.
