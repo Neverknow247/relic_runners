@@ -43,8 +43,8 @@ horizontal_alignment = 1
 custom_minimum_size = Vector2(0, 160)
 layout_mode = 2
 theme_override_font_sizes/font_size = 40
-text = "Starter Kit
-Bank everything, enter with a fresh weapon + backpack"
+text = "Pauper Kit (free)
+Bank everything, enter with a basic weapon + 1 potion"
 
 [node name="custom_button" type="Button" parent="center_container/panel_container/margin_container/v_box_container"]
 custom_minimum_size = Vector2(0, 160)

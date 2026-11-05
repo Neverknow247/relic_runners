@@ -466,16 +466,18 @@ func apply_starter_kit() -> void:
 		if !_bank_item_to_stash(item, 0):
 			overflow.try_stack_or_place(item)
 
-	# 4. Build the fixed starter loadout.
-	var backpack := Item.create("backpack_basic", 1)
-	equipped_backpack = backpack
-	_resize_inventory_for_backpack(backpack)
-	inventory.try_stack_or_place(Item.new("health_potion", 2))
-	inventory.try_stack_or_place(Item.new("mana_crystal", 2))
+	# 4. Build the PAUPER loadout: free, always available, and deliberately bad, so
+	# bringing your own kit (Custom) is a real choice and dying still costs you.
+	# No backpack (the 2x2 default bag), one health potion, and a random common
+	# weapon at the bottom of the common Attack band with its one starter form.
+	inventory.try_stack_or_place(Item.new("health_potion", 1))
 	var weapon_type: String = STARTER_KIT_WEAPONS.pick_random()
 	var weapon := Weapon.new(weapon_type)
 	weapon.attach_form(SpellData.get_starter_form(weapon_type))
 	weapon.element = STARTER_KIT_ELEMENTS.pick_random()
+	weapon.attack = float(ItemData.WEAPON_ATTACK_BY_RARITY["common"][0])
+	weapon.crit_rate = 0.0
+	weapon.crit_damage = 0.0
 	weapon_slots[active_slot] = weapon
 
 	# 5. Persist the whole reshuffle.
