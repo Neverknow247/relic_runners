@@ -957,10 +957,24 @@ func _flank_chase_target(target: Node2D) -> Vector2:
 # (navigation finished) so callers can decide what "arrived" means for them
 # (give up on a target, stop investigating, etc). speed defaults to move_speed;
 # combat chase/pursue passes a boosted one (PURSUE_SPEED_MULT).
+# PERF: NavigationAgent2D re-queries the WHOLE path every time target_position is
+# set (Godot deliberately skips the equality check), and the navmesh is thousands
+# of per-cell regions, so setting it every physics frame for every enemy was the
+# main source of the chug with ~12+ enemies. Only re-target when the goal moved
+# meaningfully (or periodically, in case the world changed).
+const REPATH_MIN_DISTANCE := 128.0
+const REPATH_DISTANCE_FRACTION := 0.15
+const REPATH_INTERVAL := 0.5
+var _repath_timer := 0.0
+
 func follow_nav_path(delta: float, target_position: Vector2, speed: float = -1.0) -> bool:
 	if speed < 0.0:
 		speed = move_speed
-	nav_agent.target_position = target_position
+	_repath_timer -= delta
+	var threshold := maxf(REPATH_MIN_DISTANCE, global_position.distance_to(target_position) * REPATH_DISTANCE_FRACTION)
+	if _repath_timer <= 0.0 or nav_agent.target_position.distance_to(target_position) > threshold:
+		nav_agent.target_position = target_position
+		_repath_timer = REPATH_INTERVAL
 	_update_stuck_state(delta)
 	if nav_agent.is_navigation_finished():
 		velocity = compute_separation()
@@ -1017,6 +1031,18 @@ func _deflect_around_walls(desired: Vector2) -> Vector2:
 # NOT enough to plant and shoot: our shots would just clip the corner. On a blocked
 # center the combat branch repositions around cover instead of plinking it.
 func _center_shot_clear(target: Hurtbox) -> bool:
+	if target == null or !is_instance_valid(target):
+		return false
+	var frame := Engine.get_physics_frames()
+	var tid := target.get_instance_id()
+	var cached = _center_cache.get(tid)
+	if cached != null and frame - int(cached["frame"]) < LOS_CACHE_FRAMES and (frame + _los_stagger()) % LOS_CACHE_FRAMES != 0:
+		return cached["clear"]
+	var clear := _center_shot_clear_uncached(target)
+	_center_cache[tid] = {"frame": frame, "clear": clear}
+	return clear
+
+func _center_shot_clear_uncached(target: Hurtbox) -> bool:
 	var space_state := get_world_2d().direct_space_state
 	var to_center := target.global_position - global_position
 	_los_ray.from = global_position
@@ -1371,7 +1397,30 @@ func has_line_of_sight_any_direction(target: Hurtbox) -> bool:
 # can aim at what's really exposed instead of a possibly-blocked dead
 # center), or null if no part of them is both within our fov_degrees vision
 # cone and unobstructed.
+# PERF: line of sight is up to 5 rays + 5 swept-circle casts per call, run every
+# physics frame per enemy. Cache each result for LOS_CACHE_FRAMES (staggered per
+# enemy so they don't all refresh on the same frame). The visible point is kept
+# RELATIVE to the target, so aiming still follows a moving player between refreshes.
+const LOS_CACHE_FRAMES := 4
+var _los_cache := {}
+var _center_cache := {}
+
+func _los_stagger() -> int:
+	return absi(String(name).hash()) % LOS_CACHE_FRAMES
+
 func get_visible_point(target: Hurtbox, check_fov := true) -> Variant:
+	if target == null or !is_instance_valid(target):
+		return null
+	var key := "%d:%s" % [target.get_instance_id(), check_fov]
+	var frame := Engine.get_physics_frames()
+	var cached = _los_cache.get(key)
+	if cached != null and frame - int(cached["frame"]) < LOS_CACHE_FRAMES and (frame + _los_stagger()) % LOS_CACHE_FRAMES != 0:
+		return null if cached["offset"] == null else target.global_position + cached["offset"]
+	var result = _get_visible_point_uncached(target, check_fov)
+	_los_cache[key] = {"frame": frame, "offset": null if result == null else result - target.global_position}
+	return result
+
+func _get_visible_point_uncached(target: Hurtbox, check_fov := true) -> Variant:
 	# A zero-width ray (or even a few parallel rays) can still slip through
 	# the single-point diagonal gap where two wall tiles meet corner-to-
 	# corner. Sweeping an actual circle shape along the path has real width
