@@ -126,6 +126,9 @@ func _refresh() -> void:
 		none.add_theme_font_size_override("font_size", 40)
 		_sell_list.add_child(none)
 	var gold: int = _player.gold_available()
+	var cost: int = _player.repair_cost()
+	if cost > 0:
+		_row(_buy_list, "Repair all worn gear + weapons", "Repair %dg" % cost, gold >= cost, _on_repair)
 	for i in ItemData.VENDOR_STOCK.size():
 		var stock: Array = ItemData.VENDOR_STOCK[i]
 		var label := "%s x%d" % [ItemData.get_def(stock[0]).get("display_name", stock[0]), stock[1]]
@@ -134,6 +137,11 @@ func _refresh() -> void:
 func _on_sell(instance_id: String) -> void:
 	if _player.vendor_sell(instance_id) > 0:
 		Sounds.play_sfx("loot", null, -2.0)
+	_refresh()
+
+func _on_repair() -> void:
+	if _player.repair_all():
+		Sounds.play_sfx("armed", null, -4.0)
 	_refresh()
 
 func _on_buy(index: int) -> void:

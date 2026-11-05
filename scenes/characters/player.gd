@@ -908,6 +908,40 @@ func vendor_buy(index: int) -> bool:
 	inventory_ui.refresh()
 	return true
 
+# Repair: gold per point of missing durability, across both weapons and all worn
+# gear. Broken gear stops working (see _gear_stat_sum), so this is the way back.
+const REPAIR_GOLD_PER_POINT := 0.5
+
+func repair_cost() -> int:
+	var missing := 0.0
+	for w in weapon_slots:
+		if w != null:
+			missing += maxf(w.max_durability - w.durability, 0.0)
+	for g in _all_gear():
+		if g != null and g.max_durability > 0.0:
+			missing += maxf(g.max_durability - g.durability, 0.0)
+	return ceili(missing * REPAIR_GOLD_PER_POINT)
+
+func repair_all() -> bool:
+	var cost := repair_cost()
+	if cost <= 0 or gold_available() < cost:
+		return false
+	_consume_ingredient("gold", cost)
+	for w in weapon_slots:
+		if w != null:
+			w.durability = w.max_durability
+	for g in _all_gear():
+		if g != null and g.max_durability > 0.0:
+			g.durability = g.max_durability
+	persist_weapon_slots()
+	persist_equipment()
+	persist_inventory()
+	persist_materials()
+	_refresh_gear_effects()
+	refresh_spell_ui()
+	inventory_ui.refresh()
+	return true
+
 # Put an item in the bag, or the stash if the bag is full (hub only).
 func _give_item(item: Item) -> void:
 	if inventory.try_stack_or_place(item):
