@@ -13,7 +13,7 @@ func setup(_world):
 func begin_kit_selection(expedition_id: String):
 	if world.party_state != world.PartyState.HUB:
 		return
-	if !world.EXPEDITION_TARGETS.has(expedition_id):
+	if !MapRegistry.has_map(expedition_id) and !world.EXPEDITION_TARGETS.has(expedition_id):
 		return
 	world.party_state = world.PartyState.KIT_SELECTION
 	world.pending_kit_expedition_id = expedition_id
@@ -67,7 +67,14 @@ func launch_expedition(expedition_id: String):
 	if !world.multiplayer.is_server():
 		return
 
-	var target = world.EXPEDITION_TARGETS[expedition_id]
+	# A registered MapDef is the source of truth for where a run starts; the old
+	# EXPEDITION_TARGETS table is only a fallback for ids without one.
+	var target: Dictionary
+	var def := MapRegistry.get_def(expedition_id)
+	if def != null:
+		target = {"zone": def.zone, "room": def.room, "spawn": def.spawn}
+	else:
+		target = world.EXPEDITION_TARGETS[expedition_id]
 
 	world.party_state = world.PartyState.EXPEDITION
 	world.expedition_zone = target["zone"]
@@ -82,7 +89,7 @@ func launch_expedition(expedition_id: String):
 	# is actually different each time, not just different-per-room. Sent
 	# before the location-change RPCs below so it lands before any peer's
 	# copy of the room scene finishes loading and reads it.
-	world.broadcast_expedition_seed.rpc(randi())
+	world.broadcast_expedition_seed.rpc(randi(), expedition_id if def != null else "")
 
 	for peer_id in world.player_locations.keys():
 		world.server_change_player_location(

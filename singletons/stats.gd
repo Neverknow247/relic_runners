@@ -11,6 +11,13 @@ var transition_time = .25
 # enemy_spawner.gd's group rolls — has a shared source to seed from.
 var expedition_seed: int = 0
 
+# Which MapDef (scenes/maps/defs) the current expedition is running, broadcast with
+# the seed. "" in the hub / before any run; spawners fall back to their defaults.
+var current_map_id := ""
+
+func current_map() -> MapDef:
+	return MapRegistry.get_def(current_map_id) if current_map_id != "" else null
+
 # Per-room enemy state for the current expedition instance, keyed by
 # "zone/room" (e.g. "dungeon/room_1"), so leaving and re-entering a room
 # within the same expedition finds enemies where they were left (dead ones

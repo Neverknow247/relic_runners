@@ -39,20 +39,27 @@ func _try_spawn(point: Marker2D) -> void:
 	# Stable name so the container's looted state persists across a revisit.
 	container.name = "%s_container" % point.name
 	container.container_type = ctype
-	container.tier = "silver" if rng.randf() < SILVER_CHANCE else "bronze"
+	var map := Stats.current_map()
+	var silver := map.container_silver_chance if map != null else SILVER_CHANCE
+	var gold := map.container_gold_chance if map != null else 0.0
+	var tier_roll := rng.randf()
+	container.tier = "gold" if tier_roll < gold else ("silver" if tier_roll < gold + silver else "bronze")
 	container.position = point.position
 	add_child(container)
 
 func _pick_type(rng: RandomNumberGenerator) -> String:
+	# The map's container mix (MapDef.container_type_weights) wins when set.
+	var map := Stats.current_map()
+	var weights: Dictionary = map.container_type_weights if map != null and !map.container_type_weights.is_empty() else type_weights
 	var total := 0
-	for w in type_weights.values():
+	for w in weights.values():
 		total += int(w)
 	if total <= 0:
 		return ""
 	var roll := rng.randi_range(1, total)
 	var cum := 0
-	for t in type_weights:
-		cum += int(type_weights[t])
+	for t in weights:
+		cum += int(weights[t])
 		if roll <= cum:
 			return t
 	return ""

@@ -469,6 +469,7 @@ func client_change_location(zone: String, room: String, spawn_point:= "default")
 		SaveAndLoad.save_all()
 	if arriving_in_hub:
 		_pre_run_loadout.clear()
+		Stats.current_map_id = ""
 		var local_player = get_local_player()
 		if local_player != null:
 			# Covers returning through an exit portal, not just dying (death
@@ -754,13 +755,15 @@ func client_cancel_kit_prompt():
 		local_player.hide_kit_prompt()
 
 @rpc("authority", "call_local", "reliable")
-func broadcast_expedition_seed(seed_value: int):
+func broadcast_expedition_seed(seed_value: int, map_id: String):
 	# Every peer loads the same room scene independently with no networked
 	# node spawning, so anything that needs to look "randomized" per
 	# expedition (like enemy_spawner.gd's group rolls) has to derive from
 	# this shared, server-picked seed instead of real per-peer randomness —
 	# otherwise each peer would roll a different, mismatched layout.
 	Stats.expedition_seed = seed_value
+	# The map's tuning (roster, tier mix, pack sizes...) every spawner reads.
+	Stats.current_map_id = map_id
 	# A new expedition is a new instance — clear out where enemies were
 	# left in every room from the last one so this one starts fresh.
 	Stats.expedition_room_state = {}

@@ -67,10 +67,14 @@ func _ready() -> void:
 		if not await _wait_one_physics_frame():
 			return
 	var saved_state: Dictionary = Stats.expedition_room_state.get(room_key, {})
+	var map := Stats.current_map()
+	var chance := spawn_chance * (map.spawn_chance_mult if map != null else 1.0)
 	for point in spawn_points:
 		var rng := RandomNumberGenerator.new()
-		rng.seed = Stats.expedition_seed ^ point.name.hash()
-		if rng.randf() < spawn_chance:
+		# Salted with the room key: every level names its markers enemy_spawn_1..N,
+		# so the marker name alone rolled identical packs on every map.
+		rng.seed = Stats.expedition_seed ^ (room_key + "/" + String(point.name)).hash()
+		if rng.randf() < chance:
 			spawn_group(point, rng, map_rid, saved_state)
 	# Enemies are added directly above (not via any networked spawn RPC), so
 	# this is the one point in time every enemy in this room is guaranteed to
@@ -96,16 +100,33 @@ func _wait_one_physics_frame() -> bool:
 
 # One weighted archetype pick for the whole pack (deterministic).
 func _pick_archetype(rng: RandomNumberGenerator) -> String:
+	# The current map's roster (MapDef.roster) wins; ARCHETYPE_WEIGHTS is the default.
+	var map := Stats.current_map()
+	var weights: Dictionary = map.roster if map != null and !map.roster.is_empty() else ARCHETYPE_WEIGHTS
 	var total := 0
-	for w in ARCHETYPE_WEIGHTS.values():
-		total += w
+	for w in weights.values():
+		total += int(w)
+	if total <= 0:
+		return "pentagon"
 	var roll := rng.randi_range(1, total)
 	var cum := 0
-	for a in ARCHETYPE_WEIGHTS:
-		cum += ARCHETYPE_WEIGHTS[a]
+	for a in weights:
+		cum += int(weights[a])
 		if roll <= cum:
 			return a
 	return "pentagon"
+
+# bronze / silver / gold for one enemy, from the map's tier mix (defaults otherwise).
+func _pick_tier(rng: RandomNumberGenerator) -> String:
+	var map := Stats.current_map()
+	var silver := map.silver_chance if map != null else SILVER_CHANCE
+	var gold := map.gold_chance if map != null else 0.0
+	var r := rng.randf()
+	if r < gold:
+		return "gold"
+	if r < gold + silver:
+		return "silver"
+	return "bronze"
 
 # Per-archetype pack size [min, max] (inclusive), rolled off the deterministic rng.
 # Falls back to the min/max_group_size exports for any archetype not listed.
@@ -117,7 +138,11 @@ const GROUP_SIZES := {
 }
 func _group_size_for(group_archetype: String, rng: RandomNumberGenerator) -> int:
 	var bounds: Array = GROUP_SIZES.get(group_archetype, [min_group_size, max_group_size])
-	return rng.randi_range(bounds[0], bounds[1])
+	var size := rng.randi_range(bounds[0], bounds[1])
+	var map := Stats.current_map()
+	if map != null and map.pack_mult != 1.0:
+		size = maxi(1, roundi(size * map.pack_mult))
+	return size
 
 func spawn_group(
 	point: Marker2D, rng: RandomNumberGenerator, map_rid: RID, saved_state: Dictionary
@@ -148,7 +173,7 @@ func spawn_group(
 		# Whole pack shares the archetype; tier (Silver) is per-enemy — a tougher one
 		# mixed in. Set BEFORE add_child so the enemy's _ready applies the preset.
 		enemy.archetype = group_archetype
-		enemy.tier = "silver" if rng.randf() < SILVER_CHANCE else "bronze"
+		enemy.tier = _pick_tier(rng)
 		if i == 0:
 			leader = enemy
 		else:

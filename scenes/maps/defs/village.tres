@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="MapDef" format=3]
+
+[ext_resource type="Script" path="res://scenes/maps/map_def.gd" id="1_mapdef"]
+
+[resource]
+script = ExtResource("1_mapdef")
+id = "village"
+display_name = "E1 - Outskirts"
+style = "extraction"
+tier = 1
+zone = "village"
+room = "main"
+spawn = "random_portal"
+roster = {
+"circle": 30,
+"pentagon": 25,
+"square": 10,
+"triangle": 35
+}
+silver_chance = 0.1
+gold_chance = 0.0
+pack_mult = 1.0
+spawn_chance_mult = 1.0
+container_silver_chance = 0.1
+container_gold_chance = 0.0
+container_type_weights = {}
+duration_sec = 0.0
+tokens_per_player = 2
