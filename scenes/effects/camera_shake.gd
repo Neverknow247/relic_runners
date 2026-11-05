@@ -10,9 +10,9 @@ const SHAKE_MAX_OFFSET := 90.0
 const TRAUMA_DECAY := 1.8
 # Look-ahead: lean toward where you're aiming so you see more of what you're
 # shooting at than what's behind you. Fraction of the cursor offset, capped.
-const LOOK_AHEAD_FRACTION := 0.22
+const LOOK_AHEAD_FRACTION := 0.15
 const LOOK_AHEAD_MAX := 320.0  # keep <= enemy.gd's look-ahead allowance in SCREEN_FIRE_MARGIN
-const LOOK_AHEAD_SMOOTH := 7.0
+const LOOK_AHEAD_SMOOTH := 4.0
 
 var trauma := 0.0
 var _look := Vector2.ZERO
@@ -34,7 +34,8 @@ func _process(delta: float) -> void:
 	var target := Vector2.ZERO
 	var inv = p.get("inventory_ui")
 	var menu_open: bool = inv != null and inv.visible
-	if !menu_open and p is Node2D:
+	# Optional (Settings > Camera Look-Ahead, off by default).
+	if Utils.camera_lookahead and !menu_open and p is Node2D:
 		var to_mouse: Vector2 = get_global_mouse_position() - (p as Node2D).global_position
 		target = (to_mouse * LOOK_AHEAD_FRACTION).limit_length(LOOK_AHEAD_MAX)
 	_look = _look.lerp(target, clampf(LOOK_AHEAD_SMOOTH * delta, 0.0, 1.0))

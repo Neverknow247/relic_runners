@@ -28,8 +28,10 @@ var sounds = {
 var music_playing = null
 
 # --- Gameplay SFX (assets/audio/sounds/sfx_<name>.wav) ---------------------
-# First-pass procedural placeholders from tools/gen_sfx.py; replace any file with
-# a real asset of the same name. Missing files are skipped silently.
+# The game calls play_sfx(name) at every one of these moments, but ships with NO
+# sound files yet (the designer is making their own). Drop a file named
+# sfx_<name>.wav into assets/audio/sounds/ and it plays from then on; any name
+# without a file is skipped silently.
 const SFX_NAMES := [
 	"shoot_wand", "shoot_orb", "shoot_tome", "enemy_shoot", "hit", "enemy_die",
 	"player_hurt", "roll", "tap", "armed", "fizzle", "windup", "sniper_windup",

@@ -45,6 +45,9 @@ func set_volume():
 
 var squash_and_stretch = true
 var screen_shake = true
+# Camera leans toward your aim (camera_shake.gd). Off by default: some players
+# find it queasy. Saved in settings.cfg like the others.
+var camera_lookahead = false
 
 var window_mode = 0:
 	get:

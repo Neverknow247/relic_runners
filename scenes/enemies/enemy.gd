@@ -116,7 +116,10 @@ const ARCHETYPES := {
 		"max_health": 700.0, "attack": 200.0, "attacks_per_sec": [1.0, 1.0],
 		"burst_count": 1, "burst_cooldown": [2.4, 3.2],
 		"pellets": 1, "spread_deg": 0.0, "bullet_speed": 3000.0, "aim_variance_deg": 0.0,
-		"windup_sec": 0.7, "aim_lock": true, "windup_root": true,
+		# The laser TRACKS you for most of the wind-up and locks lock_before s
+		# before the shot, leading your movement: walk straight and you get hit;
+		# change direction or roll after the lock (the laser flashes white).
+		"windup_sec": 0.7, "aim_lock": true, "windup_root": true, "lock_before": 0.2,
 		"body_size": 60.0,
 	},
 	"hexagon": {
@@ -774,6 +777,7 @@ func _process(_delta: float) -> void:
 			global_position = _pos_interp.sample()
 	if facing_indicator:
 		facing_indicator.position = facing_direction * FACING_INDICATOR_DISTANCE
+	_update_tracking_laser()
 
 func _physics_process(delta: float) -> void:
 	if !is_multiplayer_authority():
@@ -1557,6 +1561,12 @@ var _aim_locked := false
 var _aim_lock_point := Vector2.ZERO
 var _laser: Line2D = null
 var _windup_tween: Tween = null
+# Tracking-laser wind-up (sniper): aim follows the target until _lock_before s
+# remain, then freezes on a led point. Server-side state:
+var _lock_before := 0.0
+var _windup_tracking := false
+# Client-side: which player the laser is following (peer id), until the lock RPC.
+var _laser_target_id := 0
 
 # --- Attack tokens (the difficulty dial) ---------------------------------------
 # Only N enemies may be winding up / firing a burst at the same player at once
@@ -1623,30 +1633,81 @@ func _target_on_screen(t: Node2D) -> bool:
 	return absf(d.x) <= TARGET_SCREEN_HALF.x - SCREEN_FIRE_MARGIN \
 		and absf(d.y) <= TARGET_SCREEN_HALF.y - SCREEN_FIRE_MARGIN
 
+# Where the target will be after `extra_time` + the bullet's flight, assuming it
+# keeps its current velocity; capped like fire_spell's lead so a rushing target
+# can't flip the aim behind us.
+func _led_point(point: Vector2, extra_time: float) -> Vector2:
+	var a: Dictionary = ARCHETYPES.get(archetype, ARCHETYPES["pentagon"])
+	var speed: float = float(a.get("bullet_speed", 1100.0)) * _bullet_speed_mult
+	var gap := global_position.distance_to(point)
+	var t := minf(extra_time + gap / maxf(speed, 1.0), MAX_LEAD_TIME + extra_time)
+	var lead: Vector2 = target_velocities.get(current_target, Vector2.ZERO) * t
+	if lead.length() > gap * MAX_LEAD_FRACTION:
+		lead = lead.normalized() * gap * MAX_LEAD_FRACTION
+	return point + lead
+
+func _emit_laser_lock(point: Vector2) -> void:
+	var targets := _room_rpc_targets()
+	if targets.is_empty():
+		_lock_laser.rpc(point)
+		return
+	var server_id := multiplayer.get_unique_id()
+	for pid in targets:
+		if pid == server_id:
+			_lock_laser(point)
+		else:
+			_lock_laser.rpc_id(pid, point)
+
+# Every peer: the laser stops following and snaps (white flash) onto the locked
+# aim. That flash is the "dodge NOW" cue.
+@rpc("authority", "call_local", "reliable")
+func _lock_laser(point: Vector2) -> void:
+	_laser_target_id = 0
+	if _laser == null or !is_instance_valid(_laser):
+		return
+	var dir := (point - global_position).normalized()
+	_laser.points = PackedVector2Array([global_position, global_position + dir * 3600.0])
+	_laser.default_color = Color(1.0, 1.0, 1.0, 1.0)
+	_laser.width = 9.0
+
+func _update_tracking_laser() -> void:
+	# Tracking laser (all peers): follow the targeted player until the lock RPC.
+	if _laser_target_id == 0 or _laser == null or !is_instance_valid(_laser):
+		return
+	var world = _get_world()
+	if world == null or !world.players.has_node(str(_laser_target_id)):
+		return
+	var tp: Vector2 = world.players.get_node(str(_laser_target_id)).global_position
+	var dir := (tp - global_position).normalized()
+	_laser.points = PackedVector2Array([global_position, global_position + dir * 3600.0])
+
 func _cancel_windup() -> void:
 	var was_active := _windup_left > 0.0 or _windup_ready
 	_windup_left = 0.0
 	_windup_ready = false
 	_aim_locked = false
+	_windup_tracking = false
 	if was_active:
-		_emit_windup(0.0, Vector2.ZERO, false)
+		_emit_windup(0.0, Vector2.ZERO, false, 0)
 
-func _emit_windup(duration: float, lock_point: Vector2, laser: bool) -> void:
+func _emit_windup(duration: float, lock_point: Vector2, laser: bool, target_id: int = 0) -> void:
 	var targets := _room_rpc_targets()
 	if targets.is_empty():
-		_show_windup.rpc(duration, lock_point, laser)
+		_show_windup.rpc(duration, lock_point, laser, target_id)
 		return
 	var server_id := multiplayer.get_unique_id()
 	for pid in targets:
 		if pid == server_id:
-			_show_windup(duration, lock_point, laser)
+			_show_windup(duration, lock_point, laser, target_id)
 		else:
-			_show_windup.rpc_id(pid, duration, lock_point, laser)
+			_show_windup.rpc_id(pid, duration, lock_point, laser, target_id)
 
 # The tell, on every peer in the room: the body swells over the wind-up (and the
 # sniper draws a laser to its locked aim point). duration 0 = cancel.
 @rpc("authority", "call_local", "reliable")
-func _show_windup(duration: float, lock_point: Vector2, laser: bool) -> void:
+func _show_windup(duration: float, lock_point: Vector2, laser: bool, target_id: int) -> void:
+	# target_id != 0: the laser follows that player until _lock_laser.
+	_laser_target_id = target_id
 	if _windup_tween != null and _windup_tween.is_valid():
 		_windup_tween.kill()
 	if _laser != null and is_instance_valid(_laser):
@@ -1656,6 +1717,7 @@ func _show_windup(duration: float, lock_point: Vector2, laser: bool) -> void:
 		return
 	if duration <= 0.0:
 		body.scale = Vector2.ONE
+		_laser_target_id = 0
 		return
 	if laser:
 		Sounds.play_sfx("sniper_windup", global_position, 0.0, 0.0)
@@ -1734,8 +1796,20 @@ func update_casting(delta: float, distance: float) -> void:
 			_windup_left = windup_sec
 			_aim_locked = _windup_aim_lock
 			_aim_lock_point = current_visible_point
-			_emit_windup(windup_sec, _aim_lock_point, _windup_aim_lock)
+			_windup_tracking = _windup_aim_lock and _lock_before > 0.0
+			var target_id := int(current_target.owner_id) if current_target != null and _windup_tracking else 0
+			_emit_windup(windup_sec, _aim_lock_point, _windup_aim_lock, target_id)
 		_windup_left -= delta
+		if _windup_tracking:
+			if _windup_left > _lock_before:
+				# Still tracking: keep re-aiming at where we can see them.
+				_aim_lock_point = current_visible_point
+			else:
+				# LOCK: freeze on where they'll be when the shot arrives (bounded
+				# lead), and tell the room so the laser freezes + flashes.
+				_windup_tracking = false
+				_aim_lock_point = _led_point(current_visible_point, _windup_left)
+				_emit_laser_lock(_aim_lock_point)
 		if _windup_left > 0.0:
 			return
 		_windup_left = 0.0
@@ -1829,6 +1903,7 @@ func _apply_archetype() -> void:
 	cast_range = a["cast_range"]
 	windup_sec = float(a.get("windup_sec", 0.0))
 	_windup_aim_lock = bool(a.get("aim_lock", false))
+	_lock_before = float(a.get("lock_before", 0.0))
 	_windup_root = bool(a.get("windup_root", false))
 	attacks_per_sec_range = a.get("attacks_per_sec", [1.0, 1.0])
 	burst_count = a.get("burst_count", 1)

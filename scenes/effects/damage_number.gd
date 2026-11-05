@@ -21,10 +21,19 @@ func setup(amount: float, color: Color, is_crit: bool = false, effective: bool =
 		label.text += "!"
 		label.add_theme_font_size_override("font_size", 208)
 	if effective:
-		label.text += "
-EFFECTIVE"
-		label.modulate = Color(0.45, 1.0, 1.0)
-		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		# A small tag under the number (not a giant second line).
+		var tag := Label.new()
+		tag.text = "EFFECTIVE"
+		tag.add_theme_font_size_override("font_size", 48)
+		tag.add_theme_color_override("font_color", Color(0.45, 1.0, 1.0))
+		tag.add_theme_color_override("font_outline_color", Color.BLACK)
+		tag.add_theme_constant_override("outline_size", 14)
+		tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		tag.position = Vector2(label.position.x, label.position.y + label.size.y * 0.75)
+		tag.size = Vector2(label.size.x, 70)
+		add_child(tag)
+		var tt := create_tween()
+		tt.tween_property(tag, "modulate:a", 0.0, DURATION).set_delay(DURATION * 0.4)
 	var tween := create_tween()
 	tween.tween_property(self, "position:y", position.y - RISE_DISTANCE, DURATION) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
