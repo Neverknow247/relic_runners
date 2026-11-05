@@ -1,0 +1,18 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# Script/PCK encryption key — NEVER commit this. It's the AES key the export is
+# encrypted with; committing it defeats the encryption. Keep it secret + backed
+# up (the SAME key is required to ship updates). Supply it at export time via the
+# GODOT_SCRIPT_ENCRYPTION_KEY environment variable.
+encryption_key.txt
+*.gdkey
+.env
+
+# Windows temp copies made while a DLL is locked by the running editor/game
+~*.TMP
+*.TMP
+
+# Godot export output
+exports/
