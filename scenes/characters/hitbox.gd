@@ -21,6 +21,10 @@ var is_crit: bool = false
 # True when a PLAYER fired this (set from spell_data["from_enemy"] in
 # projectile.setup_spell). Player shots never hurt players — no friendly fire.
 var from_player := true
+# True for an ENEMY's stationary zone (warder pulse, lobbed rain): those only ever
+# hurt players, never the pack they're cast in. Enemy bullets still can (the AI
+# avoids firing through allies instead).
+var enemy_zone := false
 
 # The single source of truth for "should this hitbox damage that hurtbox?" — used
 # by every damage path (this Area2D auto-hit, plus the DoT ticks in beam/rain/cone
@@ -34,6 +38,8 @@ func can_hit(hurtbox: Hurtbox) -> bool:
 	if caster_id != 0 and hurtbox.owner_id == caster_id:
 		return false
 	if from_player and hurtbox.is_player:
+		return false
+	if enemy_zone and not hurtbox.is_player:
 		return false
 	return true
 

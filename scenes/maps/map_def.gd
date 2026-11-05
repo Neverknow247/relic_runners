@@ -33,6 +33,8 @@ class_name MapDef
 @export var pack_mult := 1.0
 ## Multiplies each spawn marker's chance to spawn a pack at all.
 @export var spawn_chance_mult := 1.0
+## Affixes silver (1) and gold (2) enemies roll from. See Enemy.AFFIXES.
+@export var affix_pool: Array[String] = ["fast", "armored"]
 
 @export_group("Containers")
 @export_range(0.0, 1.0) var container_silver_chance := 0.12

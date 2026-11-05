@@ -130,6 +130,7 @@ func setup_spell(_direction: Vector2, _spell_data: Dictionary, caster_id: int = 
 	hitbox.attacker_crit_damage = spell_data.get("attacker_crit_damage", 0.0)
 	hitbox.is_crit = crit
 	hitbox.from_player = not spell_data.get("from_enemy", false)
+	hitbox.enemy_zone = spell_data.get("from_enemy", false) and spell_data.get("speed", 0.0) <= 0.0
 	# Free after the form's ACTUAL lifetime. Started here (not in _ready) because
 	# lifetime is only known once setup_spell runs — the stationary pierce forms
 	# (burst/cone/beam/rain) rely on this timer for their whole duration since

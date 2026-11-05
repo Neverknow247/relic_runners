@@ -133,6 +133,27 @@ const ARCHETYPES := {
 		"body_size": 62.0,
 	},
 }
+# Elite AFFIXES (Phase 3, Diablo-style): silver rolls 1, gold rolls 2, from the map's
+# MapDef.affix_pool. Rolled deterministically (expedition seed ^ name) so every peer
+# agrees with no networking, and drawn as marks on the body glyph.
+#   fast     +30% move/strafe, +20% bullet speed
+#   armored  takes 30% less damage
+#   shielded an element-coloured shield soaks SHIELD_HP; a hit from an element that
+#            beats it shatters it instantly (the wheel as a tactic)
+#   warder   a telegraphed 0.4 s pulse (burst) when a player is within WARDER_RANGE
+const AFFIXES := ["fast", "armored", "shielded", "warder"]
+const SHIELD_HP := 300.0
+const ARMORED_MULT := 0.7
+const WARDER_RANGE := 520.0
+const WARDER_INTERVAL := 4.0
+const WARDER_CHARGE := 0.4
+const WARDER_DAMAGE := 120.0
+var affixes: Array = []
+var _bullet_speed_mult := 1.0
+var _shield_hp := 0.0
+var _warder_timer := 0.0
+var _warder_charge := 0.0
+
 # Elites are a beefier, gold-tinted, bigger version of any archetype with better loot.
 const TIERS := {
 	# bronze = baseline, silver = the "elite" (tougher + better loot), gold = locked-area
@@ -827,6 +848,7 @@ func _physics_process(delta: float) -> void:
 		current_visible_point = visible_point
 
 	var on_screen := _target_on_screen(current_target)
+	_update_warder(delta, distance)
 	if can_see and distance <= cast_range and on_screen and _center_shot_clear(current_target):
 		var to_target := current_visible_point - global_position
 		var dir := to_target.normalized()
@@ -1788,9 +1810,86 @@ func _apply_archetype() -> void:
 	attack = a["attack"] * t["attack_mult"]
 	max_health = a["max_health"] * t["health_mult"]
 	health = max_health
+	_roll_affixes()
 	# Identity now reads off the body glyph: shape = archetype, fill = element, border =
 	# tier (see _update_visual). visual_root stays neutral (no tier scale/tint).
 	_update_visual()
+
+func _roll_affixes() -> void:
+	affixes = []
+	_bullet_speed_mult = 1.0
+	_shield_hp = 0.0
+	var count := 2 if tier == "gold" else (1 if tier == "silver" else 0)
+	if count > 0:
+		var map := Stats.current_map()
+		var pool: Array = (map.affix_pool if map != null and !map.affix_pool.is_empty() else ["fast", "armored"]).duplicate()
+		var rng := RandomNumberGenerator.new()
+		rng.seed = Stats.expedition_seed ^ hash("affix:" + String(name))
+		while affixes.size() < count and !pool.is_empty():
+			affixes.append(pool.pop_at(rng.randi() % pool.size()))
+	if affixes.has("fast"):
+		move_speed *= 1.3
+		strafe_speed *= 1.3
+		_bullet_speed_mult = 1.2
+	if affixes.has("shielded"):
+		_shield_hp = SHIELD_HP
+	_warder_timer = WARDER_INTERVAL * 0.5
+	if body:
+		body.affixes = affixes
+		body.shield_up = _shield_hp > 0.0
+		body.queue_redraw()
+
+# Server, from _on_hurtbox_hurt: armor and shield between a hit and our health.
+func _apply_affix_defense(dmg: float, advantage: bool) -> float:
+	if affixes.has("armored"):
+		dmg *= ARMORED_MULT
+	if _shield_hp > 0.0:
+		if advantage:
+			# The right element shatters the shield outright; the hit passes through.
+			_shield_hp = 0.0
+		else:
+			var absorbed := minf(_shield_hp, dmg)
+			_shield_hp -= absorbed
+			dmg -= absorbed
+		if _shield_hp <= 0.0:
+			_emit_shield_break()
+	return dmg
+
+func _emit_shield_break() -> void:
+	var targets := _room_rpc_targets()
+	if targets.is_empty():
+		_show_shield_break.rpc()
+		return
+	var server_id := multiplayer.get_unique_id()
+	for pid in targets:
+		if pid == server_id:
+			_show_shield_break()
+		else:
+			_show_shield_break.rpc_id(pid)
+
+@rpc("authority", "call_local", "reliable")
+func _show_shield_break() -> void:
+	if body == null:
+		return
+	body.shield_up = false
+	body.queue_redraw()
+	Fx.shatter(get_tree(), global_position, body.fill_color.lightened(0.45), 1.2)
+	Sounds.play_sfx("enemy_die", global_position, -4.0)
+
+# Server, each combat frame: a warder pulses when a player gets close.
+func _update_warder(delta: float, distance: float) -> void:
+	if !affixes.has("warder"):
+		return
+	if _warder_charge > 0.0:
+		_warder_charge -= delta
+		if _warder_charge <= 0.0:
+			_broadcast_spawn_projectile(attacker_weapon, attacker_element, "burst", Vector2.RIGHT, WARDER_DAMAGE, 0.0, 0.0, 0.0)
+		return
+	_warder_timer -= delta
+	if _warder_timer <= 0.0 and distance <= WARDER_RANGE:
+		_warder_timer = WARDER_INTERVAL
+		_warder_charge = WARDER_CHARGE
+		_emit_windup(WARDER_CHARGE, global_position, false)
 
 func fire_spell(weapon: String, element: String, form: String) -> void:
 	if current_target == null:
@@ -1820,7 +1919,7 @@ func fire_spell(weapon: String, element: String, form: String) -> void:
 		# Predictive leading: shift the aim to where the target will be by the time
 		# the shot reaches it (time ≈ distance / real shot speed). Cheap first-order
 		# lead. Skipped for speed-0 AoE forms (they don't travel).
-		var proj_speed: float = float(a.get("bullet_speed", base_speed))
+		var proj_speed: float = float(a.get("bullet_speed", base_speed)) * _bullet_speed_mult
 		var speed_mult: float = proj_speed / base_speed if base_speed > 0.0 else 1.0
 		if proj_speed > 0.0 and not _aim_locked:
 			# Bounded lead: cap the flight-time estimate, AND cap the resulting offset to
@@ -1986,6 +2085,7 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 		if is_crit:
 			final_damage *= 1.0 + atk_crit_damage / 100.0
 	final_damage *= 1.0 - SpellData.damage_reduction(defense)
+	final_damage = _apply_affix_defense(final_damage, advantage)
 	# Aggro: credit this damage to the attacking PLAYER. hitbox.caster_id is the
 	# player's peer id directly (enemy casts use name.hash(), so guard on it being a
 	# real player node). Whoever out-damages the current target pulls aggro — see

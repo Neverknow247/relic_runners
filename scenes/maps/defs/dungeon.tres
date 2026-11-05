@@ -23,6 +23,7 @@ silver_chance = 0.25
 gold_chance = 0.05
 pack_mult = 1.3
 spawn_chance_mult = 1.0
+affix_pool = Array[String](["fast", "armored", "shielded", "warder"])
 container_silver_chance = 0.25
 container_gold_chance = 0.05
 container_type_weights = {}
