@@ -211,8 +211,27 @@ var equipped_gear: Dictionary = {}
 var quick_slots: Array[Item] = []
 
 var state = move_state
-var has_dash = true
-var dash_input_axis
+
+# --- Dodge roll + i-frames --------------------------------------------------
+# Space (the "jump" action). A short burst along your movement direction (or your
+# aim, standing still) with invulnerability for the first part of it. The core
+# skill verb: enemy bullets are tuned on the assumption you can roll through them.
+const ROLL_SPEED := 2500.0
+const ROLL_DURATION := 0.35
+const ROLL_IFRAMES := 0.2
+const ROLL_COOLDOWN := 0.7
+# Speed you exit the roll at (a short brake instead of carrying 2500 into a walk).
+const ROLL_EXIT_SPEED := 1000.0
+# After any hit, a brief window where further hits are ignored, so a burst of
+# pellets or a stream can't stack damage in a single frame.
+const HURT_IFRAMES := 0.4
+var _roll_timer := 0.0
+var _roll_cooldown_timer := 0.0
+var _roll_direction := Vector2.ZERO
+# Seconds of invulnerability left (roll or hurt). Checked in _on_hurtbox_hurt, the
+# single entry point every damage source (bullets, DoT ticks, explosions) uses.
+var _iframe_timer := 0.0
+var _flicker_tween: Tween
 
 var default_max_velocity = 1000
 var default_acceleration = 6000
@@ -1908,6 +1927,10 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 	# disagree (e.g. one shows 26, another 28).
 	if !is_multiplayer_authority():
 		return
+	# Dodge-roll / post-hit invulnerability (see the roll section). Swallowed whole:
+	# no damage, no number, no durability drain.
+	if _iframe_timer > 0.0:
+		return
 	# Resolve the hit from stats HERE (defender authority): base = attacker Attack
 	# (hitbox.damage), crit rolled from the attacker's crit stats + a +50/+50 bonus if
 	# their element beats ours, then our Defense reduces it (Diablo-style DR).
@@ -1927,6 +1950,9 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 	final_damage *= 1.0 - SpellData.damage_reduction(get_defense())
 	_broadcast_damage_number.rpc(final_damage, is_crit)
 	take_damage(final_damage)
+	if final_damage > 0.0 and !_is_in_hub():
+		_iframe_timer = maxf(_iframe_timer, HURT_IFRAMES)
+		_start_hurt_flicker(HURT_IFRAMES)
 	# Getting hit wears down equipped gear; a piece that breaks loses its trait.
 	_drain_gear_durability()
 
@@ -2250,6 +2276,8 @@ func _physics_process(delta):
 		check_inventory_toggle()
 		check_map_toggle()
 		attack_timer = max(attack_timer - delta, 0.0)
+		_roll_cooldown_timer = maxf(_roll_cooldown_timer - delta, 0.0)
+		_iframe_timer = maxf(_iframe_timer - delta, 0.0)
 		# Any open menu (inventory OR the esc/pause menu) arms attack-suppression so the
 		# click that operates/closes it can't leak into a shot the frame it clears —
 		# attack_check() then ignores the still-held button until it's released.
@@ -2266,6 +2294,8 @@ func _physics_process(delta):
 			check_weapon_swap()
 			check_quick_slot_input()
 			_check_revive(delta)
+			if state != roll_state and _can_start_roll():
+				_start_roll()
 			state.call(delta)
 	# Position/anim/rotation now replicate via the MultiplayerSynchronizer only
 	# (net_position, published in _process) — the old per-frame server_send_player_state
@@ -2347,6 +2377,61 @@ func snap_to_8_directions(direction: Vector2) -> Vector2:
 
 func is_moving(_input_axis):
 	return _input_axis != Vector2.ZERO
+
+func _can_start_roll() -> bool:
+	if !Input.is_action_just_pressed("jump"):
+		return false
+	if _roll_cooldown_timer > 0.0:
+		return false
+	# Punching in a stratagem code (spell mode 1) commits you: no rolling out of it.
+	if Input.is_action_pressed("spell_mode_1"):
+		return false
+	return true
+
+func _start_roll() -> void:
+	var raw_input = Vector2(Input.get_axis("left", "right"), Input.get_axis("up", "down"))
+	var dir: Vector2 = snap_to_8_directions(raw_input)
+	if dir == Vector2.ZERO:
+		dir = aim_direction if aim_direction != Vector2.ZERO else Vector2.RIGHT
+	_roll_direction = dir.normalized()
+	_roll_timer = ROLL_DURATION
+	_roll_cooldown_timer = ROLL_DURATION + ROLL_COOLDOWN
+	_iframe_timer = maxf(_iframe_timer, ROLL_IFRAMES)
+	is_attacking = false
+	update_legs_rotation(_roll_direction)
+	_play_roll_visual()
+	state = roll_state
+
+func roll_state(delta):
+	_roll_timer -= delta
+	velocity = _roll_direction * ROLL_SPEED
+	# No update_aim() mid-roll: it sets sprite.rotation every frame and would
+	# fight the spin tween. Aim resumes the frame the roll ends.
+	move_and_slide()
+	if _roll_timer <= 0.0:
+		velocity = _roll_direction * ROLL_EXIT_SPEED
+		play_body_anim("idle")
+		state = move_state
+
+# Squash-and-stretch along the roll plus a quick spin of the body, local only
+# (remote peers just see the fast movement through position sync).
+func _play_roll_visual() -> void:
+	var t := create_tween()
+	t.tween_property(visual_root, "scale", Vector2(0.75, 1.2), ROLL_DURATION * 0.3)
+	t.tween_property(visual_root, "scale", Vector2.ONE, ROLL_DURATION * 0.7)
+	var spin := create_tween()
+	var start_rot := sprite.rotation
+	spin.tween_property(sprite, "rotation", start_rot + TAU, ROLL_DURATION)
+
+# Blinks the body while hurt i-frames run, so you can see you're briefly safe.
+func _start_hurt_flicker(duration: float) -> void:
+	if _flicker_tween != null and _flicker_tween.is_valid():
+		_flicker_tween.kill()
+	_flicker_tween = create_tween()
+	var blinks := int(duration / 0.08)
+	for i in blinks:
+		_flicker_tween.tween_property(visual_root, "modulate:a", 0.35, 0.04)
+		_flicker_tween.tween_property(visual_root, "modulate:a", 1.0, 0.04)
 
 func apply_acceleration(delta, _input_axis):
 	velocity = velocity.move_toward(_input_axis.normalized()*max_velocity,acceleration*delta)
