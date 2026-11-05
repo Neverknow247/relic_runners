@@ -436,4 +436,8 @@ E3 and S3 defs + scenes; more guardians; enemy art polish (glow/outline shaders 
 - Post-run summary card (extracted/died, map, time, kills, stacks carried).
 - **S1 Homestead** survival skeleton: 15-min days (last third night), night tint, night hunts, portals sealed at night and before day 3, hunger (fish are food; survival loot adds food).
 
+- Independent review of all the above found 9 issues (1 high: host returning to hub desynced map tuning); all fixed in fe5461a.
+- Survival foraging: berry bushes + renewable containers (S1 regrows bushes/mining nodes every 150 s); village gets 10 more container markers.
+- **Hub vendor** (gold finally spent): sell fish/junk/dusts/crystals/gear, buy potions/food/basic gear, and repair everything.
+
 **Next once the designer has playtested:** tune from feedback, then the deferred Phase 2 refactors (EnemyDef/FSM, player.gd split), then Phase 5 economy (vendor, repair, recycler, bench levels) and the rest of Phase 6 survival (renewable nodes, campfire, field crafting, S2 + bring-a-kit gate, run resume).
