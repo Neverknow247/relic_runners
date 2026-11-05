@@ -6,6 +6,7 @@ class_name MapRegistry
 const MAP_PATHS := [
 	"res://scenes/maps/defs/village.tres",
 	"res://scenes/maps/defs/dungeon.tres",
+	"res://scenes/maps/defs/homestead.tres",
 ]
 
 static var _defs: Dictionary = {}

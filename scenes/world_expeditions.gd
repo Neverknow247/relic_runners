@@ -92,6 +92,8 @@ func launch_expedition(expedition_id: String):
 	world.broadcast_expedition_seed.rpc(randi(), expedition_id if def != null else "")
 	# Extraction maps run on a raid clock (0 = none, e.g. survival / unset).
 	world.client_start_raid_timer.rpc(def.duration_sec if def != null else 0.0)
+	# Survival maps run on a day clock instead.
+	world.client_start_day_clock.rpc(def != null and def.style == "survival")
 
 	for peer_id in world.player_locations.keys():
 		world.server_change_player_location(

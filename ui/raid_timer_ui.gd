@@ -35,6 +35,10 @@ func _process(_delta: float) -> void:
 		_warned_5 = false
 		_warned_1 = false
 		return
+	# Survival maps: show the day clock instead of a raid countdown.
+	if world.has_method("survival_active") and world.survival_active():
+		_show_day_clock(world)
+		return
 	var left: float = world.raid_seconds_left()
 	if left < 0.0:
 		_label.visible = false
@@ -57,3 +61,18 @@ func _process(_delta: float) -> void:
 	else:
 		_label.add_theme_color_override("font_color", Color(0.92, 0.92, 0.92))
 		_label.modulate.a = 1.0
+
+func _show_day_clock(world) -> void:
+	_label.visible = true
+	_label.modulate.a = 1.0
+	var secs := int(ceil(world.seconds_to_phase_change()))
+	var t := "%d:%02d" % [floori(secs / 60.0), secs % 60]
+	var day: int = world.survival_day()
+	var map: MapDef = Stats.current_map()
+	if world.is_night():
+		_label.add_theme_color_override("font_color", Color(0.6, 0.7, 1.0))
+		_label.text = "NIGHT %d  -  dawn in %s  -  portals sealed" % [day, t]
+	else:
+		_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.75))
+		var portal_note := "portals open" if day >= map.extract_from_day else "portals open on day %d" % map.extract_from_day
+		_label.text = "DAY %d  -  dusk in %s  -  %s" % [day, t, portal_note]

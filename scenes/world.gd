@@ -224,11 +224,103 @@ func client_raid_expired() -> void:
 	if lp != null and my_zone != "hub" and lp.has_method("raid_expired"):
 		lp.raid_expired()
 
-func _process(_delta: float) -> void:
+# --- Day clock (survival maps) -------------------------------------------------
+# Starts at dawn of day 1 when a survival map launches; each peer runs it on its own
+# clock from the server's start signal (like the raid clock). Night tints the view,
+# enemies hunt the players, and portals stay sealed (see exit_portal).
+var _day_start_msec := 0
+var _day_tint: CanvasModulate = null
+var _hunt_timer := 0.0
+const NIGHT_TINT := Color(0.32, 0.36, 0.55)
+
+@rpc("authority", "call_local", "reliable")
+func client_start_day_clock(active: bool) -> void:
+	_day_start_msec = Time.get_ticks_msec() if active else 0
+
+func survival_active() -> bool:
+	var map := Stats.current_map()
+	return _day_start_msec > 0 and map != null and map.style == "survival" and my_zone != "hub"
+
+func survival_elapsed() -> float:
+	return (Time.get_ticks_msec() - _day_start_msec) / 1000.0 if _day_start_msec > 0 else 0.0
+
+# 1-based day number.
+func survival_day() -> int:
+	var map := Stats.current_map()
+	if map == null or map.day_length_sec <= 0.0:
+		return 1
+	return int(survival_elapsed() / map.day_length_sec) + 1
+
+# 0..1 through the current day; night is the last night_fraction of it.
+func survival_day_phase() -> float:
+	var map := Stats.current_map()
+	if map == null or map.day_length_sec <= 0.0:
+		return 0.0
+	return fmod(survival_elapsed(), map.day_length_sec) / map.day_length_sec
+
+func is_night() -> bool:
+	var map := Stats.current_map()
+	return survival_active() and survival_day_phase() >= 1.0 - map.night_fraction
+
+# Seconds until the next dusk (during day) or dawn (during night).
+func seconds_to_phase_change() -> float:
+	var map := Stats.current_map()
+	if map == null:
+		return 0.0
+	var phase := survival_day_phase()
+	var dusk := 1.0 - map.night_fraction
+	var to := (dusk - phase) if phase < dusk else (1.0 - phase)
+	return to * map.day_length_sec
+
+func can_extract_now() -> bool:
+	if !survival_active():
+		return true
+	return !is_night() and survival_day() >= Stats.current_map().extract_from_day
+
+func _update_day_tint(delta: float) -> void:
+	if _day_tint == null:
+		_day_tint = CanvasModulate.new()
+		add_child(_day_tint)
+	var target := Color.WHITE
+	if survival_active():
+		# Ease into night over the last 8% of daylight and out over the first 4%.
+		var map := Stats.current_map()
+		var phase := survival_day_phase()
+		var dusk := 1.0 - map.night_fraction
+		var k := 0.0
+		if phase >= dusk:
+			k = clampf((1.0 - phase) / 0.04, 0.0, 1.0) if phase > 0.96 else 1.0
+		elif phase > dusk - 0.08:
+			k = (phase - (dusk - 0.08)) / 0.08
+		target = Color.WHITE.lerp(NIGHT_TINT, k)
+	_day_tint.color = _day_tint.color.lerp(target, clampf(delta * 3.0, 0.0, 1.0))
+
+# Server, at night: pull every enemy in an occupied room toward the players.
+func _night_hunt(delta: float) -> void:
+	if !is_night():
+		_hunt_timer = 0.0
+		return
+	_hunt_timer -= delta
+	if _hunt_timer > 0.0:
+		return
+	_hunt_timer = Stats.current_map().night_hunt_interval
+	for pid in player_locations:
+		var loc: Dictionary = player_locations[pid]
+		if loc["zone"] == "hub" or !players.has_node(str(pid)):
+			continue
+		var p = players.get_node(str(pid))
+		for e in get_tree().get_nodes_in_group("enemies"):
+			if is_instance_valid(e) and !e.is_dead and e.global_position.distance_to(p.global_position) < 9000.0:
+				e.hear_world_noise(p.global_position)
+
+func _process(delta: float) -> void:
+	_update_day_tint(delta)
 	if !multiplayer.has_multiplayer_peer() or !multiplayer.is_server():
 		return
 	if _raid_deadline_msec > 0 and party_state == PartyState.EXPEDITION and Time.get_ticks_msec() >= _raid_deadline_msec:
 		client_raid_expired.rpc()
+	if party_state == PartyState.EXPEDITION:
+		_night_hunt(delta)
 
 func _on_server_disconnected():
 	if my_zone != "hub" and !_pre_run_loadout.is_empty():

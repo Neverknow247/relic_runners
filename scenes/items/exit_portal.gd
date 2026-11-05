@@ -141,6 +141,10 @@ func server_request_activate() -> void:
 func _start_charging() -> void:
 	if state != State.LOCKED:
 		return
+	# Survival: portals are sealed at night and before the map's extract_from_day.
+	var world_node = get_tree().get_first_node_in_group("world")
+	if world_node != null and world_node.has_method("can_extract_now") and !world_node.can_extract_now():
+		return
 	state = State.CHARGING
 	_broadcast_state(State.CHARGING, charge_time)
 	# Kick off the extraction waves alongside the charge countdown (parallel

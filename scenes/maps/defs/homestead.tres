@@ -1,0 +1,34 @@
+[gd_resource type="Resource" script_class="MapDef" format=3]
+
+[ext_resource type="Script" path="res://scenes/maps/map_def.gd" id="1_mapdef"]
+
+[resource]
+script = ExtResource("1_mapdef")
+id = "homestead"
+display_name = "S1 - Homestead"
+style = "survival"
+tier = 1
+unlock_after = ""
+zone = "village"
+room = "main"
+spawn = "random_portal"
+roster = {
+"circle": 30,
+"pentagon": 20,
+"square": 5,
+"triangle": 45
+}
+silver_chance = 0.05
+gold_chance = 0.0
+pack_mult = 0.8
+spawn_chance_mult = 1.0
+affix_pool = Array[String](["fast", "armored"])
+container_silver_chance = 0.08
+container_gold_chance = 0.0
+container_type_weights = {}
+day_length_sec = 900.0
+night_fraction = 0.33
+extract_from_day = 3
+night_hunt_interval = 10.0
+duration_sec = 0.0
+tokens_per_player = 2

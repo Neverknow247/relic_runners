@@ -42,6 +42,16 @@ class_name MapDef
 ## container type -> weight. Empty = container_spawner's own type_weights.
 @export var container_type_weights: Dictionary = {}
 
+@export_group("Survival (style = survival)")
+## Seconds per full day (day + night).
+@export var day_length_sec := 900.0
+## Fraction of each day that is night (the dangerous part).
+@export_range(0.0, 0.9) var night_fraction := 0.33
+## Portals only open in DAYLIGHT, and only from this day on (1-based).
+@export var extract_from_day := 3
+## While it's night, every enemy in the room is pulled toward the players this often.
+@export var night_hunt_interval := 10.0
+
 @export_group("Pacing (later phases)")
 ## Raid timer for extraction maps in seconds (0 = none yet; Phase 4).
 @export var duration_sec := 0.0
