@@ -97,15 +97,14 @@ func setup_spell(_direction: Vector2, _spell_data: Dictionary, caster_id: int = 
 	hitbox.attacker_crit_rate = spell_data.get("attacker_crit_rate", 0.0)
 	hitbox.attacker_crit_damage = spell_data.get("attacker_crit_damage", 0.0)
 	hitbox.is_crit = crit
+	hitbox.from_player = not spell_data.get("from_enemy", false)
 	# Free after the form's ACTUAL lifetime. Started here (not in _ready) because
 	# lifetime is only known once setup_spell runs — the stationary pierce forms
 	# (burst/cone/beam/rain) rely on this timer for their whole duration since
-	# they don't die on hit or by leaving the screen.
+	# they don't die on hit. Moving shots die at lifetime OR max_distance — never
+	# on leaving a screen: each peer simulates its own copy, so a screen-exit free
+	# on the HOST deleted shots still flying toward a distant client (lost hits).
 	get_tree().create_timer(lifetime).timeout.connect(_expire)
-
-func _on_visible_on_screen_notifier_2d_screen_exited() -> void:
-	pass
-	queue_free()
 
 func _on_hitbox_area_entered(area: Area2D) -> void:
 	# Pass over anything this projectile can't damage — the caster's own hurtbox,

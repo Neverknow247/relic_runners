@@ -416,6 +416,8 @@ func build_spell_data(weapon: String, element: String, form: String, rarity: Str
 		# than read from SpellData in projectile.gd, because spell_data.gd preloads
 		# the projectile scenes and a back-reference would form a compile cycle.
 		"max_distance": form_data.get("max_distance", ENEMY_PROJECTILE_MAX_RANGE if is_enemy else PROJECTILE_MAX_RANGE),
+		# Who fired it: drives Hitbox.from_player (no player-on-player friendly fire).
+		"from_enemy": is_enemy,
 	}
 
 func build_weapon_spell_data(weapon_id: String, form_index: int) -> Dictionary:

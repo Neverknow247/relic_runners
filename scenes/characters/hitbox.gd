@@ -18,15 +18,22 @@ var attacker_crit_rate: float = 0.0
 var attacker_crit_damage: float = 0.0
 # Legacy field, no longer the source of truth (crit is resolved at the defender).
 var is_crit: bool = false
+# True when a PLAYER fired this (set from spell_data["from_enemy"] in
+# projectile.setup_spell). Player shots never hurt players — no friendly fire.
+var from_player := true
 
 # The single source of truth for "should this hitbox damage that hurtbox?" — used
 # by every damage path (this Area2D auto-hit, plus the DoT ticks in beam/rain/cone
-# and the ball's explosion, which drive damage themselves). Only ever skips the
-# caster's OWN hurtbox. (Enemies avoid hitting each other via AI — they hold fire
+# and the ball's explosion, which drive damage themselves). Skips the caster's OWN
+# hurtbox, and any player hurtbox for a player-fired shot (friendly fire is off
+# between players — 3-player co-op at this zoom/bullet speed was unreadable).
+# (Enemies avoid hitting each other via AI — they hold fire
 # when an ally is in their firing lane, see enemy._ally_in_firing_lane — rather than
 # a bullet-level immunity, so a genuinely mis-aimed shot can still clip an ally.)
 func can_hit(hurtbox: Hurtbox) -> bool:
 	if caster_id != 0 and hurtbox.owner_id == caster_id:
+		return false
+	if from_player and hurtbox.is_player:
 		return false
 	return true
 

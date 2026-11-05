@@ -1797,6 +1797,7 @@ func _enter_tree() -> void:
 
 func _ready() -> void:
 	hurtbox.owner_id = name.to_int()
+	hurtbox.is_player = true
 	hurtbox.hurt.connect(_on_hurtbox_hurt)
 	if is_multiplayer_authority():
 		player_camera.make_current()
