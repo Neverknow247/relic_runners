@@ -25,7 +25,6 @@ config/icon="res://icon.svg"
 [autoload]
 
 Utils="*res://singletons/utils.gd"
-Events="*res://singletons/events.gd"
 Sounds="*res://singletons/sounds.tscn"
 Stats="*res://singletons/stats.gd"
 GlobalSteam="*uid://5y571qbak8hi"

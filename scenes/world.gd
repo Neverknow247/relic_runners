@@ -64,10 +64,8 @@ enum PartyState {
 	HUB,
 	# The host opened an expedition door: every player has a kit popup up, and
 	# the party only travels once all of them have answered (see
-	# world_expeditions.gd's kit-selection flow). COUNTDOWN is retained for the
-	# enum's stability but is no longer entered.
+	# world_expeditions.gd's kit-selection flow).
 	KIT_SELECTION,
-	COUNTDOWN,
 	EXPEDITION
 }
 
@@ -81,7 +79,6 @@ var kit_expected_peers: Array = []
 var kit_answers: Dictionary = {}
 var expedition_zone := "hub"
 var expedition_room := "main"
-var expedition_countdown_time := 1
 
 var shutting_down = false
 
@@ -627,14 +624,6 @@ func peer_ready_in_room(peer_id: int, room_key: String) -> bool:
 func clear_peer_room_ready(peer_id: int) -> void:
 	for room_key in room_ready_peers.keys():
 		room_ready_peers[room_key].erase(peer_id)
-
-@rpc("authority", "call_remote", "reliable")
-func client_set_known_players(_known_ids):
-	push_warning("client_set_known_players is deprecated")
-
-@rpc("authority", "call_remote", "reliable")
-func client_set_visible_players(_visible_ids):
-	push_warning("client_set_visible_players is deprecated")
 
 @rpc("authority", "call_local", "reliable")
 func client_prepare_player_room_change(peer_id: int):
