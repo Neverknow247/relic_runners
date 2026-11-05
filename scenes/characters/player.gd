@@ -2680,6 +2680,20 @@ func cast_spell(spell_data: Dictionary, reset_sequence: bool = true):
 	var atk := get_attack()
 	var cr := get_crit_rate()
 	var cd := get_crit_damage()
+	# A weapon's basic attack can be a fan (tome); everything else is one shot.
+	var pellets: int = maxi(1, int(spell_data.get("pellets", 1)))
+	var spread := deg_to_rad(float(spell_data.get("spread_deg", 0.0)))
+	for i in pellets:
+		var frac := 0.0 if pellets <= 1 else float(i) / float(pellets - 1) - 0.5
+		_spawn_cast(world, spawn_position, direction.rotated(frac * spread), spell_data, atk, cr, cd)
+	if reset_sequence:
+		spell_input_sequence.clear()
+		refresh_spell_ui()
+
+
+# One projectile of a cast: spawn our predicted copy locally, and ask the server to
+# spawn the authoritative one (and relay it to everyone else in the room).
+func _spawn_cast(world, spawn_position: Vector2, direction: Vector2, spell_data: Dictionary, atk: float, cr: float, cd: float) -> void:
 	# Client-side prediction: spawn OUR shot locally right now so it never waits on a
 	# server round-trip. The request below tells the server + other players to spawn
 	# their copies but skips echoing back to us (no duplicate). On a client this local
@@ -2714,9 +2728,6 @@ func cast_spell(spell_data: Dictionary, reset_sequence: bool = true):
 			atk, cr, cd,
 			spell_data.get("rarity", "common")
 		)
-	if reset_sequence:
-		spell_input_sequence.clear()
-		refresh_spell_ui()
 
 #@rpc("any_peer", "call_local", "reliable")
 func spawn_spell_local(

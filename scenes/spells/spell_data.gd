@@ -134,12 +134,20 @@ const WEAPONS = {
 		"lifetime": 1.0,
 		"crit_chance": 0.0,
 	},
+	# basic_* = how this weapon's free BASIC attack (form "default") plays, so weapon
+	# choice is the moment-to-moment build (spells are the stratagems). All three land
+	# near ~290 DPS at a 95 Attack roll, with very different feel:
+	#   basic_cooldown s/shot, basic_damage x Attack per pellet, basic_size x size,
+	#   basic_pellets + basic_spread_deg = an even fan (1 = single shot).
 	"tome": {
 		"damage": 1.15,
 		"speed": 0.85,
 		"size": 1.15,
 		"lifetime": 1.15,
 		"crit_chance": 5.0,
+		# 3-shot spread: forgiving, best up close.
+		"basic_cooldown": 0.5, "basic_damage": 0.5, "basic_size": 0.9,
+		"basic_pellets": 3, "basic_spread_deg": 14.0,
 	},
 	"orb": {
 		"damage": 1.0,
@@ -147,6 +155,9 @@ const WEAPONS = {
 		"size": 1.0,
 		"lifetime": 1.0,
 		"crit_chance": 5.0,
+		# Slow, heavy, fat shot: rewards landing each one.
+		"basic_cooldown": 0.55, "basic_damage": 1.75, "basic_size": 1.5,
+		"basic_pellets": 1, "basic_spread_deg": 0.0,
 	},
 	"wand": {
 		"damage": 0.85,
@@ -154,6 +165,9 @@ const WEAPONS = {
 		"size": 0.85,
 		"lifetime": 0.85,
 		"crit_chance": 5.0,
+		# Fast light stream: hold and hose.
+		"basic_cooldown": 0.18, "basic_damage": 0.55, "basic_size": 0.75,
+		"basic_pellets": 1, "basic_spread_deg": 0.0,
 	},
 }
 
@@ -384,6 +398,17 @@ func build_spell_data(weapon: String, element: String, form: String, rarity: Str
 		proj_speed = BASE_SPEED * weapon_data["speed"] * element_data["speed"] * form_data["speed"]
 		proj_size = BASE_SIZE * weapon_data.get("size", 1.0) * form_data.get("size", 1.0)
 		proj_lifetime = BASE_LIFETIME * weapon_data.get("lifetime", 1.0) * form_data.get("lifetime", 1.0)
+	# The weapon's own basic-attack feel (see WEAPONS basic_*); players only.
+	var damage_mult: float = form_data.get("damage", 1.0)
+	var attack_cooldown: float = form_data.get("attack_cooldown", 0.35) * cooldown_mult
+	var pellets := 1
+	var spread_deg := 0.0
+	if !is_enemy and form == "default":
+		damage_mult *= weapon_data.get("basic_damage", 1.0)
+		attack_cooldown = weapon_data.get("basic_cooldown", attack_cooldown)
+		proj_size *= weapon_data.get("basic_size", 1.0)
+		pellets = int(weapon_data.get("basic_pellets", 1))
+		spread_deg = float(weapon_data.get("basic_spread_deg", 0.0))
 	return {
 		"scene": form_data["scene"],
 		"weapon": weapon,
@@ -397,11 +422,14 @@ func build_spell_data(weapon: String, element: String, form: String, rarity: Str
 		# this and stay flat (see enemy.gd). "damage" itself is a placeholder that's
 		# always overridden at spawn.
 		"damage": 0.0,
-		"damage_mult": form_data.get("damage", 1.0),
+		"damage_mult": damage_mult,
 		"speed": proj_speed,
 		"size": proj_size,
 		"lifetime": proj_lifetime,
-		"attack_cooldown": form_data.get("attack_cooldown", 0.35) * cooldown_mult,
+		"attack_cooldown": attack_cooldown,
+		# Basic-attack fan for the caster's weapon (1 = single shot; see cast_spell).
+		"pellets": pellets,
+		"spread_deg": spread_deg,
 		"spawn_offset": form_data.get("spawn_offset", 288.0),
 		"mana_cost": form_data.get("mana_cost", 0.0),
 		"color": element_data["color"],
