@@ -90,6 +90,8 @@ func launch_expedition(expedition_id: String):
 	# before the location-change RPCs below so it lands before any peer's
 	# copy of the room scene finishes loading and reads it.
 	world.broadcast_expedition_seed.rpc(randi(), expedition_id if def != null else "")
+	# Extraction maps run on a raid clock (0 = none, e.g. survival / unset).
+	world.client_start_raid_timer.rpc(def.duration_sec if def != null else 0.0)
 
 	for peer_id in world.player_locations.keys():
 		world.server_change_player_location(

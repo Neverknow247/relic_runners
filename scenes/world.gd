@@ -179,6 +179,35 @@ var _pre_run_loadout: Dictionary = {}
 func clear_pre_run_loadout() -> void:
 	_pre_run_loadout.clear()
 
+# --- Raid clock (extraction maps) --------------------------------------------
+# MapDef.duration_sec. The server tells every peer the remaining time at launch;
+# each counts down on its own clock (the HUD reads raid_seconds_left). When the
+# server's clock runs out, everyone still on the expedition dies (death bag, back
+# to the hub): extract in time or lose what you carry.
+var _raid_deadline_msec := 0
+
+func raid_seconds_left() -> float:
+	if _raid_deadline_msec <= 0:
+		return -1.0
+	return maxf((_raid_deadline_msec - Time.get_ticks_msec()) / 1000.0, 0.0)
+
+@rpc("authority", "call_local", "reliable")
+func client_start_raid_timer(seconds: float) -> void:
+	_raid_deadline_msec = Time.get_ticks_msec() + int(seconds * 1000.0) if seconds > 0.0 else 0
+
+@rpc("authority", "call_local", "reliable")
+func client_raid_expired() -> void:
+	_raid_deadline_msec = 0
+	var lp = get_local_player()
+	if lp != null and my_zone != "hub" and lp.has_method("raid_expired"):
+		lp.raid_expired()
+
+func _process(_delta: float) -> void:
+	if !multiplayer.has_multiplayer_peer() or !multiplayer.is_server():
+		return
+	if _raid_deadline_msec > 0 and party_state == PartyState.EXPEDITION and Time.get_ticks_msec() >= _raid_deadline_msec:
+		client_raid_expired.rpc()
+
 func _on_server_disconnected():
 	if my_zone != "hub" and !_pre_run_loadout.is_empty():
 		for key in _pre_run_loadout:

@@ -25,5 +25,5 @@ spawn_chance_mult = 1.0
 container_silver_chance = 0.25
 container_gold_chance = 0.05
 container_type_weights = {}
-duration_sec = 0.0
+duration_sec = 1800.0
 tokens_per_player = 3
