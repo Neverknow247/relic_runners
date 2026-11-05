@@ -11,9 +11,11 @@
 [ext_resource type="PackedScene" path="res://ui/crafting_ui.tscn" id="9_crafting"]
 [ext_resource type="PackedScene" path="res://ui/fishing_ui.tscn" id="10_fishing"]
 [ext_resource type="PackedScene" path="res://ui/map_ui.tscn" id="11_map"]
+[ext_resource type="Script" path="res://scenes/effects/camera_shake.gd" id="12_camshake"]
 
 [node name="player_camera" type="Camera2D"]
 zoom = Vector2(3, 3)
+script = ExtResource("12_camshake")
 
 [node name="spell_list_ui" parent="." instance=ExtResource("1_3wdvw")]
 

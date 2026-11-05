@@ -115,8 +115,10 @@ func _on_hitbox_area_entered(area: Area2D) -> void:
 	# of being consumed by the first one they touch.
 	if pierce:
 		return
+	Fx.puff(get_tree(), global_position, modulate, scale.x)
 	queue_free()
 
 func _on_hitbox_body_entered(_body: Node2D) -> void:
 	if stop_on_wall:
+		Fx.puff(get_tree(), global_position, modulate, scale.x * 0.7)
 		queue_free()

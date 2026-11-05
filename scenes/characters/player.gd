@@ -1962,6 +1962,10 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 @rpc("authority", "call_local", "unreliable")
 func _broadcast_damage_number(amount: float, is_crit: bool) -> void:
 	_spawn_damage_number(amount, Color(1, 0.3, 0.25), is_crit)
+	Fx.flash(sprite, true)
+	# Getting hit kicks the screen — scaled by how big a chunk of your health it was.
+	if is_multiplayer_authority():
+		player_camera.add_trauma(clampf(0.25 + amount / maxf(max_health, 1.0) * 2.5, 0.25, 0.8))
 
 func take_damage(amount: float) -> void:
 	if death_state != DeathState.ALIVE:

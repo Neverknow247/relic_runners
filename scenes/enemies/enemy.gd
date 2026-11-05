@@ -130,7 +130,14 @@ var health := max_health:
 			health_bar.value = health
 var is_dead := false:
 	set(value):
+		var was_dead := is_dead
 		is_dead = value
+		# Death shatter + a little shake, once, on the alive->dead edge (the synced
+		# setter re-runs every tick on clients). Skipped for enemies restored as
+		# already-dead on room load (spawned this very moment).
+		if value and !was_dead and is_inside_tree() and Engine.get_process_frames() - _spawn_frame > 5:
+			Fx.shatter(get_tree(), global_position, body.fill_color if body else Color.WHITE, clampf(body.half_size / 56.0, 0.7, 1.6) if body else 1.0)
+			Fx.shake_at(get_tree(), global_position, 0.22)
 		if value:
 			velocity = Vector2.ZERO
 			if visual_root:
@@ -566,7 +573,15 @@ func alert_nearby_group(known_target: Hurtbox, known_point: Vector2) -> void:
 		else:
 			member.start_investigating(member.global_position.direction_to(known_point))
 
+# Frame this enemy entered the tree (see is_dead's death-FX guard).
+var _spawn_frame := 0
+# Server-side knockback impulse (u/s), decays fast; see KNOCKBACK_*.
+var _knockback := Vector2.ZERO
+const KNOCKBACK_SPEED := 1400.0
+const KNOCKBACK_DECAY := 9000.0
+
 func _ready() -> void:
+	_spawn_frame = Engine.get_process_frames()
 	hurtbox.hurt.connect(_on_hurtbox_hurt)
 	detection_area.area_entered.connect(_on_detection_area_entered)
 	detection_area.area_exited.connect(_on_detection_area_exited)
@@ -704,6 +719,9 @@ func _physics_process(delta: float) -> void:
 		return
 	if is_dead:
 		return
+	if _knockback.length_squared() > 1.0:
+		move_and_collide(_knockback * delta)
+		_knockback = _knockback.move_toward(Vector2.ZERO, KNOCKBACK_DECAY * delta)
 	if NavigationServer2D.map_get_regions(nav_agent.get_navigation_map()).is_empty():
 		# The nav map hasn't finished its first sync yet (region registration
 		# happens a frame or so after scene load) — every NavigationServer2D
@@ -1750,6 +1768,11 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 		if aggro_world != null and aggro_world.players != null and aggro_world.players.has_node(str(hitbox.caster_id)):
 			_aggro[hitbox.caster_id] = _aggro.get(hitbox.caster_id, 0.0) + final_damage
 	_emit_damage_number(final_damage, is_crit)
+	# Small shove away from the hit (direct hits only; DoT ticks would jitter).
+	if hitbox != null and is_instance_valid(hitbox) and hitbox.auto_hit:
+		var away: Vector2 = global_position - hitbox.global_position
+		if away.length_squared() > 0.0001:
+			_knockback += away.normalized() * KNOCKBACK_SPEED * (1.5 if is_crit else 1.0)
 	# Getting hit is an instant, unmissable cue of where the attack came
 	# from — snap facing straight there instead of easing over with
 	# turn_speed like normal tracking does.
@@ -1798,6 +1821,7 @@ func _emit_damage_number(amount: float, is_crit: bool) -> void:
 @rpc("authority", "call_local", "unreliable")
 func _broadcast_damage_number(amount: float, is_crit: bool) -> void:
 	_spawn_damage_number(amount, Color(1, 0.9, 0.3), is_crit)
+	Fx.flash(body)
 
 func take_damage(amount: float) -> void:
 	if is_dead:
