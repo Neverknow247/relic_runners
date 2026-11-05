@@ -149,6 +149,13 @@ const WARDER_INTERVAL := 4.0
 const WARDER_CHARGE := 0.4
 const WARDER_DAMAGE := 120.0
 var affixes: Array = []
+# Synced (enemy.tscn) so a late arrival sees a shield the server already broke.
+var shield_up := false:
+	set(value):
+		shield_up = value
+		if body:
+			body.shield_up = value
+			body.queue_redraw()
 var _bullet_speed_mult := 1.0
 var _shield_hp := 0.0
 var _warder_timer := 0.0
@@ -631,6 +638,7 @@ func apply_shove(dir: Vector2) -> void:
 		return
 	_knockback += dir.normalized() * SHOVE_SPEED
 	_cancel_windup()
+	_warder_charge = 0.0
 	cast_timer = maxf(cast_timer, SHOVE_STAGGER)
 
 func _ready() -> void:
@@ -857,11 +865,12 @@ func _physics_process(delta: float) -> void:
 		# of the spell's reach; short-range forms are simply never planned.
 		_update_stuck_state(delta)
 		var move_intent := Vector2.ZERO
-		if distance > preferred_range + RANGE_BUFFER:
+		var hold_range := _effective_preferred_range(current_target)
+		if distance > hold_range + RANGE_BUFFER:
 			# PURSUE — we've drifted past the hold band; close the gap back to it, a bit
 			# faster than normal (we're outside our range, catching up).
 			move_intent = dir * move_speed * PURSUE_SPEED_MULT
-		elif distance < preferred_range - RANGE_BUFFER:
+		elif distance < hold_range - RANGE_BUFFER:
 			# TOO CLOSE — back off to keep our distance (still facing + firing).
 			move_intent = -dir * move_speed
 		else:
@@ -892,6 +901,10 @@ func _physics_process(delta: float) -> void:
 		# the main loop, so we loose the shot the instant the lane clears.
 		if not _ally_in_firing_lane(current_visible_point):
 			update_casting(delta, distance)
+		elif _windup_left > 0.0:
+			# Lane blocked mid-tell: drop the wind-up (and its root) so we can move to
+			# a clean lane, and wind up fresh (with a fresh tell) once it's clear.
+			_cancel_windup()
 	elif can_see and distance <= cast_range and on_screen:
 		# We can SEE them (an edge peeking past cover) but a wall blocks a real shot at
 		# their center — planting here just plinks the corner (the bug where an enemy
@@ -1532,7 +1545,9 @@ func _closest_target(hurtboxes: Array) -> Hurtbox:
 # +-2560 x +-1440 around themselves. Enemies only fire at a target that is inside
 # that target's screen (minus a margin), so nothing ever shoots you from off-screen.
 const TARGET_SCREEN_HALF := Vector2(2560.0, 1440.0)
-const SCREEN_FIRE_MARGIN := 140.0
+# 140 of edge slack plus the camera's max look-ahead lean (camera_shake.gd
+# LOOK_AHEAD_MAX), since the target's view can be shifted that far off-centre.
+const SCREEN_FIRE_MARGIN := 140.0 + 320.0
 var windup_sec := 0.0
 var _windup_aim_lock := false
 var _windup_root := false
@@ -1591,6 +1606,17 @@ func _release_token() -> void:
 	holders.erase(self)
 	pool[_token_target_id] = holders
 	_token_target_id = 0
+
+# How far from `t` we may hold and still be inside its fire box along our current
+# bearing: keeps long-range shapes (square/hexagon/circle) from parking just
+# off-screen above/below and flip-flopping between chase and back-off.
+func _effective_preferred_range(t: Node2D) -> float:
+	var d := (global_position - t.global_position).normalized()
+	var hx := TARGET_SCREEN_HALF.x - SCREEN_FIRE_MARGIN
+	var hy := TARGET_SCREEN_HALF.y - SCREEN_FIRE_MARGIN
+	var tx := INF if absf(d.x) < 0.0001 else hx / absf(d.x)
+	var ty := INF if absf(d.y) < 0.0001 else hy / absf(d.y)
+	return minf(preferred_range, minf(tx, ty) * 0.9)
 
 func _target_on_screen(t: Node2D) -> bool:
 	var d := t.global_position - global_position
@@ -1680,6 +1706,8 @@ func _show_recover(duration: float) -> void:
 func reset_casting() -> void:
 	_cancel_windup()
 	_release_token()
+	# An interrupted burst starts over (token + wind-up), never resumes mid-way.
+	_burst_shots = 0
 	spell_input_sequence.clear()
 	target_recipe_sequence.clear()
 	tap_timer = 0.0
@@ -1836,8 +1864,7 @@ func _roll_affixes() -> void:
 	_warder_timer = WARDER_INTERVAL * 0.5
 	if body:
 		body.affixes = affixes
-		body.shield_up = _shield_hp > 0.0
-		body.queue_redraw()
+	shield_up = _shield_hp > 0.0
 
 # Server, from _on_hurtbox_hurt: armor and shield between a hit and our health.
 func _apply_affix_defense(dmg: float, advantage: bool) -> float:
@@ -1867,12 +1894,34 @@ func _emit_shield_break() -> void:
 		else:
 			_show_shield_break.rpc_id(pid)
 
+# The warder's own tell (a red flash on the body), separate from the attack
+# wind-up's tween/laser so the two never cancel each other's warning.
+func _emit_warder_tell() -> void:
+	var targets := _room_rpc_targets()
+	if targets.is_empty():
+		_show_warder_tell.rpc()
+		return
+	var server_id := multiplayer.get_unique_id()
+	for pid in targets:
+		if pid == server_id:
+			_show_warder_tell()
+		else:
+			_show_warder_tell.rpc_id(pid)
+
 @rpc("authority", "call_local", "reliable")
-func _show_shield_break() -> void:
+func _show_warder_tell() -> void:
 	if body == null:
 		return
-	body.shield_up = false
-	body.queue_redraw()
+	body.modulate = Color(1.6, 0.4, 0.35)
+	var t := body.create_tween()
+	t.tween_property(body, "modulate", Color.WHITE, WARDER_CHARGE)
+	Sounds.play_sfx("windup", global_position, -2.0, 0.0)
+
+@rpc("authority", "call_local", "reliable")
+func _show_shield_break() -> void:
+	shield_up = false
+	if body == null:
+		return
 	Fx.shatter(get_tree(), global_position, body.fill_color.lightened(0.45), 1.2)
 	Sounds.play_sfx("enemy_die", global_position, -4.0)
 
@@ -1889,7 +1938,7 @@ func _update_warder(delta: float, distance: float) -> void:
 	if _warder_timer <= 0.0 and distance <= WARDER_RANGE:
 		_warder_timer = WARDER_INTERVAL
 		_warder_charge = WARDER_CHARGE
-		_emit_windup(WARDER_CHARGE, global_position, false)
+		_emit_warder_tell()
 
 func fire_spell(weapon: String, element: String, form: String) -> void:
 	if current_target == null:

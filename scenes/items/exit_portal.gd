@@ -98,6 +98,16 @@ func _process(delta: float) -> void:
 		State.OPEN:
 			var world = get_tree().get_first_node_in_group("world")
 			if world:
+				var lp = world.get_local_player()
+				# Downed/dying players can't extract (interact is their give-up key).
+				if lp == null or !lp.is_alive():
+					return
+				# Survival: an open portal still won't take you at night.
+				if world.has_method("can_extract_now") and !world.can_extract_now():
+					return
+				if _extracting:
+					return
+				_extracting = true
 				_record_extraction()
 				world.mark_run_extracted()
 				world.request_location_changes("hub", "main", "default")
@@ -110,6 +120,9 @@ func _process(delta: float) -> void:
 # "must be LOCKED" guard means it can never progress past this.
 # A successful extraction from this expedition's map counts toward the map-board
 # ladder (MapDef.unlock_after). Local save; written when we arrive in the hub.
+# Set once we've stepped through, so a double press can't count twice.
+var _extracting := false
+
 func _record_extraction() -> void:
 	var map_id: String = Stats.current_map_id
 	if map_id == "":

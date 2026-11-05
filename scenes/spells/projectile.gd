@@ -159,6 +159,13 @@ func _on_hitbox_area_entered(area: Area2D) -> void:
 	# and allied enemies (so an enemy bullet doesn't die on an enemy in the way).
 	if area is Hurtbox and not hitbox.can_hit(area):
 		return
+	# Rolled through: the bullet keeps flying (EtG-style) rather than vanishing on
+	# an invulnerable player. (Only the victim's own peer knows its i-frames, so
+	# other peers may still show it popping; damage is decided on the victim.)
+	if area is Hurtbox and area.is_player:
+		var owner_node = area.get_parent()
+		if owner_node != null and owner_node.has_method("is_invulnerable") and owner_node.is_invulnerable():
+			return
 	# Piercing forms (AoE zones, wedges, beams) pass through hurtboxes instead
 	# of being consumed by the first one they touch.
 	if pierce:

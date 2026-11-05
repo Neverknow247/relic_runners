@@ -222,9 +222,11 @@ const ROLL_IFRAMES := 0.2
 const ROLL_COOLDOWN := 0.7
 # Speed you exit the roll at (a short brake instead of carrying 2500 into a walk).
 const ROLL_EXIT_SPEED := 1000.0
-# After any hit, a brief window where further hits are ignored, so a burst of
-# pellets or a stream can't stack damage in a single frame.
+# After a HEAVY hit (>= HURT_IFRAMES_THRESHOLD, e.g. a sniper shot), a brief
+# window where further hits are ignored, so a big hit can't be stacked. Normal
+# pellets/streams don't grant it: enemy volleys are tuned on all pellets landing.
 const HURT_IFRAMES := 0.4
+const HURT_IFRAMES_THRESHOLD := 150.0
 var _roll_timer := 0.0
 var _roll_cooldown_timer := 0.0
 var _roll_direction := Vector2.ZERO
@@ -1999,7 +2001,7 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 	final_damage *= 1.0 - SpellData.damage_reduction(get_defense())
 	_broadcast_damage_number.rpc(final_damage, is_crit, advantage)
 	take_damage(final_damage)
-	if final_damage > 0.0 and !_is_in_hub():
+	if final_damage >= HURT_IFRAMES_THRESHOLD and !_is_in_hub():
 		_iframe_timer = maxf(_iframe_timer, HURT_IFRAMES)
 		_start_hurt_flicker(HURT_IFRAMES)
 	# Getting hit wears down equipped gear; a piece that breaks loses its trait.
@@ -2461,6 +2463,11 @@ func snap_to_8_directions(direction: Vector2) -> Vector2:
 
 func is_moving(_input_axis):
 	return _input_axis != Vector2.ZERO
+
+# Invulnerable right now (rolling or post-heavy-hit): projectiles pass through us
+# instead of being eaten (see projectile._on_hitbox_area_entered).
+func is_invulnerable() -> bool:
+	return _iframe_timer > 0.0
 
 func _can_start_roll() -> bool:
 	if !Input.is_action_just_pressed("jump"):

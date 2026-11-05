@@ -47,7 +47,9 @@ func _next_backup_slot() -> int:
 	for slot in range(1, BACKUP_SLOTS + 1):
 		if FileAccess.file_exists(_backup_path(slot)):
 			var t := FileAccess.get_modified_time(_backup_path(slot))
-			if t > newest_time:
+			# >= : modified times are 1 s resolution, so on a tie prefer the later
+			# slot (written later in the ring's order).
+			if t >= newest_time:
 				newest_time = t
 				newest_slot = slot
 	return (newest_slot % BACKUP_SLOTS) + 1

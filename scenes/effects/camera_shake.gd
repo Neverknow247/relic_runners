@@ -11,7 +11,7 @@ const TRAUMA_DECAY := 1.8
 # Look-ahead: lean toward where you're aiming so you see more of what you're
 # shooting at than what's behind you. Fraction of the cursor offset, capped.
 const LOOK_AHEAD_FRACTION := 0.22
-const LOOK_AHEAD_MAX := 650.0
+const LOOK_AHEAD_MAX := 320.0  # keep <= enemy.gd's look-ahead allowance in SCREEN_FIRE_MARGIN
 const LOOK_AHEAD_SMOOTH := 7.0
 
 var trauma := 0.0

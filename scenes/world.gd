@@ -237,9 +237,20 @@ const NIGHT_TINT := Color(0.32, 0.36, 0.55)
 func client_start_day_clock(active: bool) -> void:
 	_day_start_msec = Time.get_ticks_msec() if active else 0
 
+# For THIS peer's own HUD/hunger: a survival run is on and we're out on it.
 func survival_active() -> bool:
+	return _survival_running() and my_zone != "hub"
+
+# The run itself (independent of where this peer stands). Server-side rules
+# (portal seal, night hunt) use this so the host being back in the hub doesn't
+# switch them off for clients still out.
+func _survival_running() -> bool:
 	var map := Stats.current_map()
-	return _day_start_msec > 0 and map != null and map.style == "survival" and my_zone != "hub"
+	return _day_start_msec > 0 and map != null and map.style == "survival"
+
+func _night_now() -> bool:
+	var map := Stats.current_map()
+	return _survival_running() and survival_day_phase() >= 1.0 - map.night_fraction
 
 func survival_elapsed() -> float:
 	return (Time.get_ticks_msec() - _day_start_msec) / 1000.0 if _day_start_msec > 0 else 0.0
@@ -259,8 +270,7 @@ func survival_day_phase() -> float:
 	return fmod(survival_elapsed(), map.day_length_sec) / map.day_length_sec
 
 func is_night() -> bool:
-	var map := Stats.current_map()
-	return survival_active() and survival_day_phase() >= 1.0 - map.night_fraction
+	return survival_active() and _night_now()
 
 # Seconds until the next dusk (during day) or dawn (during night).
 func seconds_to_phase_change() -> float:
@@ -273,9 +283,9 @@ func seconds_to_phase_change() -> float:
 	return to * map.day_length_sec
 
 func can_extract_now() -> bool:
-	if !survival_active():
+	if !_survival_running():
 		return true
-	return !is_night() and survival_day() >= Stats.current_map().extract_from_day
+	return !_night_now() and survival_day() >= Stats.current_map().extract_from_day
 
 func _update_day_tint(delta: float) -> void:
 	if _day_tint == null:
@@ -297,7 +307,7 @@ func _update_day_tint(delta: float) -> void:
 
 # Server, at night: pull every enemy in an occupied room toward the players.
 func _night_hunt(delta: float) -> void:
-	if !is_night():
+	if !_night_now():
 		_hunt_timer = 0.0
 		return
 	_hunt_timer -= delta
@@ -617,7 +627,9 @@ func client_change_location(zone: String, room: String, spawn_point:= "default")
 		SaveAndLoad.save_all()
 	if arriving_in_hub:
 		_pre_run_loadout.clear()
-		Stats.current_map_id = ""
+		# NOT clearing Stats.current_map_id here: the host returning first would
+		# wipe the map tuning the server still uses for clients' rooms (desync).
+		# The next launch's broadcast_expedition_seed replaces it.
 		if _run_start_msec > 0:
 			var lp_summary = get_local_player()
 			var carried := 0
