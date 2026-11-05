@@ -17,8 +17,8 @@ func _ready() -> void:
 	_label = Label.new()
 	_label.anchor_left = 0.5
 	_label.anchor_right = 0.5
-	_label.offset_left = -600
-	_label.offset_right = 600
+	_label.offset_left = -1500
+	_label.offset_right = 1500
 	_label.offset_top = 40
 	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_label.add_theme_font_size_override("font_size", 96)
