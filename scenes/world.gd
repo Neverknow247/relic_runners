@@ -438,6 +438,9 @@ func client_change_location(zone: String, room: String, spawn_point:= "default")
 		# only the persisted snapshot loses it.
 		Stats.save_data["weapons"] = []
 		Stats.save_data["active_slot"] = 0
+		# Belt quick slots are dropped on death too (player.gd), so they must be wiped
+		# here as well, or an alt+F4 mid-run kept your belt potions.
+		Stats.save_data["quick_slots"] = []
 		SaveAndLoad.save_all()
 	if arriving_in_hub:
 		var local_player = get_local_player()

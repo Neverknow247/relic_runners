@@ -2128,6 +2128,12 @@ func _drop_death_bag_and_reset_gear() -> void:
 	for weapon in weapon_slots:
 		if weapon != null:
 			dropped_items.append(_wrap_weapon_as_item(weapon).to_dict())
+	# Rings and the other EXTRA_GEAR_SLOTS are lost too. They used to be skipped
+	# here and then written back by persist_equipment(), so a ring survived a
+	# graceful death but was lost on a crash (the leave-hub wipe clears it).
+	for gear in equipped_gear.values():
+		if gear != null:
+			dropped_items.append(gear.to_dict())
 	var world = get_tree().get_first_node_in_group("world")
 	if world != null and !dropped_items.is_empty():
 		world.request_drop_death_bag(global_position, dropped_items)
@@ -2136,6 +2142,7 @@ func _drop_death_bag_and_reset_gear() -> void:
 	equipped_backpack = null
 	equipped_belt = null
 	equipped_body = null
+	equipped_gear.clear()
 	quick_slots = []
 	weapon_slots = [null, null]
 	active_slot = 0
@@ -2144,6 +2151,9 @@ func _drop_death_bag_and_reset_gear() -> void:
 	persist_inventory()
 	persist_quick_slots()
 	persist_weapon_slots()
+	# Gear came off without going through set_equipped, so recompute its effects
+	# (max health, barrier, stealth flags) from the now-empty loadout.
+	_refresh_gear_effects()
 	refresh_mana_ui()
 	refresh_spell_ui()
 	inventory_ui.refresh()

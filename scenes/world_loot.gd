@@ -59,8 +59,7 @@ func roll_loot_pool(
 		return
 	if pool.is_empty():
 		return
-	var pile := Inventory.new(LOOT_PILE_SIZE.x, LOOT_PILE_SIZE.y)
-	var dropped_anything := false
+	var piles: Array = []
 	for r in world.rng.randi_range(rolls_min, rolls_max):
 		var rarity := _roll_rarity()
 		var tier: Array = pool.get(rarity, [])
@@ -72,11 +71,9 @@ func roll_loot_pool(
 		if qty <= 0:
 			continue
 		var item := _make_loot_item(item_type, qty, weapon_override, rarity)
-		if item != null and pile.try_stack_or_place(item):
-			dropped_anything = true
-	if !dropped_anything:
-		return
-	_spawn_new_pile(world_pos, pile)
+		if item != null:
+			_place_spilling(piles, item, LOOT_PILE_SIZE)
+	_spawn_piles(world_pos, piles)
 
 # Per-entry-chance loot table (ItemData.LOOT_TABLES). Each entry is an independent
 # roll; on a hit it resolves a group/item/@token to an item and drops it. `context`
@@ -88,18 +85,16 @@ func roll_loot_table(world_pos: Vector2, table: Array, context: Dictionary, open
 		return
 	if table.is_empty():
 		return
-	var pile := Inventory.new(LOOT_PILE_SIZE.x, LOOT_PILE_SIZE.y)
-	var dropped_anything := false
+	var piles: Array = []
 	var chance_mult: float = float(context.get("chance_mult", 1.0))
 	for entry in table:
 		var chance := int(round(float(entry.get("chance", 100)) * chance_mult))
 		if world.rng.randi_range(1, 100) > chance:
 			continue
 		var item := _resolve_entry(entry, context)
-		if item != null and pile.try_stack_or_place(item):
-			dropped_anything = true
-	if dropped_anything:
-		_spawn_new_pile(world_pos, pile, open_for_peer)
+		if item != null:
+			_place_spilling(piles, item, LOOT_PILE_SIZE)
+	_spawn_piles(world_pos, piles, open_for_peer)
 
 # Resolves one loot entry (group / specific item / @token) to a built Item, or null.
 func _resolve_entry(entry: Dictionary, context: Dictionary) -> Item:
@@ -256,20 +251,51 @@ func drop_item(world_pos: Vector2, item_dict: Dictionary) -> void:
 		if entry["inventory"].try_stack_or_place(item):
 			world.broadcast_item_added.rpc(pickup_id, item.to_dict())
 			return
-	var pile := Inventory.new(LOOT_PILE_SIZE.x, LOOT_PILE_SIZE.y)
-	pile.try_stack_or_place(item)
-	_spawn_new_pile(world_pos, pile)
+	var piles: Array = []
+	_place_spilling(piles, item, LOOT_PILE_SIZE)
+	_spawn_piles(world_pos, piles)
 
 # A dying player's whole backpack + contents, dropped as one dedicated pile
 # — unlike drop_item(), this never tries to merge into some nearby unrelated
 # pile; a death bag is always its own thing, right where they fell.
+# A full loadout can need more than one bag's worth of cells, so extras spill into
+# additional bags dropped beside it instead of being silently deleted.
 func drop_death_bag(world_pos: Vector2, items: Array) -> void:
-	var pile := Inventory.new(DEATH_BAG_SIZE.x, DEATH_BAG_SIZE.y)
+	var piles: Array = []
 	for item_dict in items:
-		pile.try_stack_or_place(Item.from_dict(item_dict))
-	if pile.placements.is_empty():
+		_place_spilling(piles, Item.from_dict(item_dict), DEATH_BAG_SIZE)
+	_spawn_piles(world_pos, piles)
+
+# Puts `item` into the last pile in `piles`, opening a fresh pile of `size` when it
+# doesn't fit — so a full pile never silently swallows an item. A stackable that only
+# partly fits keeps its remainder in item.quantity (try_stack_or_place decrements as
+# it stacks), and that remainder goes into the new pile.
+func _place_spilling(piles: Array, item: Item, size: Vector2i) -> void:
+	if !piles.is_empty() and piles[-1].try_stack_or_place(item):
 		return
-	_spawn_new_pile(world_pos, pile)
+	# A huge stack can need several fresh piles: each one keeps whatever it took
+	# (even when try_stack_or_place reports false for the leftover) and the rest
+	# moves on to the next. Bounded so a bad item can't loop forever.
+	for _attempt in 64:
+		var pile := Inventory.new(size.x, size.y)
+		var placed_all := pile.try_stack_or_place(item)
+		if pile.placements.is_empty():
+			push_warning("world_loot: item '%s' doesn't fit in an empty %s pile; dropped" % [item.type, size])
+			return
+		piles.append(pile)
+		if placed_all:
+			return
+	push_warning("world_loot: gave up spilling '%s' (qty %d left)" % [item.type, item.quantity])
+
+# Spawns every non-empty pile near world_pos (each nudged apart by
+# _spawn_new_pile). Only the first auto-opens for open_for_peer.
+func _spawn_piles(world_pos: Vector2, piles: Array, open_for_peer: int = 0) -> void:
+	var first := true
+	for pile in piles:
+		if pile.placements.is_empty():
+			continue
+		_spawn_new_pile(world_pos, pile, open_for_peer if first else 0)
+		first = false
 
 func _spawn_new_pile(desired_position: Vector2, pile: Inventory, open_for_peer: int = 0) -> void:
 	var spawn_pos := _find_non_overlapping_position(desired_position)
