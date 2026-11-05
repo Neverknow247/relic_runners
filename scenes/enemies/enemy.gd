@@ -61,56 +61,62 @@ var _burst_shots := 0
 # Elemental enemies (2026-08-30): no gear / weapons / spell-casting — each SHAPE just
 # does its one signature basic attack, so it's predictable and easy to add more. The
 # archetype key == the body glyph drawn (see enemy_body.gd). Stats are ABSOLUTE, in the
-# units you tune in: `move_speed` (world u/s), `bullet_speed` (world u/s — keep these
-# ABOVE the player's 1200 move speed so shots can't be walked away from), and
+# units you tune in: `move_speed` (world u/s), `bullet_speed` (world u/s — kept at or
+# ABOVE the player's 1000 walk speed so shots can't simply be walked away from; the
+# dodge roll at 2500 is how you beat them), and
 # `attacks_per_sec` as a [min, max] RANGE (volleys/sec — a pentagon/triangle "attack"
 # is its whole fan; rolled fresh each shot so the cadence isn't metronomic).
 # `pellets` shots fan EVENLY across `spread_deg`, unless `pellet_angles_deg` gives an
 # explicit per-pellet offset list (custom/asymmetric fan). `burst_count` + `burst_cooldown` ([min,max]) = fire
 # N shots at that cadence then pause a random C-range seconds. See fire_spell.
+# Telegraphs (Phase 1): `windup_sec` = a visible wind-up before each BURST (body pulse;
+# a laser line too when `aim_lock`). `aim_lock` freezes the aim point at wind-up start
+# (no lead), so reacting to the tell beats the shot. `windup_root` = stand still while
+# winding. Numbers pass 2026-11-05 targets: player kills fodder in 1-2 hits, heavies in
+# ~3 s; no single hit over ~22% of player HP, and never untelegraphed.
 const ARCHETYPES := {
 	"pentagon": {
-		# 5-pellet shotgun fan. Per-pellet damage low (50); the full point-blank
-		# volley (~250) punishes, grazes are light. Mid range, slow cadence.
+		# 5-pellet shotgun bruiser: slow, closes in, tight fan so 3 pellets land at its
+		# hold range (full volley 350 point-blank, ~210 at range). Big 0.5 s tell.
 		"move_speed": 600.0, "strafe_speed": 420.0,
-		"preferred_range": 1100.0, "cast_range": 2560.0,
-		"max_health": 1000.0, "attack": 50.0, "attacks_per_sec": [0.55, 0.65],
+		"preferred_range": 800.0, "cast_range": 1100.0,
+		"max_health": 800.0, "attack": 70.0, "attacks_per_sec": [0.55, 0.65],
 		"burst_count": 2, "burst_cooldown": [3.0, 4.0],
-		# Custom (asymmetric) fan: center + a TIGHT inner pair (±14°) + a WIDER outer
-		# pair (±30°) → 60° total. pellet_angles_deg overrides the even spread_deg fan;
-		# spread_deg (60) is left as documentation of the overall width.
-		"pellets": 5, "spread_deg": 60.0, "pellet_angles_deg": [-30.0, -14.0, 0.0, 14.0, 30.0],
-		"bullet_speed": 1250.0, "aim_variance_deg": 5.0,
+		"pellets": 5, "spread_deg": 36.0, "pellet_angles_deg": [-18.0, -8.0, 0.0, 8.0, 18.0],
+		"bullet_speed": 1050.0, "aim_variance_deg": 5.0,
+		"windup_sec": 0.5,
 		"body_size": 64.0,
 	},
 	"triangle": {
 		# Fast, fragile 3-pellet spread; spawns in swarms (see enemy_spawner group
-		# size). Low per-pellet damage (15) = chip pressure.
+		# size). Dies in 1-2 basic hits; chip pressure.
 		"move_speed": 700.0, "strafe_speed": 480.0,
 		"preferred_range": 960.0, "cast_range": 2080.0,
-		"max_health": 330.0, "attack": 15.0, "attacks_per_sec": [0.65, 0.75],
+		"max_health": 150.0, "attack": 45.0, "attacks_per_sec": [0.65, 0.75],
 		"burst_count": 3, "burst_cooldown": [2.5, 3.0],
-		"pellets": 3, "spread_deg": 34.0, "bullet_speed": 1300.0, "aim_variance_deg": 1.0,
+		"pellets": 3, "spread_deg": 24.0, "bullet_speed": 1150.0, "aim_variance_deg": 1.0,
+		"windup_sec": 0.25,
 		"body_size": 48.0,
 	},
 	"circle": {
-		# Rapid single-shot stream — many weak bullets one after another (high
-		# attacks_per_sec). Fast mover, mid range, medium bulk.
+		# Suppressor: a 7-shot stream over ~2 s, then a clear 2-2.5 s recover window.
 		"move_speed": 900.0, "strafe_speed": 480.0,
 		"preferred_range": 1200.0, "cast_range": 2400.0,
-		"max_health": 650.0, "attack": 22.0, "attacks_per_sec": [2.0, 3.0],
-		"burst_count": 5, "burst_cooldown": [1.5, 2.0],
-		"pellets": 1, "spread_deg": 0.0, "bullet_speed": 1350.0, "aim_variance_deg": 7.5,
+		"max_health": 450.0, "attack": 40.0, "attacks_per_sec": [3.5, 3.5],
+		"burst_count": 7, "burst_cooldown": [2.0, 2.5],
+		"pellets": 1, "spread_deg": 0.0, "bullet_speed": 1100.0, "aim_variance_deg": 7.5,
+		"windup_sec": 0.3,
 		"body_size": 56.0,
 	},
 	"square": {
-		# Sniper — one powerful, FAST shot at a time from long range. High single-hit
-		# damage; slow cadence; telegraphed + dodgeable.
+		# Sniper: one heavy shot per cycle. 0.7 s laser tell with the aim LOCKED at its
+		# start and the square standing still: roll (or step) when you see the line.
 		"move_speed": 500.0, "strafe_speed": 300.0,
-		"preferred_range": 1900.0, "cast_range": 2800.0,
-		"max_health": 800.0, "attack": 300.0, "attacks_per_sec": [0.5, 0.55],
-		"burst_count": 5, "burst_cooldown": [2.0, 2.5],
-		"pellets": 1, "spread_deg": 0.0, "bullet_speed": 4000.0, "aim_variance_deg": 0.0,
+		"preferred_range": 1500.0, "cast_range": 2400.0,
+		"max_health": 700.0, "attack": 200.0, "attacks_per_sec": [1.0, 1.0],
+		"burst_count": 1, "burst_cooldown": [2.4, 3.2],
+		"pellets": 1, "spread_deg": 0.0, "bullet_speed": 3000.0, "aim_variance_deg": 0.0,
+		"windup_sec": 0.7, "aim_lock": true, "windup_root": true,
 		"body_size": 60.0,
 	},
 }
@@ -120,7 +126,7 @@ const TIERS := {
 	# only (not spawned yet — see enemy_spawner). Loot comes from LOOT_TABLES[archetype]
 	# [tier]; these just scale stats + tint the sprite so a tier reads at a glance.
 	"bronze": {"health_mult": 1.0, "attack_mult": 1.0, "scale": 1.0, "tint": Color(1, 1, 1)},
-	"silver": {"health_mult": 2.0, "attack_mult": 1.5, "scale": 1.25, "tint": Color(0.8, 0.85, 0.95)},
+	"silver": {"health_mult": 1.6, "attack_mult": 1.5, "scale": 1.25, "tint": Color(0.8, 0.85, 0.95)},
 	"gold": {"health_mult": 4.0, "attack_mult": 2.0, "scale": 1.5, "tint": Color(1.0, 0.85, 0.35)},
 }
 var health := max_health:
@@ -794,7 +800,8 @@ func _physics_process(delta: float) -> void:
 	if can_see:
 		current_visible_point = visible_point
 
-	if can_see and distance <= cast_range and _center_shot_clear(current_target):
+	var on_screen := _target_on_screen(current_target)
+	if can_see and distance <= cast_range and on_screen and _center_shot_clear(current_target):
 		var to_target := current_visible_point - global_position
 		var dir := to_target.normalized()
 		# Clean lane to their center — hold at a FIXED comfortable range and shoot;
@@ -827,6 +834,8 @@ func _physics_process(delta: float) -> void:
 			+ _flank_spread(current_target.global_position)
 		# Ease toward the target velocity rather than snapping to it every frame, so the
 		# pursue<->strafe flips and separation/flank nudges glide instead of jittering.
+		if _windup_root and _windup_left > 0.0:
+			target_velocity = Vector2.ZERO
 		velocity = velocity.move_toward(target_velocity, COMBAT_ACCEL * delta)
 		update_facing(delta, current_visible_point - global_position)
 		# Hold fire if an ally sits in our line to the target — we'd shoot them in the
@@ -835,7 +844,7 @@ func _physics_process(delta: float) -> void:
 		# the main loop, so we loose the shot the instant the lane clears.
 		if not _ally_in_firing_lane(current_visible_point):
 			update_casting(delta, distance)
-	elif can_see and distance <= cast_range:
+	elif can_see and distance <= cast_range and on_screen:
 		# We can SEE them (an edge peeking past cover) but a wall blocks a real shot at
 		# their center — planting here just plinks the corner (the bug where an enemy
 		# sat and shot the wall for free). Path AROUND the cover via the navmesh to earn
@@ -1464,7 +1473,80 @@ func _closest_target(hurtboxes: Array) -> Hurtbox:
 			closest = h
 	return closest
 
+# --- Attack telegraphs (Phase 1.6) -----------------------------------------
+# Visible world: 3840x2160 viewport at zoom 0.75 = 5120x2880, so a player sees
+# +-2560 x +-1440 around themselves. Enemies only fire at a target that is inside
+# that target's screen (minus a margin), so nothing ever shoots you from off-screen.
+const TARGET_SCREEN_HALF := Vector2(2560.0, 1440.0)
+const SCREEN_FIRE_MARGIN := 140.0
+var windup_sec := 0.0
+var _windup_aim_lock := false
+var _windup_root := false
+var _windup_left := 0.0
+var _windup_ready := false
+var _aim_locked := false
+var _aim_lock_point := Vector2.ZERO
+var _laser: Line2D = null
+var _windup_tween: Tween = null
+
+func _target_on_screen(t: Node2D) -> bool:
+	var d := t.global_position - global_position
+	return absf(d.x) <= TARGET_SCREEN_HALF.x - SCREEN_FIRE_MARGIN \
+		and absf(d.y) <= TARGET_SCREEN_HALF.y - SCREEN_FIRE_MARGIN
+
+func _cancel_windup() -> void:
+	var was_active := _windup_left > 0.0 or _windup_ready
+	_windup_left = 0.0
+	_windup_ready = false
+	_aim_locked = false
+	if was_active:
+		_emit_windup(0.0, Vector2.ZERO, false)
+
+func _emit_windup(duration: float, lock_point: Vector2, laser: bool) -> void:
+	var targets := _room_rpc_targets()
+	if targets.is_empty():
+		_show_windup.rpc(duration, lock_point, laser)
+		return
+	var server_id := multiplayer.get_unique_id()
+	for pid in targets:
+		if pid == server_id:
+			_show_windup(duration, lock_point, laser)
+		else:
+			_show_windup.rpc_id(pid, duration, lock_point, laser)
+
+# The tell, on every peer in the room: the body swells over the wind-up (and the
+# sniper draws a laser to its locked aim point). duration 0 = cancel.
+@rpc("authority", "call_local", "reliable")
+func _show_windup(duration: float, lock_point: Vector2, laser: bool) -> void:
+	if _windup_tween != null and _windup_tween.is_valid():
+		_windup_tween.kill()
+	if _laser != null and is_instance_valid(_laser):
+		_laser.queue_free()
+	_laser = null
+	if body == null:
+		return
+	if duration <= 0.0:
+		body.scale = Vector2.ONE
+		return
+	_windup_tween = create_tween()
+	_windup_tween.tween_property(body, "scale", Vector2.ONE * 1.3, duration).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	_windup_tween.tween_property(body, "scale", Vector2.ONE, 0.08)
+	if laser:
+		var dir := (lock_point - global_position).normalized()
+		_laser = Line2D.new()
+		_laser.top_level = true
+		_laser.width = 10.0
+		_laser.z_index = 40
+		_laser.default_color = Color(1.0, 0.15, 0.15, 0.15)
+		_laser.points = PackedVector2Array([global_position, global_position + dir * 3600.0])
+		get_tree().current_scene.add_child(_laser)
+		var lt := _laser.create_tween()
+		lt.tween_property(_laser, "default_color", Color(1.0, 0.2, 0.2, 0.9), duration)
+		lt.parallel().tween_property(_laser, "width", 4.0, duration)
+		lt.tween_callback(_laser.queue_free)
+
 func reset_casting() -> void:
+	_cancel_windup()
 	spell_input_sequence.clear()
 	target_recipe_sequence.clear()
 	tap_timer = 0.0
@@ -1481,6 +1563,18 @@ func update_casting(delta: float, distance: float) -> void:
 		return
 	if cast_timer > 0.0:
 		return
+	# Telegraph: before the FIRST shot of a burst, wind up (visible to the room).
+	if windup_sec > 0.0 and _burst_shots == 0 and not _windup_ready:
+		if _windup_left <= 0.0:
+			_windup_left = windup_sec
+			_aim_locked = _windup_aim_lock
+			_aim_lock_point = current_visible_point
+			_emit_windup(windup_sec, _aim_lock_point, _windup_aim_lock)
+		_windup_left -= delta
+		if _windup_left > 0.0:
+			return
+		_windup_left = 0.0
+		_windup_ready = true
 	# Decide the next cast first (so we know its reach).
 	if _planned_form == "":
 		_plan_next_cast()
@@ -1566,6 +1660,9 @@ func _apply_archetype() -> void:
 	# (AI is authority-only), so a non-deterministic roll here can't desync anything.
 	preferred_range = a["preferred_range"] * randf_range(1.0 - PREFERRED_RANGE_VARIANCE, 1.0 + PREFERRED_RANGE_VARIANCE)
 	cast_range = a["cast_range"]
+	windup_sec = float(a.get("windup_sec", 0.0))
+	_windup_aim_lock = bool(a.get("aim_lock", false))
+	_windup_root = bool(a.get("windup_root", false))
 	attacks_per_sec_range = a.get("attacks_per_sec", [1.0, 1.0])
 	burst_count = a.get("burst_count", 1)
 	burst_cooldown_range = a.get("burst_cooldown", [0.0, 0.0])
@@ -1584,7 +1681,7 @@ func fire_spell(weapon: String, element: String, form: String) -> void:
 	var spell_data := all_spell_data.build_spell_data(weapon, element, form, "common", true)
 	# Aim at the actual point of them we can see (may be an edge peeking past a
 	# corner) rather than their dead center, which could still be behind cover.
-	var aim_point := current_visible_point
+	var aim_point := _aim_lock_point if _aim_locked else current_visible_point
 	# Damage = this enemy's Attack (per pellet); the attacker's crit stats travel
 	# to the defender (crit resolved at hit time). Nothing rolled here.
 	if spell_data.get("targeted", false):
@@ -1603,7 +1700,7 @@ func fire_spell(weapon: String, element: String, form: String) -> void:
 		# lead. Skipped for speed-0 AoE forms (they don't travel).
 		var proj_speed: float = float(a.get("bullet_speed", base_speed))
 		var speed_mult: float = proj_speed / base_speed if base_speed > 0.0 else 1.0
-		if proj_speed > 0.0:
+		if proj_speed > 0.0 and not _aim_locked:
 			# Bounded lead: cap the flight-time estimate, AND cap the resulting offset to
 			# a fraction of the gap, so a fast/rushing target can never push the aim past
 			# us (which used to flip the shot to fire the wrong way — "shots off track").
@@ -1638,6 +1735,10 @@ func fire_spell(weapon: String, element: String, form: String) -> void:
 		if _burst_shots >= burst_count:
 			_burst_shots = 0
 			cast_timer = randf_range(burst_cooldown_range[0], burst_cooldown_range[1])
+	# Burst finished: the next one needs a fresh wind-up (and a fresh aim lock).
+	if _burst_shots == 0:
+		_windup_ready = false
+		_aim_locked = false
 
 # Per-shot angle offsets (radians, relative to the aimed direction) for one volley.
 # An archetype may specify an explicit `pellet_angles_deg` list (custom/asymmetric
