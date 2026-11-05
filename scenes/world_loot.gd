@@ -375,7 +375,7 @@ func clear_active_pickups() -> void:
 # left lying around in the hub, which used to vanish whenever a run launched.
 func clear_expedition_pickups() -> void:
 	for pickup_id in active_pickups.keys():
-		var key := world.world_rooms.room_key_at(active_pickups[pickup_id]["position"])
+		var key: String = world.world_rooms.room_key_at(active_pickups[pickup_id]["position"])
 		if !key.begins_with("hub/"):
 			active_pickups.erase(pickup_id)
 
