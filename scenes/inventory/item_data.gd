@@ -354,6 +354,44 @@ const ITEMS := {
 
 static var _warned_unknown_types := {}
 
+# --- Vendor (hub) -------------------------------------------------------------
+# Gold per unit the vendor pays. Junk and fish finally have a use; crystals and
+# stones sell low enough that crafting them is still the better play. Weapons and
+# gear sell by rarity (VENDOR_SELL_BY_RARITY). Anything not listed can't be sold.
+const VENDOR_SELL := {
+	"scrap": 1, "cloth": 2, "herbs": 1, "berries": 1, "red_moss": 2, "water_flask": 1,
+	"mana_dust": 3, "pure_mana_shard": 15,
+	"fire_dust": 3, "lightning_dust": 3, "ice_dust": 3, "wind_dust": 3,
+	"nature_dust": 3, "water_dust": 3, "earth_dust": 3,
+	"crystal_fire": 12, "crystal_lightning": 12, "crystal_ice": 12, "crystal_wind": 12,
+	"crystal_nature": 12, "crystal_water": 12, "crystal_earth": 12,
+	"form_stone_ball": 18, "form_stone_bolt": 18, "form_stone_rain": 18,
+	"form_stone_beam": 18, "form_stone_burst": 18, "form_stone_cone": 18,
+	"minnow": 2, "river_bass": 4, "silverscale": 8, "old_boot": 1, "mana_eel": 10,
+	"river_pearl": 25, "golden_koi": 40,
+	"health_potion": 10, "greater_health_potion": 25, "mana_crystal": 15, "refined_mana_crystal": 30,
+}
+const VENDOR_SELL_BY_RARITY := {"common": 8, "uncommon": 22, "rare": 55, "epic": 120, "legendary": 250, "mythic": 500}
+# What the vendor sells: [item type, quantity, gold price].
+const VENDOR_STOCK := [
+	["health_potion", 1, 30],
+	["greater_health_potion", 1, 75],
+	["mana_crystal", 1, 45],
+	["berries", 5, 12],
+	["minnow", 3, 10],
+	["backpack_basic", 1, 90],
+	["belt_basic", 1, 60],
+	["cloak_basic", 1, 70],
+]
+
+static func vendor_sell_price(item) -> int:
+	if item == null:
+		return 0
+	if is_gear(item.type) or get_equip_slot(item.type) == "weapon":
+		var r: String = item.rarity if item.rarity != "" else "common"
+		return VENDOR_SELL_BY_RARITY.get(r, 8)
+	return int(VENDOR_SELL.get(item.type, 0)) * maxi(1, item.quantity)
+
 static func get_def(item_type: String) -> Dictionary:
 	if !ITEMS.has(item_type):
 		# Still falls back to scrap so nothing crashes, but say so once: a typo in

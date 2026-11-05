@@ -267,7 +267,9 @@ func _tick_hunger(delta: float) -> void:
 const ControlsOverlay := preload("res://ui/controls_overlay.gd")
 const RaidTimerUI := preload("res://ui/raid_timer_ui.gd")
 const MapBoardUI := preload("res://ui/map_board_ui.gd")
+const VendorUI := preload("res://ui/vendor_ui.gd")
 var map_board = null
+var vendor_ui = null
 
 func open_map_board() -> void:
 	if map_board != null:
@@ -870,6 +872,51 @@ func _consume_ingredient(ingredient: String, count: int) -> void:
 			remaining -= 1
 		if remaining <= 0:
 			return
+
+# --- Vendor (called by ui/vendor_ui.gd) ----------------------------------------
+func gold_available() -> int:
+	return ingredient_available("gold")
+
+# Sell a whole bag stack for gold. Returns gold received (0 = nothing sold).
+func vendor_sell(instance_id: String) -> int:
+	var target: Item = null
+	for entry in inventory.placements:
+		if entry["item"].instance_id == instance_id:
+			target = entry["item"]
+			break
+	var price := ItemData.vendor_sell_price(target)
+	if price <= 0:
+		return 0
+	inventory.remove_item(instance_id)
+	_give_item(Item.create("gold", price))
+	persist_inventory()
+	inventory_ui.refresh()
+	return price
+
+# Buy VENDOR_STOCK[index]. Returns false (no change) if you can't afford it.
+func vendor_buy(index: int) -> bool:
+	if index < 0 or index >= ItemData.VENDOR_STOCK.size():
+		return false
+	var entry: Array = ItemData.VENDOR_STOCK[index]
+	var price: int = entry[2]
+	if gold_available() < price:
+		return false
+	_consume_ingredient("gold", price)
+	_give_item(Item.create(entry[0], entry[1]))
+	persist_inventory()
+	persist_materials()
+	inventory_ui.refresh()
+	return true
+
+# Put an item in the bag, or the stash if the bag is full (hub only).
+func _give_item(item: Item) -> void:
+	if inventory.try_stack_or_place(item):
+		return
+	if _bank_item_to_stash(item, 0):
+		persist_stash()
+	else:
+		overflow.try_stack_or_place(item)
+		persist_overflow()
 
 func craft(recipe_index: int) -> bool:
 	if recipe_index < 0 or recipe_index >= ItemData.CRAFTING_RECIPES.size():
@@ -1870,6 +1917,8 @@ func _ready() -> void:
 		add_child(RaidTimerUI.new())
 		map_board = MapBoardUI.new()
 		add_child(map_board)
+		vendor_ui = VendorUI.new()
+		add_child(vendor_ui)
 		spell_list_ui.visible = true
 		spell_list_ui.setup(self)
 		health_ui.visible = true
@@ -2340,7 +2389,7 @@ func _physics_process(delta):
 		# Any open menu (inventory OR the esc/pause menu) arms attack-suppression so the
 		# click that operates/closes it can't leak into a shot the frame it clears —
 		# attack_check() then ignores the still-held button until it's released.
-		if inventory_ui.visible or _esc_menu_open() or (map_board != null and map_board.is_open()):
+		if inventory_ui.visible or _esc_menu_open() or (map_board != null and map_board.is_open()) or (vendor_ui != null and vendor_ui.is_open()):
 			_block_attack_until_release = true
 		if inventory_ui.visible:
 			# Menu is up — no movement, no aiming, no attack input should

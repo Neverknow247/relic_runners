@@ -1,0 +1,40 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/items/vendor.gd" id="1_vendor"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_vendor"]
+radius = 256.0
+
+[node name="vendor" type="Area2D"]
+collision_layer = 0
+collision_mask = 2
+script = ExtResource("1_vendor")
+
+[node name="collision_shape_2d" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_vendor")
+
+[node name="visual_root" type="Node2D" parent="."]
+
+[node name="color_rect" type="ColorRect" parent="visual_root"]
+offset_left = -128.0
+offset_top = -128.0
+offset_right = 128.0
+offset_bottom = 128.0
+color = Color(0.85, 0.7, 0.2, 1)
+
+[node name="status_label" type="Label" parent="visual_root"]
+offset_left = -400.0
+offset_top = -400.0
+offset_right = 400.0
+offset_bottom = -128.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 24
+theme_override_font_sizes/font_size = 72
+text = "Vendor"
+horizontal_alignment = 1
+vertical_alignment = 2
+autowrap_mode = 2
+
+[connection signal="body_entered" from="." to="." method="_on_body_entered"]
+[connection signal="body_exited" from="." to="." method="_on_body_exited"]
