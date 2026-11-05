@@ -23,7 +23,7 @@
 ### What is distinctively Relic Runners (protect these)
 
 1. **The Paradox Wheel.** Seven elements, each beats exactly three (+1/+2/+4 on the circle) — no element is "best". This is already generated in `SpellData._static_init` and nobody else has it. Every system below should make the wheel *visible and tactical*: enemy fill colour tells you the matchup, elite shields require the right element, map tiers bias the roster so your kit choice is a real bet.
-2. **Spell-weaving.** Casting by directional taps is the signature verb. It is currently punished (3-4 taps, two of them redundant, standing still). Fixed properly it becomes a rhythm-combo system nobody else in the genre has.
+2. **Spells are stratagems (Helldivers model).** Casting by directional-tap codes is the signature verb and is *deliberately* an input commitment: you must find a safe moment to punch in the code. Spells are rare, big, screen-changing special attacks gated by cooldowns, never the filler. The moment-to-moment fight comes from the basic weapon, the dodge roll and positioning (§3); spells are the punctuation that turns a losing fight.
 3. **Geometry as a language.** Shape = role, fill = element, border = tier, affix = glyph marks. Enemies that read instantly at 0.75 zoom from across the screen. We keep vector enemies as *the* art direction and polish them (glow, outlines, death shatter) rather than replacing them with sprites.
 4. **Two clocks, one world.** Map choice is tempo choice. Extraction maps run on a *raid clock* (timer + portal pressure); Survival maps run on a *day clock* (night + hunger). Same hub, same stash, same wheel, same enemies — different pressure.
 5. **The run is the bet.** You choose what to bring; what you carry out is yours; what you die with is on the floor for your team to recover (this already works *except* the re-sync bug that makes death bags invisible — Phase 0).
@@ -108,16 +108,36 @@ Implement TTK via `max_health` in the archetype data: triangle 330→150, circle
 1. **Dodge roll** (Space; `jump` is already bound in `project.godot`; `has_dash` exists at `player.gd:214`). Direction = movement input, else aim. Cancels nothing: a weave in progress survives a roll — rolling mid-weave *is* the skill ceiling.
 2. **Hurt i-frames** 0.4 s via `hurtbox.is_invincible` + a flicker.
 3. **Weave** (spell input, see below).
-4. Later (Phase 3): **Element pulse** — RMB-hold + Space fires a 0.3 s ring that deletes enemy bullets in a 400 u radius and costs 300 mana. This is the "blank". Cheap because projectiles are local on every peer: broadcast a `clear_bullets(pos, r)` room RPC.
+4. Later (Phase 3): **Blank rune** — a carried consumable (crafted/looted) used from a quick slot: a 0.3 s ring that deletes enemy bullets in a 400 u radius. Cheap because projectiles are local on every peer: broadcast a `clear_bullets(pos, r)` room RPC.
 
-### Spell input scheme — keep weaving, fix it
-Decision: **keep tap-weaving as the identity; remove everything that makes it worse than holding LMB.**
-- **Drop the element prefix.** `SpellRecipes.RECIPES` becomes `FORM_SUFFIX` only (1-2 taps). `get_available_recipes` already filters to the weapon's element, so the prefix carries zero information. `has_relevant_spell_prefix` (`player.gd:2623`) keeps working on the shorter sequences. Element stays as a *weapon* property; a second weapon slot with a different element is how you "change element" mid-fight (swap is already a verb).
-- **Mode 1 (hold RMB) no longer roots.** Replace the friction branch in `move_state` (`player.gd:2292-2298`) and `attack_state` (`:2743`) with **drift**: velocity is preserved at the moment RMB is pressed (no acceleration, no friction) and WASD becomes taps. You slide through a weave. Rolling is still allowed during a weave.
-- **Auto-fire on release.** A completed sequence fires toward the cursor when RMB is released (no extra LMB). LMB during the hold still fires basic. This cuts a full input from every cast.
-- **Feedback**: tap tick (pitched up per tap), ring pulse on the player, completion chime + the form's icon flash, fizzle buzz + red flash on a wrong tap. The HUD spell list (`ui/spell_list_ui.gd`) highlights the matched prefix live (it already does the matching).
-- **Mode 2 (Shift + arrows)** stays for controller/left-hand users but is removed from the default hints.
-- Mana costs stay; the "cheap" basic remains the filler so weaving is the punctuation, not the whole sentence.
+### Spells as stratagems (designer decision, 2026-11-05)
+The designer is modelling spells on **Helldivers 2 stratagems**: the multi-tap code input is intentional, spells are meant to be *big and powerful*, and **must not be spammable**. So the job is not to make casting cheaper; it's to make each cast **worth the commitment** and to make combat fun *between* casts.
+
+**Input (keep as-is, small fidelity tweaks):**
+- Keep the full code: element prefix + form suffix (3-4 taps). The length is the cost. Codes stay per-element so a 2-element loadout means memorising more codes, like a stratagem loadout.
+- **Calling in = slowed walk, not a root** (Helldivers lets you walk while inputting but not sprint or shoot): while the mode is held, move at ~40% speed, no basic fire, no roll. Today's mode-1 friction branch (`player.gd:2292-2298`, `:2743`) becomes a speed cap. Tunable; set to 0% to keep today's full root.
+- A completed code is "armed" and delivered with the next LMB (as today). Getting hit while inputting does **not** cancel the code (Helldivers doesn't either), but a wrong tap resets it.
+- Feedback: per-tap tick (pitch rising), code-complete chime + the spell icon lighting up on the HUD, wrong-tap buzz + red flash. The HUD spell list (`ui/spell_list_ui.gd`) becomes a **stratagem panel**: icon, code arrows, live-highlighted matched taps, and a cooldown sweep.
+
+**Gating = cooldowns, not a mana pool you spam from:**
+- Each form gets its own cooldown (starting values): bolt 12 s, cone 15 s, ball 20 s, burst 25 s, beam 30 s, rain 45 s. Cooldown is per spell, so a loadout of 3 spells gives ~3 big moments per fight, not 7 in a row.
+- **Mana stays as a per-run resource, re-tuned so it's scarce:** cost ≈ 30-40% of the bar per cast and *no passive regen during a run* (regen only in the hub). Mana crystals / mana_eel / refined crystals become meaningful loot you carry in. Recommend both gates (cooldown = can't spam in a fight; mana = can't spam across a run). Open decision 1.
+- Cooldowns sit with the caster (client-predicted like casting today) and are mirrored on the server for the RPC check.
+
+**Make every cast hit like a stratagem:**
+- Damage ×4-8 today's multipliers (basic ≈ 95; a bolt should one-shot fodder and take ~40% of a heavy; a rain/ball should clear a pack).
+- Every spell gets a **delivery moment**: a brief world telegraph (marker / beam line / falling rune) then impact with big shake, hitstop, knockback, element-coloured burst and a sound layer. Rain becomes a "call-down" you throw to a spot (like an orbital): a 1 s marker then the strike.
+- **Utility, not just damage**: some forms clear enemy bullets in their area (burst), some stagger/knock down (ball), some leave a zone (rain puddle). Stratagems are tools for specific problems.
+- Element still matters: hitting a weak element doubles knockdown/stagger and shows "EFFECTIVE".
+
+**Combat that's fun without spells (the 90% of the fight):**
+1. **Dodge roll + hurt i-frames** (1.1). The core skill verb.
+2. **Weapons that play differently on basic attack** (new, Phase 1): wand = fast low-damage stream; orb = slower heavy shot with slight pierce; tome = 3-shot spread. Weapon choice is the moment-to-moment build; spells are the loadout's ultimates. Data on `SpellData.WEAPONS`.
+3. **Charged basic / alt-fire**: hold LMB on a full bar to charge a stronger shot (orb), or a short burst (wand). Cheap extra depth, no mana.
+4. **Melee shove** (F or middle-mouse): a short-range push that knocks enemies back, cancels a rusher's dash, 3 s cooldown. Hotline Miami's up-close option.
+5. **Environment**: explosive/elemental barrels and destructible cover from the existing *Destructible Objects* pack (`assets/art/pixel_quest/`); knockback into walls deals bonus damage.
+6. **The "blank"** becomes a consumable (a ward/rune you carry, crafted or looted) rather than a spell, so it doesn't compete with stratagem input.
+7. Kill feedback (shake, hitstop, shatter, sound) and readable, dodgeable enemy patterns (§3 telegraphs) make basic fighting satisfying on its own.
 
 ### Enemy role roster
 Keep the four shapes, give each a *movement* identity. Add two. All of this lives in `EnemyDef` Resources (§5), not in `enemy.gd` consts.
@@ -266,11 +286,13 @@ Session = one focused AI coding session (a few hours). "Headless" = verifiable w
 | 1.5 **Bullet legibility**: enemy bullets drawn as dark-rimmed diamonds with a bright core; player shots as elongated streaks; keyed on caster type in `projectile.gd _draw` | `projectile.gd` | live 1p |
 | 1.6 **Telegraphs v0** (no FSM yet): a `windup_sec` per archetype honoured before `fire_spell`: square 0.7 s with a `Line2D` laser + rising tone, aim locked; pentagon 0.5 s scale-up; circle/triangle 0.25 s flash. On-screen-rect firing rule replaces `cast_range`. A visible RECOVER tint during burst cooldown | `enemy.gd`, `enemy_body.gd` | live 1p |
 | 1.7 **Numbers pass**: bullet speeds 700-1100; damage per §3 table; square 1 shot of 200; pentagon pellet angles ±8/±18; HP cuts; silver ×1.6; advantage crits shown as an "EFFECTIVE" tag + element burst | `enemy.gd ARCHETYPES/TIERS`, `damage_number.gd` | live 1p |
-| 1.8 **Weave fix**: drop `ELEMENT_PREFIX`; RMB drift instead of root; auto-fire on release; tap/complete/fizzle feedback | `spell_recipes.gd`, `player.gd:2281-2310, 2374-2392, 2716-2760`, `spell_list_ui.gd` | live 1p |
+| 1.8 **Stratagem pass**: keep the full code input; call-in = 40% slowed walk (no fire/roll) instead of root; per-form cooldowns + scarce mana (no in-run regen); damage ×4-8 with delivery telegraph + impact juice; rain as a thrown call-down; stratagem HUD panel with cooldown sweep; tap/complete/wrong-tap feedback | `spell_data.gd FORMS`, `player.gd:2281-2310, 2374-2414, 2716-2760`, `spell_list_ui.gd`, `rain_projectile.gd` | live 1p |
+| 1.11 **Weapon identity on basic attack**: wand stream / orb heavy+pierce / tome 3-spread; charged basic on hold | `spell_data.gd WEAPONS`, `player.gd attack_check`, `projectile.gd` | live 1p |
+| 1.12 **Melee shove** (knockback, cancels dashes, 3 s cooldown) | `player.gd`, new input action | live 1p |
 | 1.9 **Camera**: look-ahead 20% toward aim, position smoothing | `player_camera.tscn`, `player.gd` | live 1p |
 | 1.10 **Play Solo** button (hosts a silent private lobby) + first-run controls overlay | `main_menu.gd/.tscn`, new `ui/controls_overlay.tscn` | live 1p |
 
-**Acceptance (designer playtest, E1 village, solo then 2p):** you can roll through a pentagon fan; the sniper never hits you from off-screen and you can dodge it on the tone; a triangle dies in 1-2 hits with a shatter and a sound; a weave is 1-2 taps and you cast while sliding; you die in ~10 s if you stand still in a pack and survive 45 s+ rolling. "Too easy / too hard" is replaced by "I died because I rolled late."
+**Acceptance (designer playtest, E1 village, solo then 2p):** you can roll through a pentagon fan; the sniper never hits you from off-screen and you can dodge it on the tone; a triangle dies in 1-2 hits with a shatter and a sound; a full fight is fun with basic attacks + roll alone, and each spell feels like calling in an orbital (you pick the moment, it changes the fight, you can't fire it again for a while); you die in ~10 s if you stand still in a pack and survive 45 s+ rolling. "Too easy / too hard" is replaced by "I died because I rolled late."
 **Dependencies:** Phase 0.
 
 ### Phase 2 — Foundation (6-8 sessions)
@@ -301,7 +323,7 @@ Session = one focused AI coding session (a few hours). "Headless" = verifiable w
 | 3.5 Affixes: Fast, Shielded (element ring), Splitter, Vampiric, Burning trail; glyph marks; per-map affix pool | `scenes/enemies/affixes/*.gd`, `enemy_body.gd` | live 1p |
 | 3.6 Player gunfire noise → `hear_world_noise`; stealth gear trait `quiet_boots` | `world.gd` spell spawn RPC, `enemy.gd`, `item_data.gd` | live 1p |
 | 3.7 Extraction wave rework: telegraph direction marker + sound; peak/valley plan; varied composition; cap noise pull-in; waves spawn via `EnemyDirector` | `exit_portal.gd`, `enemy_director.gd` | live 2p |
-| 3.8 Element pulse ("blank") verb + room `clear_bullets` RPC | `PlayerCombat`, `RoomNet` | live 2p |
+| 3.8 Blank rune consumable + room `clear_bullets` RPC | `item_data.gd`, `player.gd use_quick_slot`, `RoomNet` | live 2p |
 | 3.9 Prism guardian (3 phases) as E2 keyed-portal final wave | new defs, `guardian_brain.gd` | live 2p |
 
 **Acceptance:** E1 pack of 2 triangles + 1 circle + 1 pentagon is a fun 20-30 s fight; E2 feels distinctly harder through tokens/affixes, not through one-shots; Shielded elites teach the wheel (wrong element = chip, right element = pop).
@@ -359,14 +381,14 @@ E3 and S3 defs + scenes; more guardians; enemy art polish (glow/outline shaders 
 
 ## 7. Open decisions for the designer
 
-1. **Spell input: drift-weave without element prefix (recommended) vs keep the prefix for "purity".** Default: drop the prefix; element = weapon; two weapon slots = two elements.
+1. **Spells = Helldivers stratagems (DECIDED by designer): full code input stays, big and powerful, not spammable.** Still open: gate by cooldowns only, or cooldowns + scarce no-regen mana? Default: both. Also: walk speed while inputting (default 40%; 0% = today's root).
 2. **Friendly fire.** Default: off between players. (On would need slower player bullets and a visual, and it fights 3-player co-op at 0.75 zoom.)
 3. **8-way movement snapping (`snap_to_8_directions`).** It suits the hand-drawn legs but caps precision in a bullet game. Default: keep 8-way for *animation*, use raw analog for *velocity*.
 4. **Crash = death on Survival?** Default: no — host run snapshot with resume (Phase 6.6); Extraction keeps crash-equals-death.
 5. **Enemy art direction.** Default: commit to polished vector geometry (glow, outline, shatter) rather than sprites — it is the identity and it is cheap. The player sprite style then needs a matching outline/glow treatment, not a repaint.
 6. **Pauper kit: free-and-bad (default) vs costs gold.** Free keeps the game playable after a wipe; bad keeps stakes.
 7. **Starting tiers.** Default: ship E1 + S1 first, E2 second, S2 fourth. If you'd rather lead with survival, swap Phases 4 and 6 — the foundation (Phase 2) supports either order.
-8. **Element pulse ("blank") — in or out?** Default: in, at 300 mana, Phase 3. It's the only bullet-hell safety valve besides the roll and it makes mana matter even when you don't weave.
+8. **The "blank" (bullet clear) — in or out?** Default: in, as a carried consumable rune (crafted/looted), Phase 3, so it doesn't compete with stratagem input.
 9. **Hunger only vs hunger + warmth.** Default: hunger at S1, warmth at S2. Never thirst.
 10. **Trust model.** Default: friends-only co-op, no anti-cheat, server validates only what causes *desync* (location changes), not what enables cheating.
 
