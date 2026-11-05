@@ -9,11 +9,11 @@ var spell_input_sequence: Array[int] = []
 
 const DamageNumberScene := preload("res://scenes/effects/damage_number.tscn")
 
-func _spawn_damage_number(amount: float, color: Color, is_crit: bool = false) -> void:
+func _spawn_damage_number(amount: float, color: Color, is_crit: bool = false, effective: bool = false) -> void:
 	var num = DamageNumberScene.instantiate()
 	get_tree().current_scene.add_child(num)
 	num.global_position = global_position + Vector2(0, -128)
-	num.setup(amount, color, is_crit)
+	num.setup(amount, color, is_crit, effective)
 
 @onready var player_camera: Camera2D = $player_camera
 @onready var spell_list_ui = $player_camera/spell_list_ui
@@ -1947,8 +1947,9 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 	# their element beats ours, then our Defense reduces it (Diablo-style DR).
 	var final_damage: float = damage
 	var is_crit := false
+	var advantage := false
 	if hitbox != null and "attacker_element" in hitbox:
-		var advantage := SpellData.has_advantage(hitbox.attacker_element, network_element)
+		advantage = SpellData.has_advantage(hitbox.attacker_element, network_element)
 		var crit_rate: float = hitbox.attacker_crit_rate + (50.0 if advantage else 0.0)
 		var crit_damage: float = hitbox.attacker_crit_damage + (50.0 if advantage else 0.0)
 		is_crit = randf() * 100.0 < crit_rate
@@ -1959,7 +1960,7 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 		final_damage *= 0.95
 	# Defense stat: diminishing-returns damage reduction.
 	final_damage *= 1.0 - SpellData.damage_reduction(get_defense())
-	_broadcast_damage_number.rpc(final_damage, is_crit)
+	_broadcast_damage_number.rpc(final_damage, is_crit, advantage)
 	take_damage(final_damage)
 	if final_damage > 0.0 and !_is_in_hub():
 		_iframe_timer = maxf(_iframe_timer, HURT_IFRAMES)
@@ -1971,8 +1972,8 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 # screen shows it too) — the one place the number is spawned now, so all peers
 # agree.
 @rpc("authority", "call_local", "unreliable")
-func _broadcast_damage_number(amount: float, is_crit: bool) -> void:
-	_spawn_damage_number(amount, Color(1, 0.3, 0.25), is_crit)
+func _broadcast_damage_number(amount: float, is_crit: bool, effective: bool) -> void:
+	_spawn_damage_number(amount, Color(1, 0.3, 0.25), is_crit, effective)
 	Fx.flash(sprite, true)
 	# Getting hit kicks the screen — scaled by how big a chunk of your health it was.
 	if is_multiplayer_authority():

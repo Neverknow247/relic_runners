@@ -20,11 +20,11 @@ var all_spell_recipes = SpellRecipes.new()
 
 const DamageNumberScene := preload("res://scenes/effects/damage_number.tscn")
 
-func _spawn_damage_number(amount: float, color: Color, is_crit: bool = false) -> void:
+func _spawn_damage_number(amount: float, color: Color, is_crit: bool = false, effective: bool = false) -> void:
 	var num = DamageNumberScene.instantiate()
 	get_tree().current_scene.add_child(num)
 	num.global_position = global_position + Vector2(0, -128)
-	num.setup(amount, color, is_crit)
+	num.setup(amount, color, is_crit, effective)
 
 @export var max_health := 1000.0
 
@@ -1868,8 +1868,9 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 	# element beats ours, then our Defense reduces it (Diablo-style DR).
 	var final_damage: float = damage
 	var is_crit := false
+	var advantage := false
 	if hitbox != null and "attacker_element" in hitbox:
-		var advantage := SpellData.has_advantage(hitbox.attacker_element, attacker_element)
+		advantage = SpellData.has_advantage(hitbox.attacker_element, attacker_element)
 		var atk_crit_rate: float = hitbox.attacker_crit_rate + (50.0 if advantage else 0.0)
 		var atk_crit_damage: float = hitbox.attacker_crit_damage + (50.0 if advantage else 0.0)
 		is_crit = randf() * 100.0 < atk_crit_rate
@@ -1884,7 +1885,7 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 		var aggro_world = _get_world()
 		if aggro_world != null and aggro_world.players != null and aggro_world.players.has_node(str(hitbox.caster_id)):
 			_aggro[hitbox.caster_id] = _aggro.get(hitbox.caster_id, 0.0) + final_damage
-	_emit_damage_number(final_damage, is_crit)
+	_emit_damage_number(final_damage, is_crit, advantage)
 	# Small shove away from the hit (direct hits only; DoT ticks would jitter).
 	if hitbox != null and is_instance_valid(hitbox) and hitbox.auto_hit:
 		var away: Vector2 = global_position - hitbox.global_position
@@ -1921,23 +1922,23 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 # Room-scoped like the projectile spawn above (same "don't spam other rooms'
 # peers with node-null errors" reasoning) — the damage number only matters to
 # peers who actually have this enemy.
-func _emit_damage_number(amount: float, is_crit: bool) -> void:
+func _emit_damage_number(amount: float, is_crit: bool, effective: bool = false) -> void:
 	var targets := _room_rpc_targets()
 	if targets.is_empty():
-		_broadcast_damage_number.rpc(amount, is_crit)
+		_broadcast_damage_number.rpc(amount, is_crit, effective)
 		return
 	var server_id := multiplayer.get_unique_id()
 	for pid in targets:
 		if pid == server_id:
-			_broadcast_damage_number(amount, is_crit)
+			_broadcast_damage_number(amount, is_crit, effective)
 		else:
-			_broadcast_damage_number.rpc_id(pid, amount, is_crit)
+			_broadcast_damage_number.rpc_id(pid, amount, is_crit, effective)
 
 # Shows the authoritative damage number on every peer (call_local so the server
 # shows it too) — the single place an enemy's damage number is spawned now.
 @rpc("authority", "call_local", "unreliable")
-func _broadcast_damage_number(amount: float, is_crit: bool) -> void:
-	_spawn_damage_number(amount, Color(1, 0.9, 0.3), is_crit)
+func _broadcast_damage_number(amount: float, is_crit: bool, effective: bool) -> void:
+	_spawn_damage_number(amount, Color(1, 0.9, 0.3), is_crit, effective)
 	Fx.flash(body)
 
 func take_damage(amount: float) -> void:
