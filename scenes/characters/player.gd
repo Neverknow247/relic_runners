@@ -1974,6 +1974,7 @@ func _broadcast_damage_number(amount: float, is_crit: bool) -> void:
 	# Getting hit kicks the screen — scaled by how big a chunk of your health it was.
 	if is_multiplayer_authority():
 		player_camera.add_trauma(clampf(0.25 + amount / maxf(max_health, 1.0) * 2.5, 0.25, 0.8))
+	Sounds.play_sfx("player_hurt", global_position)
 
 func take_damage(amount: float) -> void:
 	if death_state != DeathState.ALIVE:
@@ -2342,6 +2343,7 @@ func get_controller_aim_direction() -> Vector2:
 
 func record_attack_direction(input_num: int):
 	spell_input_sequence.append(input_num)
+	Sounds.play_sfx("tap", null, -4.0, 0.0)
 	if spell_input_sequence.size() > 6:
 		spell_input_sequence.clear()
 		_code_feedback(false)
@@ -2365,9 +2367,11 @@ func _sequence_is_complete_spell() -> bool:
 # Armed: bright flash + a tiny kick. Wrong tap: a red blink.
 func _code_feedback(armed: bool) -> void:
 	if armed:
+		Sounds.play_sfx("armed", null, 0.0, 0.0)
 		Fx.flash(sprite, true, 3.0, 0.18)
 		player_camera.add_trauma(0.12)
 	else:
+		Sounds.play_sfx("fizzle", null, -2.0, 0.0)
 		sprite.self_modulate = Color(1.0, 0.25, 0.25)
 		var t := create_tween()
 		t.tween_property(sprite, "self_modulate", Color.WHITE, 0.2)
@@ -2438,12 +2442,14 @@ func _start_roll() -> void:
 	is_attacking = false
 	update_legs_rotation(_roll_direction)
 	_play_roll_visual()
+	Sounds.play_sfx("roll", global_position)
 	state = roll_state
 
 func _shove() -> void:
 	_shove_cooldown_timer = SHOVE_COOLDOWN
 	var dir := aim_direction.normalized() if aim_direction != Vector2.ZERO else Vector2.RIGHT
 	Fx.puff(get_tree(), global_position + dir * SHOVE_RANGE * 0.45, Color(1, 1, 1), 2.2)
+	Sounds.play_sfx("shove", global_position)
 	player_camera.add_trauma(0.15)
 	if _is_in_hub():
 		return

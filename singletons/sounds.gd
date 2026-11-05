@@ -27,6 +27,61 @@ var sounds = {
 
 var music_playing = null
 
+# --- Gameplay SFX (assets/audio/sounds/sfx_<name>.wav) ---------------------
+# First-pass procedural placeholders from tools/gen_sfx.py; replace any file with
+# a real asset of the same name. Missing files are skipped silently.
+const SFX_NAMES := [
+	"shoot_wand", "shoot_orb", "shoot_tome", "enemy_shoot", "hit", "enemy_die",
+	"player_hurt", "roll", "tap", "armed", "fizzle", "windup", "sniper_windup",
+	"spell_cast", "explosion", "shove", "loot", "ui_click",
+]
+# World sounds fade out linearly to silence at this distance from the local player.
+const HEARING_RANGE := 3600.0
+# The same sound can't restart within this many ms (stops a 3-pellet shot or a
+# burst of hits from stacking into one loud spike).
+const REPEAT_GUARD_MS := 35
+var sfx := {}
+var _last_played := {}
+
+func _ready() -> void:
+	for n in SFX_NAMES:
+		var path: String = sounds_path + "sfx_%s.wav" % n
+		if ResourceLoader.exists(path):
+			sfx[n] = load(path)
+
+# Plays a gameplay sound. pos (a world Vector2) makes it positional relative to the
+# local player: quieter with distance, skipped beyond HEARING_RANGE. null = UI/2D.
+func play_sfx(sfx_name: String, pos = null, volume_db := 0.0, pitch_var := 0.08) -> void:
+	var stream = sfx.get(sfx_name)
+	if stream == null:
+		return
+	var now := Time.get_ticks_msec()
+	if now - int(_last_played.get(sfx_name, -100000)) < REPEAT_GUARD_MS:
+		return
+	var vol := volume_db
+	if pos is Vector2:
+		var listener = _listener_position()
+		if listener is Vector2:
+			var d: float = listener.distance_to(pos)
+			if d > HEARING_RANGE:
+				return
+			vol += linear_to_db(clampf(1.0 - d / HEARING_RANGE, 0.05, 1.0))
+	_last_played[sfx_name] = now
+	for sound_player in sounds_players:
+		if !sound_player.playing:
+			sound_player.stream = stream
+			sound_player.pitch_scale = 1.0 + randf_range(-pitch_var, pitch_var)
+			sound_player.volume_db = vol
+			sound_player.play()
+			return
+
+func _listener_position():
+	var world = get_tree().get_first_node_in_group("world")
+	if world == null or !world.has_method("get_local_player"):
+		return null
+	var lp = world.get_local_player()
+	return lp.global_position if lp != null else null
+
 func play_music(music_string, pitch_scale = 1, volume_db = 0):
 	if music_playing != music_string:
 		music_player.pitch_scale = pitch_scale

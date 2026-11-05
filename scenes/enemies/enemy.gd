@@ -144,6 +144,7 @@ var is_dead := false:
 		if value and !was_dead and is_inside_tree() and Engine.get_process_frames() - _spawn_frame > 5:
 			Fx.shatter(get_tree(), global_position, body.fill_color if body else Color.WHITE, clampf(body.half_size / 56.0, 0.7, 1.6) if body else 1.0)
 			Fx.shake_at(get_tree(), global_position, 0.22)
+			Sounds.play_sfx("enemy_die", global_position)
 		if value:
 			velocity = Vector2.ZERO
 			if visual_root:
@@ -1539,6 +1540,10 @@ func _show_windup(duration: float, lock_point: Vector2, laser: bool) -> void:
 	if duration <= 0.0:
 		body.scale = Vector2.ONE
 		return
+	if laser:
+		Sounds.play_sfx("sniper_windup", global_position, 0.0, 0.0)
+	else:
+		Sounds.play_sfx("windup", global_position, -4.0, 0.0)
 	_windup_tween = create_tween()
 	_windup_tween.tween_property(body, "scale", Vector2.ONE * 1.3, duration).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	_windup_tween.tween_property(body, "scale", Vector2.ONE, 0.08)

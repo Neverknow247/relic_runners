@@ -833,6 +833,7 @@ func _spawn_loot_pickup_deferred(pickup_id: String, world_pos: Vector2, inventor
 	zone_objects.add_child(pickup)
 	pickup.global_position = world_pos
 	pickup.setup(pickup_id, inventory_dict)
+	Sounds.play_sfx("loot", world_pos, -3.0)
 	# A container open passes its opener's peer id so ONE interact both spawns and opens
 	# the loot — auto-open the panel here for that peer (0 = normal drop, no auto-open).
 	if open_for_peer != 0 and open_for_peer == multiplayer.get_unique_id():

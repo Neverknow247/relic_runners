@@ -15,3 +15,4 @@ func setup_spell(_direction: Vector2, _spell_data: Dictionary, caster_id: int = 
 			b.queue_free()
 	Fx.shatter(get_tree(), global_position, _tint, clampf(scale.x / 6.0, 0.8, 2.0))
 	Fx.shake_at(get_tree(), global_position, 0.45)
+	Sounds.play_sfx("explosion", global_position)

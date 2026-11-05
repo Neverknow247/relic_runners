@@ -116,6 +116,7 @@ func setup_spell(_direction: Vector2, _spell_data: Dictionary, caster_id: int = 
 	# Moving enemy bullets are findable so a player's burst can clear them.
 	if _enemy_shot and speed > 0.0:
 		add_to_group("enemy_bullets")
+	_play_spawn_sound()
 	queue_redraw()
 	pierce = spell_data.get("pierce", false)
 	stop_on_wall = spell_data.get("stop_on_wall", true)
@@ -137,6 +138,21 @@ func setup_spell(_direction: Vector2, _spell_data: Dictionary, caster_id: int = 
 	# on the HOST deleted shots still flying toward a distant client (lost hits).
 	get_tree().create_timer(lifetime).timeout.connect(_expire)
 
+# Every peer spawns its own copy of every shot, so playing here gives everyone the
+# sound, positioned where it was fired.
+func _play_spawn_sound() -> void:
+	var form: String = spell_data.get("form", "default")
+	if _enemy_shot:
+		Sounds.play_sfx("enemy_shoot", global_position, -6.0)
+	elif form != "default":
+		Sounds.play_sfx("spell_cast", global_position)
+	else:
+		match spell_data.get("weapon", ""):
+			"wand": Sounds.play_sfx("shoot_wand", global_position, -4.0)
+			"orb": Sounds.play_sfx("shoot_orb", global_position)
+			"tome": Sounds.play_sfx("shoot_tome", global_position, -2.0)
+			_: Sounds.play_sfx("shoot_wand", global_position, -6.0)
+
 func _on_hitbox_area_entered(area: Area2D) -> void:
 	# Pass over anything this projectile can't damage — the caster's own hurtbox,
 	# and allied enemies (so an enemy bullet doesn't die on an enemy in the way).
@@ -147,6 +163,7 @@ func _on_hitbox_area_entered(area: Area2D) -> void:
 	if pierce:
 		return
 	Fx.puff(get_tree(), global_position, _tint, scale.x)
+	Sounds.play_sfx("hit", global_position, -3.0)
 	# A stratagem connecting should feel like one.
 	if !_enemy_shot and spell_data.get("form", "default") != "default":
 		Fx.shatter(get_tree(), global_position, _tint, 0.9)
