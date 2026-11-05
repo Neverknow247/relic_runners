@@ -105,6 +105,14 @@ const LOCATION_SLOTS: Array[Vector2i] = [
 	Vector2i(2, 1), Vector2i(1, 2), Vector2i(-1, 2),
 ]
 
+# Which ZONE_SCENES room a world position lies in (each room sits in its own
+# LOCATION_SPACING slot), or "" if none. Used to scope ground loot to a room.
+func room_key_at(pos: Vector2) -> String:
+	for key in world.ZONE_SCENES:
+		if pos.distance_to(_location_offset(key)) < LOCATION_SPACING * 0.5:
+			return key
+	return ""
+
 func _location_offset(key: String) -> Vector2:
 	var idx: int = world.ZONE_SCENES.keys().find(key)
 	if idx < 0:

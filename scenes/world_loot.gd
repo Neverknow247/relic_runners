@@ -370,3 +370,27 @@ func claim_item(pickup_id: String, item_instance_id: String) -> Item:
 
 func clear_active_pickups() -> void:
 	active_pickups.clear()
+
+# Ends an expedition's ground loot (death bags, drops) but keeps piles players
+# left lying around in the hub, which used to vanish whenever a run launched.
+func clear_expedition_pickups() -> void:
+	for pickup_id in active_pickups.keys():
+		var key := world.world_rooms.room_key_at(active_pickups[pickup_id]["position"])
+		if !key.begins_with("hub/"):
+			active_pickups.erase(pickup_id)
+
+# Server only: re-send every pile in room_key to peer_id. A peer frees its local
+# pile nodes on every room change (world_rooms.load_location_locally), and piles
+# are otherwise only broadcast once at drop time, so anything dropped before
+# they arrived (a teammate's death bag) used to be invisible to them.
+func send_room_pickups_to(peer_id: int, room_key: String) -> void:
+	if !world.multiplayer.is_server():
+		return
+	for pickup_id in active_pickups:
+		var entry: Dictionary = active_pickups[pickup_id]
+		if world.world_rooms.room_key_at(entry["position"]) != room_key:
+			continue
+		if peer_id == world.multiplayer.get_unique_id():
+			world.broadcast_loot_pickup_spawned(pickup_id, entry["position"], entry["inventory"].to_dict(), 0)
+		else:
+			world.broadcast_loot_pickup_spawned.rpc_id(peer_id, pickup_id, entry["position"], entry["inventory"].to_dict(), 0)

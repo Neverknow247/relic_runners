@@ -357,6 +357,10 @@ func server_change_player_location(peer_id: int, zone: String, room: String, spa
 		await client_change_location(zone, room, spawn_point)
 	else:
 		client_change_location.rpc_id(peer_id, zone, room, spawn_point)
+	# Hand the mover every ground pile already in its new room. Ordered after
+	# client_change_location (same node, reliable), which clears the mover's old
+	# pile nodes first, so these land in the fresh view.
+	world_loot.send_room_pickups_to(peer_id, "%s/%s" % [zone, room])
 	for other_id in player_locations.keys():
 		if other_id == peer_id:
 			continue
@@ -795,6 +799,11 @@ func _spawn_loot_pickup_deferred(pickup_id: String, world_pos: Vector2, inventor
 	# expedition death bag broadcast to a peer already in the hub spawns far
 	# off-screen at the expedition's coords rather than on top of them — while
 	# legitimate hub drops still spawn normally at hub coords.)
+	# Idempotent: a pile can arrive twice (its drop-time broadcast plus the
+	# room-entry re-send), so skip one this peer already shows.
+	for existing in get_tree().get_nodes_in_group("loot_pickups"):
+		if existing.pickup_id == pickup_id and !existing.is_queued_for_deletion():
+			return
 	var pickup = preload("res://scenes/items/loot_pickup.tscn").instantiate()
 	zone_objects.add_child(pickup)
 	pickup.global_position = world_pos

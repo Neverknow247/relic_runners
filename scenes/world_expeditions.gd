@@ -72,7 +72,7 @@ func launch_expedition(expedition_id: String):
 	world.party_state = world.PartyState.EXPEDITION
 	world.expedition_zone = target["zone"]
 	world.expedition_room = target["room"]
-	world.world_loot.clear_active_pickups()
+	world.world_loot.clear_expedition_pickups()
 	world.world_rooms.clear_held_rooms()
 	# Everyone's about to reload into fresh rooms — drop all stale enemy-ready
 	# confirmations; each peer re-confirms per room as it loads.
@@ -102,7 +102,7 @@ func return_party_to_hub():
 	world.party_state = world.PartyState.HUB
 	world.expedition_zone = "hub"
 	world.expedition_room = "main"
-	world.world_loot.clear_active_pickups()
+	world.world_loot.clear_expedition_pickups()
 	world.world_rooms.clear_held_rooms()
 	world.room_ready_peers.clear()
 
@@ -129,4 +129,4 @@ func check_expedition_still_active() -> void:
 	world.party_state = world.PartyState.HUB
 	world.expedition_zone = "hub"
 	world.expedition_room = "main"
-	world.world_loot.clear_active_pickups()
+	world.world_loot.clear_expedition_pickups()
