@@ -146,6 +146,7 @@ var is_dead := false:
 			Fx.shake_at(get_tree(), global_position, 0.22)
 			Sounds.play_sfx("enemy_die", global_position)
 		if value:
+			_release_token()
 			velocity = Vector2.ZERO
 			if visual_root:
 				visual_root.visible = false
@@ -1507,6 +1508,55 @@ var _aim_lock_point := Vector2.ZERO
 var _laser: Line2D = null
 var _windup_tween: Tween = null
 
+# --- Attack tokens (the difficulty dial) ---------------------------------------
+# Only N enemies may be winding up / firing a burst at the same player at once
+# (MapDef.tokens_per_player; E1 = 2, E2 = 3). The rest keep moving and flanking
+# until a token frees up, so a big pack is dangerous through pressure and
+# positioning, not a wall of simultaneous volleys. Server-only (AI is). The pool
+# lives on the room's `enemies` node as metadata: target instance id -> holders.
+const DEFAULT_TOKENS_PER_PLAYER := 2
+var _token_target_id := 0
+
+func _tokens_per_player() -> int:
+	var map := Stats.current_map()
+	return map.tokens_per_player if map != null else DEFAULT_TOKENS_PER_PLAYER
+
+func _token_pool() -> Dictionary:
+	var p := get_parent()
+	if p == null:
+		return {}
+	if !p.has_meta("attack_tokens"):
+		p.set_meta("attack_tokens", {})
+	return p.get_meta("attack_tokens")
+
+func _try_acquire_token() -> bool:
+	if current_target == null:
+		return false
+	var tid := current_target.get_instance_id()
+	if _token_target_id == tid:
+		return true
+	_release_token()
+	var pool := _token_pool()
+	var holders: Array = pool.get(tid, [])
+	# Drop holders that died, were freed, or moved their token to someone else.
+	holders = holders.filter(func(h): return is_instance_valid(h) and !h.is_dead and h._token_target_id == tid)
+	if holders.size() >= _tokens_per_player():
+		pool[tid] = holders
+		return false
+	holders.append(self)
+	pool[tid] = holders
+	_token_target_id = tid
+	return true
+
+func _release_token() -> void:
+	if _token_target_id == 0:
+		return
+	var pool := _token_pool()
+	var holders: Array = pool.get(_token_target_id, [])
+	holders.erase(self)
+	pool[_token_target_id] = holders
+	_token_target_id = 0
+
 func _target_on_screen(t: Node2D) -> bool:
 	var d := t.global_position - global_position
 	return absf(d.x) <= TARGET_SCREEN_HALF.x - SCREEN_FIRE_MARGIN \
@@ -1594,6 +1644,7 @@ func _show_recover(duration: float) -> void:
 
 func reset_casting() -> void:
 	_cancel_windup()
+	_release_token()
 	spell_input_sequence.clear()
 	target_recipe_sequence.clear()
 	tap_timer = 0.0
@@ -1609,6 +1660,10 @@ func update_casting(delta: float, distance: float) -> void:
 			enter_next_tap()
 		return
 	if cast_timer > 0.0:
+		return
+	# A new burst needs one of the target's attack tokens; without one, hold fire
+	# (movement continues) until a packmate finishes its burst.
+	if _burst_shots == 0 and not _windup_ready and _windup_left <= 0.0 and not _try_acquire_token():
 		return
 	# Telegraph: before the FIRST shot of a burst, wind up (visible to the room).
 	if windup_sec > 0.0 and _burst_shots == 0 and not _windup_ready:
@@ -1783,10 +1838,12 @@ func fire_spell(weapon: String, element: String, form: String) -> void:
 			_burst_shots = 0
 			cast_timer = randf_range(burst_cooldown_range[0], burst_cooldown_range[1])
 			_emit_recover(cast_timer)
-	# Burst finished: the next one needs a fresh wind-up (and a fresh aim lock).
+	# Burst finished: the next one needs a fresh wind-up (and a fresh aim lock),
+	# and the attack token goes back to the pool for a packmate.
 	if _burst_shots == 0:
 		_windup_ready = false
 		_aim_locked = false
+		_release_token()
 
 # Per-shot angle offsets (radians, relative to the aimed direction) for one volley.
 # An archetype may specify an explicit `pellet_angles_deg` list (custom/asymmetric
