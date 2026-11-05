@@ -41,6 +41,10 @@ class_name MapDef
 @export_range(0.0, 1.0) var container_gold_chance := 0.0
 ## container type -> weight. Empty = container_spawner's own type_weights.
 @export var container_type_weights: Dictionary = {}
+## Seconds after being looted that a RENEWABLE container refills (0 = never).
+@export var container_respawn_sec := 0.0
+## Container types that refill (e.g. berry bushes, mining nodes on survival maps).
+@export var renewable_types: Array[String] = []
 
 @export_group("Survival (style = survival)")
 ## Seconds per full day (day + night).

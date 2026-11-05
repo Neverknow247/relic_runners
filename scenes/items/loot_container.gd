@@ -111,6 +111,41 @@ func _do_open(open_for_peer: int = 0) -> void:
 		else:
 			world.spawn_container_loot(global_position, container_type, context)
 	_broadcast_looted()
+	_schedule_regrow()
+
+# Survival maps: renewable types (MapDef.renewable_types) refill after
+# container_respawn_sec, so you keep foraging across the days. Server-only timer;
+# the refill is broadcast to the room like the looted state.
+func _schedule_regrow() -> void:
+	var map := Stats.current_map()
+	if map == null or map.container_respawn_sec <= 0.0 or !map.renewable_types.has(container_type):
+		return
+	await get_tree().create_timer(map.container_respawn_sec).timeout
+	if !is_inside_tree() or !looted:
+		return
+	looted = false
+	var world = get_tree().get_first_node_in_group("world")
+	var room_key := _my_room_key(world)
+	if world == null or room_key == "":
+		set_unlooted.rpc()
+		return
+	var server_id := multiplayer.get_unique_id()
+	var recipients := {server_id: true}
+	for pid in world.peers_in_room(room_key):
+		recipients[pid] = true
+	for pid in recipients:
+		if pid == server_id:
+			set_unlooted()
+		else:
+			set_unlooted.rpc_id(pid)
+
+@rpc("authority", "call_local", "reliable")
+func set_unlooted() -> void:
+	looted = false
+	var id := _container_id()
+	if id != "":
+		Stats.expedition_looted_containers.erase(id)
+	_update_visual()
 
 # Scope the looted flag to peers who actually have this room loaded (same reason
 # as exit_portal — a blanket .rpc() would spam "node not found" at peers who left

@@ -25,7 +25,14 @@ spawn_chance_mult = 1.0
 affix_pool = Array[String](["fast", "armored"])
 container_silver_chance = 0.08
 container_gold_chance = 0.0
-container_type_weights = {}
+container_type_weights = {
+"berry_bush": 45,
+"crate": 25,
+"medic_box": 12,
+"mining_node": 18
+}
+container_respawn_sec = 150.0
+renewable_types = Array[String](["berry_bush", "mining_node"])
 day_length_sec = 900.0
 night_fraction = 0.33
 extract_from_day = 3

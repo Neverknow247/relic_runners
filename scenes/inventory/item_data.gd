@@ -100,6 +100,11 @@ const ITEMS := {
 	# Crafting materials + crafted odds and ends (see CRAFTING_RECIPES). Plain
 	# stackable bag items whose only role (beyond the two usable consumables) is
 	# being recipe ingredients.
+	"berries": {
+		"usable": true, "food_amount": 15.0,
+		"display_name": "Berries", "stackable": true, "max_stack": 20,
+		"footprint": Vector2i(1, 1), "color": Color(0.7, 0.2, 0.45), "icon_label": "b",
+	},
 	"herbs": {
 		"display_name": "Herbs", "stackable": true, "max_stack": 20,
 		"footprint": Vector2i(1, 1), "color": Color(0.35, 0.7, 0.3), "icon_label": "h",
@@ -727,6 +732,22 @@ const LOOT_TABLES := {
 			{"src": "gold", "chance": 100, "qty": [10, 24]},
 			{"src": "potions", "chance": 55},
 			{"src": "@crystal", "chance": 70},
+		],
+	},
+	"berry_bush": {
+		"bronze": [
+			{"src": "berries", "chance": 100, "qty": [2, 4]},
+			{"src": "herbs", "chance": 40, "qty": [1, 2]},
+		],
+		"silver": [
+			{"src": "berries", "chance": 100, "qty": [3, 6]},
+			{"src": "herbs", "chance": 60, "qty": [1, 3]},
+			{"src": "red_moss", "chance": 25},
+		],
+		"gold": [
+			{"src": "berries", "chance": 100, "qty": [5, 8]},
+			{"src": "herbs", "chance": 80, "qty": [2, 4]},
+			{"src": "red_moss", "chance": 50},
 		],
 	},
 	"crate": {
