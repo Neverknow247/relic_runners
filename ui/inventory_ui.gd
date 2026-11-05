@@ -12,6 +12,7 @@ extends CanvasLayer
 @onready var stash_grid: InventoryGrid = $panel_container/margin_container/root_vbox/columns_row/left_column/stash_column/stash_grid
 @onready var materials_grid: MaterialsGrid = $panel_container/margin_container/root_vbox/columns_row/left_column/stash_column/materials_grid
 @onready var materials_tab_button: Button = $panel_container/margin_container/root_vbox/columns_row/left_column/stash_column/stash_tab_row/materials_tab_button
+@onready var gems_tab_button: Button = $panel_container/margin_container/root_vbox/columns_row/left_column/stash_column/stash_tab_row/gems_tab_button
 @onready var move_all_button: Button = $panel_container/margin_container/root_vbox/columns_row/left_column/stash_column/move_all_button
 @onready var stash_tab_1: StashTabButton = $panel_container/margin_container/root_vbox/columns_row/left_column/stash_column/stash_tab_row/stash_tab_1
 @onready var stash_tab_2: StashTabButton = $panel_container/margin_container/root_vbox/columns_row/left_column/stash_column/stash_tab_row/stash_tab_2
@@ -32,8 +33,25 @@ extends CanvasLayer
 
 var player = null
 var active_stash_tab := 0
-# The stash column shows either a numbered tab's grid or the Materials tab.
+# The stash column shows either a numbered tab's grid or one of the two Materials
+# tabs (Crystals / Gems). materials_category tracks which one when showing_materials.
 var showing_materials := false
+var materials_category := "crystals"
+
+# --- Held-item (click-grab) system ---------------------------------------
+# One item at a time can be "held" on the cursor, picked up by a left-CLICK (vs a
+# drag). The mouse WHEEL rotates it, a click drops it, right-click cancels it back to
+# origin. The
+# grids/slot widgets detect the click and call into here; native drag is suppressed
+# while holding (is_holding()). held_origin is a container id ("player"/"stash_N"/
+# "overflow") for a grid, or "slot:<destination>" (e.g. "slot:backpack"/"slot:hand"/
+# "slot:quick_0") when the item was lifted out of an equipment/weapon/belt slot.
+var held_item: Item = null
+var held_origin := ""
+var held_origin_cell := Vector2i.ZERO
+var held_origin_rotated := false
+var held_preview: ColorRect = null
+var held_preview_label: Label = null
 
 func setup(target_player) -> void:
 	player = target_player
@@ -54,7 +72,8 @@ func setup(target_player) -> void:
 	stash_tab_2.pressed.connect(func(): _select_stash_tab(1))
 	stash_tab_3.pressed.connect(func(): _select_stash_tab(2))
 	stash_tab_4.pressed.connect(func(): _select_stash_tab(3))
-	materials_tab_button.pressed.connect(_select_materials_tab)
+	materials_tab_button.pressed.connect(func(): _select_materials_tab("crystals"))
+	gems_tab_button.pressed.connect(func(): _select_materials_tab("gems"))
 	take_all_button.pressed.connect(func(): if player: player.take_all_from_loot())
 	move_all_button.pressed.connect(_on_move_all_pressed)
 	refresh()
@@ -189,6 +208,181 @@ func show_stash_panel() -> void:
 func hide_stash_panel() -> void:
 	stash_column.visible = false
 
+# True while the mouse is over the inventory window. The grids use this to tell a
+# failed drag released in the game world (drop on ground) from one released inside
+# the window on an invalid spot (snap back). Uses the panel's own coordinate space
+# so it stays correct under the stretched UI canvas.
+func mouse_over_window() -> bool:
+	var pc := $panel_container
+	return pc.get_global_rect().has_point(pc.get_global_mouse_position())
+
+# ======================= Held-item (click-grab) system ===================
+func is_holding() -> bool:
+	return held_item != null
+
+func _ensure_preview() -> void:
+	if held_preview != null:
+		return
+	held_preview = ColorRect.new()
+	held_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	held_preview.z_index = 100
+	held_preview.visible = false
+	held_preview_label = Label.new()
+	held_preview_label.position = Vector2(12, 8)
+	held_preview_label.add_theme_font_size_override("font_size", 48)
+	held_preview.add_child(held_preview_label)
+	add_child(held_preview)
+
+func _refresh_preview() -> void:
+	_ensure_preview()
+	if held_item == null:
+		held_preview.visible = false
+		return
+	var fp := held_item.footprint()
+	var def := ItemData.get_def(held_item.type)
+	var col: Color = def["color"]
+	held_preview.color = Color(col.r, col.g, col.b, 0.8)
+	held_preview.size = Vector2(fp.x * InventoryGrid.CELL_SIZE, fp.y * InventoryGrid.CELL_SIZE)
+	held_preview_label.text = def["icon_label"]
+	held_preview.visible = true
+
+func _process(_delta: float) -> void:
+	if held_item == null:
+		return
+	# Closing the inventory mid-hold would strand the item — put it back first.
+	if not visible:
+		cancel_held()
+		return
+	if held_preview != null:
+		# Center the item's top-left cell on the cursor (matches top-left-anchored drop).
+		var m: Vector2 = $panel_container.get_global_mouse_position()
+		held_preview.position = m - Vector2(InventoryGrid.CELL_SIZE, InventoryGrid.CELL_SIZE) * 0.5
+
+func _input(event: InputEvent) -> void:
+	if held_item == null or not visible:
+		return
+	if event is InputEventMouseButton and event.pressed:
+		match event.button_index:
+			MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN:
+				# Scroll the wheel (either direction) to rotate the held item.
+				rotate_held()
+				get_viewport().set_input_as_handled()
+			MOUSE_BUTTON_RIGHT:
+				cancel_held()
+				get_viewport().set_input_as_handled()
+
+func rotate_held() -> void:
+	if held_item == null:
+		return
+	held_item.rotated = not held_item.rotated
+	_refresh_preview()
+	# Redraw whatever grids are showing so the placement highlight tracks the new shape.
+	player_grid.queue_redraw()
+	if stash_column.visible and not showing_materials:
+		stash_grid.queue_redraw()
+	if loot_grid.visible:
+		loot_grid.queue_redraw()
+
+# Pick up an item from a GRID cell (called by inventory_grid on a click).
+func grab(item: Item, origin_container: String, cell: Vector2i) -> void:
+	if item == null or is_holding() or player == null:
+		return
+	var taken: Item = player.take_from_container(origin_container, item.instance_id)
+	if taken == null:
+		return
+	held_item = taken
+	held_origin = origin_container
+	held_origin_cell = cell
+	held_origin_rotated = taken.rotated
+	_refresh_preview()
+
+# Drop the held item into an own-storage grid at cell (clean place OR 1-item swap).
+func try_place_grid(container_id: String, cell: Vector2i) -> void:
+	if held_item == null or player == null:
+		return
+	if container_id == "overflow":
+		return  # overflow is take-only (mirrors _can_drop_data)
+	var result = player.place_or_swap_in_container(container_id, held_item, cell)
+	if result == false:
+		return  # didn't fit — keep holding
+	held_item = result if result is Item else null
+	if held_item != null:
+		# Swapped — now holding the displaced item, with this cell as its origin.
+		held_origin = container_id
+		held_origin_cell = cell
+		held_origin_rotated = held_item.rotated
+	_refresh_preview()
+
+func _slot_item_id(destination: String) -> String:
+	if destination == "hand" or destination == "holster":
+		var idx: int = player.active_slot if destination == "hand" else 1 - player.active_slot
+		var w = player.weapon_slots[idx]
+		return w.instance_id if w != null else ""
+	if destination.begins_with("quick_"):
+		var qi := int(destination.trim_prefix("quick_"))
+		if qi >= 0 and qi < player.quick_slots.size() and player.quick_slots[qi] != null:
+			return player.quick_slots[qi].instance_id
+		return ""
+	var it: Item = player.get_equipped(destination)
+	return it.instance_id if it != null else ""
+
+# Lift an equipped item off a slot into the hand (empty-handed click on a filled
+# slot). Reuses the unequip-to-bag path (all its side effects), then takes it into
+# hand — so it needs one free bag cell; if there's none it stays equipped.
+func grab_from_slot(destination: String) -> void:
+	if is_holding() or player == null:
+		return
+	var id := _slot_item_id(destination)
+	if id == "":
+		return
+	if destination.begins_with("quick_"):
+		player.unequip_quick_slot_to_grid(int(destination.trim_prefix("quick_")), "player", 0, 0)
+	else:
+		player.unequip_to_grid(destination, "player", 0, 0)
+	var item: Item = player.take_from_container("player", id)
+	if item == null:
+		return  # couldn't land in the bag — stays equipped, nothing grabbed
+	held_item = item
+	held_origin = "slot:" + destination
+	held_origin_cell = Vector2i.ZERO
+	held_origin_rotated = item.rotated
+	_refresh_preview()
+
+# Drop the held item onto an equipment/weapon/belt/quick slot (equip it). The caller
+# (the slot widget) has already checked the item is valid for that slot.
+func try_place_slot(destination: String) -> void:
+	if held_item == null or player == null:
+		return
+	if player._equip_claimed_to_destination(destination, held_item):
+		held_item = null
+		_refresh_preview()
+		refresh()
+	# else: no room to displace the current occupant — keep holding.
+
+func cancel_held() -> void:
+	if held_item == null:
+		return
+	held_item.rotated = held_origin_rotated
+	_return_held_to_origin()
+	held_item = null
+	_refresh_preview()
+	refresh()
+
+func _return_held_to_origin() -> void:
+	if player == null:
+		return
+	if held_origin.begins_with("slot:"):
+		if not player._equip_claimed_to_destination(held_origin.trim_prefix("slot:"), held_item):
+			_drop_held_into_bag()
+		return
+	if player.place_or_swap_in_container(held_origin, held_item, held_origin_cell) == false:
+		_drop_held_into_bag()
+
+# Last-resort so cancel can never destroy an item: stuff it anywhere in the bag.
+func _drop_held_into_bag() -> void:
+	player.inventory.try_stack_or_place(held_item)
+	player.persist_inventory()
+
 func _select_stash_tab(idx: int) -> void:
 	active_stash_tab = idx
 	showing_materials = false
@@ -202,19 +396,23 @@ func _select_stash_tab(idx: int) -> void:
 	stash_tab_3.modulate = Color(1, 1, 0.6) if idx == 2 else Color(1, 1, 1)
 	stash_tab_4.modulate = Color(1, 1, 0.6) if idx == 3 else Color(1, 1, 1)
 	materials_tab_button.modulate = Color(1, 1, 1)
+	gems_tab_button.modulate = Color(1, 1, 1)
 
-# The Materials tab replaces the numbered grid + move-all with the fixed
-# per-type materials slots (deposit-only). See materials_grid.gd.
-func _select_materials_tab() -> void:
+# A Materials tab (Crystals or Gems) replaces the numbered grid + move-all with the
+# fixed per-type material slots — now drag-OUT capable too. See materials_grid.gd.
+func _select_materials_tab(category: String) -> void:
 	showing_materials = true
+	materials_category = category
 	stash_grid.visible = false
-	# Move All still applies here (crystals/stones bank to Materials, other items
-	# to the tabs) — see _on_move_all_pressed.
+	# Move All still applies here (crystals/gems bank to Materials, other items to the
+	# tabs) — see _on_move_all_pressed.
 	move_all_button.visible = true
 	materials_grid.visible = true
-	materials_grid.refresh()
+	materials_grid.set_category(category)
 	stash_tab_1.modulate = Color(1, 1, 1)
 	stash_tab_2.modulate = Color(1, 1, 1)
 	stash_tab_3.modulate = Color(1, 1, 1)
 	stash_tab_4.modulate = Color(1, 1, 1)
-	materials_tab_button.modulate = Color(1, 1, 0.6)
+	# Highlight whichever material tab is active.
+	materials_tab_button.modulate = Color(1, 1, 0.6) if category == "crystals" else Color(1, 1, 1)
+	gems_tab_button.modulate = Color(1, 1, 0.6) if category == "gems" else Color(1, 1, 1)

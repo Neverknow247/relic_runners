@@ -19,6 +19,11 @@ var expedition_seed: int = 0
 # broadcast_expedition_seed and enemy_spawner.gd's room_key/save_state().
 var expedition_room_state: Dictionary = {}
 
+# Container ids looted this expedition (used as a set), so a hand-placed
+# loot_container stays empty on a room revisit but refills next expedition.
+# Cleared alongside expedition_seed in world.gd's broadcast_expedition_seed.
+var expedition_looted_containers: Dictionary = {}
+
 var new_save_data = {
 	"version" : ProjectSettings.get_setting("application/config/version"),
 	"stats" : {

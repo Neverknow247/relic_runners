@@ -22,30 +22,48 @@ const DEATH_BAG_SIZE := Vector2i(6, 6)
 # How close a drop has to land to an existing pile to merge into it instead
 # of spawning a new one, and how far apart two separate piles must end up
 # so their ground markers never fully overlap.
-const MERGE_RADIUS := 120.0
-const MIN_PILE_SEPARATION := 96.0
+const MERGE_RADIUS := 480.0
+const MIN_PILE_SEPARATION := 384.0
 const SEPARATION_ATTEMPTS := 8
 
 func setup(_world) -> void:
 	world = _world
 
-# Rolls a killed enemy's loot: rolls_min..rolls_max independent rolls, each
-# landing on a rarity tier (RARITY_DROP_WEIGHTS) then pulling a random item of
-# that tier from the enemy type's pool (ItemData.ENEMY_LOOT_POOLS[pool_id]).
-# "@weapon" resolves to the enemy's own weapon via weapon_override
-# {type, element, forms}. Everything that drops goes into one shared pile.
+# A killed enemy's loot (its type's ENEMY_LOOT_POOLS pool). "@weapon" resolves to
+# the enemy's own weapon via weapon_override {type, element, forms}.
 func roll_pool_loot(
-	position: Vector2, pool_id: String, rolls_min: int, rolls_max: int, weapon_override: Dictionary
+	world_pos: Vector2, pool_id: String, rolls_min: int, rolls_max: int, weapon_override: Dictionary
+) -> void:
+	roll_loot_pool(world_pos, ItemData.ENEMY_LOOT_POOLS.get(pool_id, {}), rolls_min, rolls_max, weapon_override)
+
+# A hand-placed container's loot (its CONTAINERS entry's pool + roll range).
+# There's always some chance it just turns up empty (per-container "empty_chance",
+# default 0.15) — it's still spent (looted) either way.
+func roll_container_loot(world_pos: Vector2, container_type: String, context: Dictionary = {}) -> void:
+	if !world.multiplayer.is_server():
+		return
+	# v1 (old-format) containers only — the new base types (crate/chest/mining_node/…)
+	# go through spawn_loot with a LOOT_TABLES[type][tier] table instead (loot_container).
+	var c: Dictionary = ItemData.CONTAINERS.get(container_type, {})
+	if world.rng.randf() < c.get("empty_chance", 0.15):
+		return
+	roll_loot_pool(world_pos, c.get("loot", {}), c.get("rolls_min", 1), c.get("rolls_max", 2), {})
+
+# The shared roller (server only): rolls_min..rolls_max independent rolls, each
+# landing on a rarity tier (RARITY_DROP_WEIGHTS) then pulling a random item of
+# that tier from `pool`. Everything that drops goes into one shared ground pile.
+func roll_loot_pool(
+	world_pos: Vector2, pool: Dictionary, rolls_min: int, rolls_max: int, weapon_override: Dictionary
 ) -> void:
 	if !world.multiplayer.is_server():
 		return
-	var pool: Dictionary = ItemData.ENEMY_LOOT_POOLS.get(pool_id, {})
 	if pool.is_empty():
 		return
 	var pile := Inventory.new(LOOT_PILE_SIZE.x, LOOT_PILE_SIZE.y)
 	var dropped_anything := false
 	for r in world.rng.randi_range(rolls_min, rolls_max):
-		var tier: Array = pool.get(_roll_rarity(), [])
+		var rarity := _roll_rarity()
+		var tier: Array = pool.get(rarity, [])
 		if tier.is_empty():
 			continue
 		var item_type: String = tier[world.rng.randi_range(0, tier.size() - 1)]
@@ -53,12 +71,141 @@ func roll_pool_loot(
 		var qty: int = world.rng.randi_range(qty_range[0], qty_range[1])
 		if qty <= 0:
 			continue
-		var item := _make_loot_item(item_type, qty, weapon_override)
+		var item := _make_loot_item(item_type, qty, weapon_override, rarity)
 		if item != null and pile.try_stack_or_place(item):
 			dropped_anything = true
 	if !dropped_anything:
 		return
-	_spawn_new_pile(position, pile)
+	_spawn_new_pile(world_pos, pile)
+
+# Per-entry-chance loot table (ItemData.LOOT_TABLES). Each entry is an independent
+# roll; on a hit it resolves a group/item/@token to an item and drops it. `context`
+# supplies the dead enemy's identity for the @tokens:
+#   {"element": String, "weapon": {type,element,forms}, "rarity": String (tier rarity)}
+# Chests pass {} (they use no @tokens). Server-only, like the rest of loot.
+func roll_loot_table(world_pos: Vector2, table: Array, context: Dictionary, open_for_peer: int = 0) -> void:
+	if !world.multiplayer.is_server():
+		return
+	if table.is_empty():
+		return
+	var pile := Inventory.new(LOOT_PILE_SIZE.x, LOOT_PILE_SIZE.y)
+	var dropped_anything := false
+	var chance_mult: float = float(context.get("chance_mult", 1.0))
+	for entry in table:
+		var chance := int(round(float(entry.get("chance", 100)) * chance_mult))
+		if world.rng.randi_range(1, 100) > chance:
+			continue
+		var item := _resolve_entry(entry, context)
+		if item != null and pile.try_stack_or_place(item):
+			dropped_anything = true
+	if dropped_anything:
+		_spawn_new_pile(world_pos, pile, open_for_peer)
+
+# Resolves one loot entry (group / specific item / @token) to a built Item, or null.
+func _resolve_entry(entry: Dictionary, context: Dictionary) -> Item:
+	var src: String = entry.get("src", "")
+	var item_type := ""
+	var weapon_override := {}
+	var rarity := "common"
+	match src:
+		"@weapon":
+			if (context.get("weapon", {}) as Dictionary).get("type", "") == "":
+				return null
+			item_type = "@weapon"
+			weapon_override = context["weapon"]
+			rarity = context.get("rarity", "common")
+		"@crystal":
+			var el: String = context.get("element", "")
+			if el == "":
+				return null
+			item_type = "crystal_" + el
+			rarity = ItemData.rarity_of_type(item_type)
+		"@dust":
+			var eld: String = context.get("element", "")
+			if eld == "":
+				return null
+			item_type = eld + "_dust"
+			rarity = ItemData.rarity_of_type(item_type)
+		"@gear":
+			var gear: Array = ItemData.GEAR_DROP_TYPES
+			item_type = gear[world.rng.randi_range(0, gear.size() - 1)]
+			rarity = context.get("rarity", "common")
+		_:
+			item_type = _pick_from_group(src) if ItemData.LOOT_GROUPS.has(src) else src
+			if item_type == "" or not ItemData.ITEMS.has(item_type):
+				return null
+			rarity = ItemData.rarity_of_type(item_type)
+	# Optional explicit rarity (chests use it to drop, e.g., a rare weapon since they
+	# have no enemy tier to inherit). Only affects weapons/gear; ignored otherwise.
+	if entry.has("rarity"):
+		rarity = entry["rarity"]
+	# Quantity: entry override, else the item's own drop range (@weapon is always 1).
+	var qty := 1
+	if entry.has("qty"):
+		var band: Array = entry["qty"]
+		qty = world.rng.randi_range(int(band[0]), int(band[1]))
+	elif item_type != "@weapon":
+		var dq := ItemData.get_drop_qty(item_type)
+		qty = world.rng.randi_range(dq[0], dq[1])
+	if qty <= 0:
+		return null
+	return _make_loot_item(item_type, qty, weapon_override, rarity)
+
+# Weighted pick of one item from a named group — rarer items appear less often.
+func _pick_from_group(group_name: String) -> String:
+	var items: Array = ItemData.LOOT_GROUPS.get(group_name, [])
+	if items.is_empty():
+		return ""
+	var total := 0
+	for it in items:
+		total += int(ItemData.RARITY_DROP_WEIGHTS.get(ItemData.rarity_of_type(it), 1))
+	var roll: int = world.rng.randi_range(1, max(1, total))
+	var cum := 0
+	for it in items:
+		cum += int(ItemData.RARITY_DROP_WEIGHTS.get(ItemData.rarity_of_type(it), 1))
+		if roll <= cum:
+			return it
+	return items[0]
+
+# Fishing: roll ONE catch from a spot's pool (server only). Returns
+# {"type": String, "rarity": int} — the rarity index scales the reel minigame's
+# difficulty — or {} if the spot has no loot at all. A rolled-but-empty tier
+# falls to the nearest lower tier (then upward) so a cast always lands something.
+func roll_fishing_catch(spot_type: String) -> Dictionary:
+	if !world.multiplayer.is_server():
+		return {}
+	var pool: Dictionary = ItemData.FISHING_SPOTS.get(spot_type, {}).get("loot", {})
+	if pool.is_empty():
+		return {}
+	var start: int = ItemData.RARITY_ORDER.find(_roll_rarity())
+	for i in range(start, -1, -1):
+		var picked := _pick_from_tier(pool, i)
+		if picked != "":
+			return {"type": picked, "rarity": i}
+	for i in range(start + 1, ItemData.RARITY_ORDER.size()):
+		var picked := _pick_from_tier(pool, i)
+		if picked != "":
+			return {"type": picked, "rarity": i}
+	return {}
+
+func _pick_from_tier(pool: Dictionary, tier_index: int) -> String:
+	var tier: Array = pool.get(ItemData.RARITY_ORDER[tier_index], [])
+	if tier.is_empty():
+		return ""
+	return tier[world.rng.randi_range(0, tier.size() - 1)]
+
+# Spawn a single specific item into a ground pile here (server only) — used for a
+# landed fishing catch, where the exact item was already rolled.
+func spawn_single_item(world_pos: Vector2, item_type: String, qty: int) -> void:
+	if !world.multiplayer.is_server():
+		return
+	var item := _make_loot_item(item_type, qty, {})
+	if item == null:
+		return
+	var pile := Inventory.new(LOOT_PILE_SIZE.x, LOOT_PILE_SIZE.y)
+	if !pile.try_stack_or_place(item):
+		return
+	_spawn_new_pile(world_pos, pile)
 
 # Picks one rarity tier by the weighted drop odds.
 func _roll_rarity() -> String:
@@ -74,17 +221,19 @@ func _roll_rarity() -> String:
 # (its element/forms) and applying the random "worn" durability/mana looted gear
 # and weapons come with. Returns null if a weapon was rolled but the enemy had
 # none.
-func _make_loot_item(item_type: String, qty: int, weapon_override: Dictionary) -> Item:
+func _make_loot_item(item_type: String, qty: int, weapon_override: Dictionary, rarity := "common") -> Item:
 	var item: Item
 	if item_type == "@weapon":
 		if weapon_override.get("type", "") == "":
 			return null
-		item = Item.create(weapon_override["type"], 1)
+		# The dropped weapon takes the tier it rolled from — that's what drives its
+		# Attack + crit stats (see Weapon._init / ItemData.WEAPON_*_BY_RARITY).
+		item = Item.create(weapon_override["type"], 1, rarity)
 		if item.weapon != null:
 			item.weapon.element = weapon_override.get("element", item.weapon.element)
 			item.weapon.forms = (weapon_override.get("forms", []) as Array).duplicate()
 	else:
-		item = Item.create(item_type, qty)
+		item = Item.create(item_type, qty, rarity)
 	# Looted weapons/gear come randomly worn, not pristine.
 	if item.weapon != null:
 		item.weapon.durability = world.rng.randf_range(0.2, 1.0) * item.weapon.max_durability
@@ -98,40 +247,42 @@ func _make_loot_item(item_type: String, qty: int, weapon_override: Dictionary) -
 # if none does (or none exist nearby), spawns a fresh pile nudged away from
 # any existing one so their ground markers don't land exactly on top of
 # each other.
-func drop_item(position: Vector2, item_dict: Dictionary) -> void:
+func drop_item(world_pos: Vector2, item_dict: Dictionary) -> void:
 	var item := Item.from_dict(item_dict)
 	for pickup_id in active_pickups.keys():
 		var entry: Dictionary = active_pickups[pickup_id]
-		if entry["position"].distance_to(position) > MERGE_RADIUS:
+		if entry["position"].distance_to(world_pos) > MERGE_RADIUS:
 			continue
 		if entry["inventory"].try_stack_or_place(item):
 			world.broadcast_item_added.rpc(pickup_id, item.to_dict())
 			return
 	var pile := Inventory.new(LOOT_PILE_SIZE.x, LOOT_PILE_SIZE.y)
 	pile.try_stack_or_place(item)
-	_spawn_new_pile(position, pile)
+	_spawn_new_pile(world_pos, pile)
 
 # A dying player's whole backpack + contents, dropped as one dedicated pile
 # — unlike drop_item(), this never tries to merge into some nearby unrelated
 # pile; a death bag is always its own thing, right where they fell.
-func drop_death_bag(position: Vector2, items: Array) -> void:
+func drop_death_bag(world_pos: Vector2, items: Array) -> void:
 	var pile := Inventory.new(DEATH_BAG_SIZE.x, DEATH_BAG_SIZE.y)
 	for item_dict in items:
 		pile.try_stack_or_place(Item.from_dict(item_dict))
 	if pile.placements.is_empty():
 		return
-	_spawn_new_pile(position, pile)
+	_spawn_new_pile(world_pos, pile)
 
-func _spawn_new_pile(desired_position: Vector2, pile: Inventory) -> void:
+func _spawn_new_pile(desired_position: Vector2, pile: Inventory, open_for_peer: int = 0) -> void:
 	var spawn_pos := _find_non_overlapping_position(desired_position)
 	var pickup_id := "%d_%d" % [Time.get_ticks_usec(), randi()]
 	active_pickups[pickup_id] = {"inventory": pile, "position": spawn_pos}
-	world.broadcast_loot_pickup_spawned.rpc(pickup_id, spawn_pos, pile.to_dict())
+	# open_for_peer (0 = nobody) auto-opens the new pile's panel for that peer — set by
+	# a container open so one interact both spawns and opens its loot (enemy drops pass 0).
+	world.broadcast_loot_pickup_spawned.rpc(pickup_id, spawn_pos, pile.to_dict(), open_for_peer)
 
 # A pile landing on a door/portal traps the player: interacting there opens the
 # bag instead of the door. So piles keep clear of interactables too, not just
 # each other.
-const DOOR_AVOID_RADIUS := 112.0
+const DOOR_AVOID_RADIUS := 448.0
 
 func _find_non_overlapping_position(desired: Vector2) -> Vector2:
 	var doors := _interactable_positions()
@@ -141,11 +292,11 @@ func _find_non_overlapping_position(desired: Vector2) -> Vector2:
 	# spot is found; best-effort fallback if everything nearby is crowded.
 	for attempt in SEPARATION_ATTEMPTS:
 		var angle := TAU * attempt / float(SEPARATION_ATTEMPTS)
-		var nudge := DOOR_AVOID_RADIUS + 32.0 + attempt * 32.0
+		var nudge := DOOR_AVOID_RADIUS + 128.0 + attempt * 128.0
 		var candidate := desired + Vector2.RIGHT.rotated(angle) * nudge
 		if !_position_blocked(candidate, doors):
 			return candidate
-	return desired + Vector2.RIGHT * (DOOR_AVOID_RADIUS + 32.0)
+	return desired + Vector2.RIGHT * (DOOR_AVOID_RADIUS + 128.0)
 
 func _position_blocked(candidate: Vector2, doors: Array) -> bool:
 	for pickup_id in active_pickups.keys():

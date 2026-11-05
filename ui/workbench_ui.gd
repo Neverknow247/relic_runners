@@ -16,7 +16,8 @@ extends CanvasLayer
 @onready var element_section: VBoxContainer = $panel_container/margin_container/v_box_container/element_section
 @onready var forms_section: VBoxContainer = $panel_container/margin_container/v_box_container/forms_section
 
-const ELEMENT_CHOICES := ["fire", "holy", "air"]
+# The elements you can swap a weapon to (single source: SpellData roster).
+const ELEMENT_CHOICES := SpellData.ELEMENT_ORDER
 
 var player: Node = null
 # Which weapon_slots index is being edited (0/1). Follows the player's active
@@ -88,12 +89,16 @@ func _add_weapon_button(label: String, slot: int) -> void:
 
 func _build_element_section(weapon: Weapon) -> void:
 	_add_header(element_section, "Element: %s" % weapon.element.capitalize())
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 16)
+	# HFlowContainer (not HBox) so the crystal buttons WRAP within the panel width
+	# instead of running off the right edge — there are 7 elements and the panel is
+	# a fixed width. Buttons are kept narrow so all 7 fit one row when there's room.
+	var row := HFlowContainer.new()
+	row.add_theme_constant_override("h_separation", 12)
+	row.add_theme_constant_override("v_separation", 12)
 	for element: String in ELEMENT_CHOICES:
 		var btn := Button.new()
-		btn.custom_minimum_size = Vector2(300, 110)
-		btn.add_theme_font_size_override("font_size", 32)
+		btn.custom_minimum_size = Vector2(190, 96)
+		btn.add_theme_font_size_override("font_size", 26)
 		var crystal: String = "crystal_" + element
 		var crystal_count: int = _count_of(crystal)
 		var has_crystal: bool = crystal_count > 0
@@ -101,7 +106,7 @@ func _build_element_section(weapon: Weapon) -> void:
 		btn.text = "%s\n%s" % [element.capitalize(), "current" if is_current else ("have x%d" % crystal_count if has_crystal else "need crystal")]
 		btn.disabled = is_current or !has_crystal
 		# Tint toward the element's own color so the choice reads like the
-		# fire/holy/air it'll become (same colors used on projectiles/enemies).
+		# element it'll become (same colors used on projectiles/enemies).
 		var col: Color = SpellData.ELEMENTS.get(element, SpellData.ELEMENTS["default"])["color"]
 		btn.modulate = col if !btn.disabled else col.darkened(0.5)
 		if !btn.disabled:
@@ -110,7 +115,7 @@ func _build_element_section(weapon: Weapon) -> void:
 	element_section.add_child(row)
 
 func _build_forms_section(weapon: Weapon) -> void:
-	_add_header(forms_section, "Forms (attach a stone to add its spell)")
+	_add_header(forms_section, "Forms (attach a gem to add its spell)")
 	for form: String in weapon.capable_forms():
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 16)
@@ -131,7 +136,7 @@ func _build_forms_section(weapon: Weapon) -> void:
 		else:
 			var stone_count := _count_of(ItemData.stone_for_form(form))
 			var has_stone: bool = stone_count > 0
-			btn.text = ("Attach (x%d)" % stone_count) if has_stone else "Attach (no stone)"
+			btn.text = ("Attach (x%d)" % stone_count) if has_stone else "Attach (no gem)"
 			btn.disabled = !has_stone
 			if has_stone:
 				btn.pressed.connect(_on_attach_pressed.bind(form))
@@ -161,7 +166,7 @@ func _on_attach_pressed(form: String) -> void:
 
 func _on_detach_pressed(form: String) -> void:
 	if player.workbench_detach_form(selected_slot, form):
-		status_label.text = "%s form detached — stone banked to Materials." % form.capitalize()
+		status_label.text = "%s form detached — gem banked to Materials." % form.capitalize()
 	else:
 		status_label.text = "Couldn't detach %s." % form.capitalize()
 	refresh()

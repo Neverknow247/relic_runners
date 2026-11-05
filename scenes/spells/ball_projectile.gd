@@ -14,10 +14,11 @@ const EXPLOSION_LIFETIME := 0.3
 var _exploded := false
 
 func _on_hitbox_area_entered(area: Area2D) -> void:
-	# Ignore the caster's own hurtbox; only an enemy detonates the ball early.
+	# Only a target the ball could actually hit detonates it early — not the caster's
+	# own hurtbox, and not an allied enemy it's passing (see Hitbox.can_hit).
 	if not area is Hurtbox:
 		return
-	if hitbox.caster_id != 0 and area.owner_id == hitbox.caster_id:
+	if not hitbox.can_hit(area):
 		return
 	_expire()
 

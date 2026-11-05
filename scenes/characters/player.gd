@@ -12,7 +12,7 @@ const DamageNumberScene := preload("res://scenes/effects/damage_number.tscn")
 func _spawn_damage_number(amount: float, color: Color, is_crit: bool = false) -> void:
 	var num = DamageNumberScene.instantiate()
 	get_tree().current_scene.add_child(num)
-	num.global_position = global_position + Vector2(0, -32)
+	num.global_position = global_position + Vector2(0, -128)
 	num.setup(amount, color, is_crit)
 
 @onready var player_camera: Camera2D = $player_camera
@@ -27,9 +27,14 @@ func _spawn_damage_number(amount: float, color: Color, is_crit: bool = false) ->
 @onready var mana_ui = $player_camera/mana_ui
 @onready var inventory_ui = $player_camera/inventory_ui
 @onready var downed_ui = $player_camera/downed_ui
+# World-space label above the head (not under the camera) — shows OTHER players a
+# revive prompt when they stand over this player's downed body carrying Phoenix Ash.
+@onready var revive_prompt: Label = $revive_prompt
 @onready var quick_slot_hud = $player_camera/quick_slot_hud
 @onready var workbench_ui = $player_camera/workbench_ui
 @onready var crafting_ui = $player_camera/crafting_ui
+@onready var fishing_ui = $player_camera/fishing_ui
+@onready var map_ui = $player_camera/map_ui
 @onready var expedition_kit_ui = $player_camera/expedition_kit_ui
 
 # Legs and the upper body are animated and rotated completely
@@ -50,6 +55,17 @@ var _applied_legs_anim := ""
 var _applied_body_anim := ""
 @export var network_rotation := 0.0
 @export var network_legs_rotation := 0.0
+# Networked position: the authority writes its true global_position here every
+# frame; remote copies buffer + interpolate it (see NetInterpolator) instead of
+# snapping to raw replicated values, which is what used to rubberband. This is
+# the ONLY player position channel now — the old per-frame server_send_player_state
+# RPC that fought the synchronizer is gone.
+@export var net_position := Vector2.ZERO
+var _pos_interp := NetInterpolator.new()
+var _last_net_pos := Vector2(INF, INF)
+# How fast a remote copy's sprite/legs rotation eases toward its replicated
+# target (rad/s) — smooths the 30Hz rotation stream without a laggy aim feel.
+const REMOTE_ROT_LERP := 25.0
 # Replicated combat identity (weapon type + element) — the matchup multiplier
 # needs the DEFENDER's weapon/element, but a remote peer doesn't have this
 # player's equipped Weapon (gear/weapons aren't networked). Set on the
@@ -63,8 +79,8 @@ var is_attacking := false
 
 # Base health before gear traits. max_health is recomputed from this by
 # _refresh_gear_effects() (belt_vitality adds +10%).
-const BASE_MAX_HEALTH := 100.0
-@export var max_health := 100.0
+const BASE_MAX_HEALTH := 1000.0
+@export var max_health := 1000.0
 # Replicated cloak-stealth flags (see player.tscn's SceneReplicationConfig).
 # Set on the authority from the equipped cloak's trait; the enemy AI (on the
 # server) reads a target player's copy of these — gear itself isn't networked,
@@ -77,17 +93,17 @@ var health := max_health:
 	set(value):
 		health = value
 		if health_ui:
-			health_ui.update_health(health, max_health, shield)
-# Shield (from an equipped Blessed Band) absorbs damage before health. Each
-# Blessed Band grants BLESSED_BAND_SHIELD; when the shield is fully spent the
+			health_ui.update_health(health, max_health, barrier)
+# Barrier (from an equipped Blessed Band) absorbs damage before health. Each
+# Blessed Band grants BLESSED_BAND_BARRIER; when the barrier is fully spent the
 # band(s) break into scrap (see take_damage / _break_blessed_bands).
-var shield := 0.0:
+var barrier := 0.0:
 	set(value):
-		shield = value
+		barrier = value
 		if health_ui:
-			health_ui.update_health(health, max_health, shield)
-var max_shield := 0.0
-const BLESSED_BAND_SHIELD := 50.0
+			health_ui.update_health(health, max_health, barrier)
+var max_barrier := 0.0
+const BLESSED_BAND_BARRIER := 50.0
 # ALIVE -> DOWNED (prone, 60s countdown, frozen) -> DYING (brief "dead" anim
 # pause) -> back to ALIVE once _finish_death() resets everything and sends
 # you to hub. Movement/attack input is ignored whenever this isn't ALIVE.
@@ -103,16 +119,21 @@ const DEATH_ANIM_DELAY := 1.0
 var give_up_hold_timer := 0.0
 const GIVE_UP_HOLD_DURATION := 3.0
 
-# Co-op revive: an ALIVE ally holds interact next to a DOWNED player to revive
-# them. Base is a slow revive to a sliver of health; if the REVIVER is carrying
-# Phoenix Ash it's consumed for a much faster revive to more health. The downed
-# player can't revive themselves.
-const REVIVE_RANGE := 120.0
-const REVIVE_TIME_BASE := 5.0
-const REVIVE_TIME_ASH := 1.5
-const REVIVE_HP_BASE := 25.0
-const REVIVE_HP_ASH := 50.0
+# Co-op revive: an ALIVE ally standing over a DOWNED player holds interact to
+# revive them — but ONLY if the reviver is carrying Phoenix Ash, which is spent on
+# the revive. No ash means no revive AND no prompt. The downed player can't revive
+# themselves. A world-space prompt shows over the downed body on the reviver's
+# screen while they're in range and holding an ash.
+const REVIVE_RANGE := 480.0
+const REVIVE_TIME := 1.5
+# Revived to this fraction of their OWN max health (resolved on the downed player's
+# authority in request_revive, so gear-boosted health scales with it).
+const REVIVE_HEALTH_FRACTION := 0.5
+const REVIVE_PROMPT_TEXT := "Hold E to Revive"
 var _revive_progress := 0.0
+# The downed ally whose revive prompt WE are currently showing (on our screen), so
+# we can hide it again once we move off or it's no longer valid.
+var _revive_prompt_target = null
 
 # Fresh characters start unarmed — a weapon is only ever granted by picking
 # the Starter Kit at an expedition door (see apply_starter_kit()); Custom Kit
@@ -156,7 +177,7 @@ var materials: Dictionary = {}
 # with when equipped_backpack is null (fresh character, unequipped, or after
 # death), same "equip nothing" idea belt/cloak already had, just with a
 # minimal-but-nonzero grid instead of literally zero slots.
-const DEFAULT_INVENTORY_SIZE := Vector2i(4, 1)
+const DEFAULT_INVENTORY_SIZE := Vector2i(2, 2)
 
 # Inventory's width/height are instance properties (not baked into the
 # class), so a bigger backpack is just a different Inventory.new(w, h)
@@ -193,9 +214,9 @@ var state = move_state
 var has_dash = true
 var dash_input_axis
 
-var default_max_velocity = 300
-var default_acceleration = 1500
-var friction = 1500
+var default_max_velocity = 1000
+var default_acceleration = 6000
+var friction = 6000
 
 var max_velocity = default_max_velocity
 var acceleration = default_acceleration
@@ -203,6 +224,9 @@ var acceleration = default_acceleration
 var attack_locked := false
 @export var attack_cooldown := 0.35
 var attack_timer := 0.0
+# Set true while any menu is open (see _physics_process); attack_check() then blocks
+# the attack until the button is released, so a menu-closing click can't fire a shot.
+var _block_attack_until_release := false
 
 @export var controller_aim_deadzone := 0.25
 var using_controller_aim := false
@@ -240,7 +264,7 @@ func refresh_mana_ui() -> void:
 	if equipped == null:
 		mana_ui.update_mana(0.0, 0.0)
 		return
-	mana_ui.update_mana(equipped.mana, equipped.max_mana)
+	mana_ui.update_mana(equipped.mana, equipped.effective_max_mana())
 
 func check_inventory_toggle():
 	if Input.is_action_just_pressed("toggle_inventory"):
@@ -248,6 +272,28 @@ func check_inventory_toggle():
 			close_inventory_if_open()
 		else:
 			inventory_ui.visible = true
+
+# M toggles the map overlay. Read-only and independent of the inventory — it
+# doesn't gate movement, so it updates live as you move.
+func check_map_toggle():
+	if Input.is_action_just_pressed("toggle_map"):
+		map_ui.toggle()
+
+# Esc backs out of the map if it's open (see world.gd's _unhandled_input).
+# Returns true if it actually closed it, so Esc doesn't also open the esc menu.
+func close_map_if_open() -> bool:
+	if !map_ui.visible:
+		return false
+	map_ui.close()
+	return true
+
+# True while the esc/pause menu (lives on world.tscn, not per-player) is showing —
+# used to arm attack-suppression so an esc-menu button click can't leak into a shot.
+func _esc_menu_open() -> bool:
+	var world = get_tree().get_first_node_in_group("world")
+	if world == null or not ("esc_menu" in world) or world.esc_menu == null:
+		return false
+	return world.esc_menu.visible
 
 # Shared by Tab (check_inventory_toggle above) and Esc (world.gd's
 # _unhandled_input, which closes the inventory instead of opening the esc
@@ -280,6 +326,12 @@ func close_inventory_if_open() -> bool:
 
 func get_equipped_weapon() -> Weapon:
 	return weapon_slots[active_slot]
+
+# True when the in-hand weapon is a Fishing Rod — the gate fishing_spot.gd uses
+# to let this player cast at a spot.
+func has_fishing_rod_equipped() -> bool:
+	var w := get_equipped_weapon()
+	return w != null and w.type == "fishing_rod"
 
 # Used by world interactables (loot_pickup.gd, chest.gd) before opening a
 # panel — check_inventory_toggle() (the only thing that can close a panel
@@ -335,7 +387,8 @@ func apply_pending_kit() -> void:
 	pending_kit = ""
 
 const STARTER_KIT_WEAPONS := ["tome", "orb", "wand"]
-const STARTER_KIT_ELEMENTS := ["fire", "holy", "air"]
+# The starter weapon's element is rolled from the full roster (single source).
+const STARTER_KIT_ELEMENTS := SpellData.ELEMENT_ORDER
 
 # Custom Kit: go in with exactly what's currently carried — even an empty
 # weapon slot (attack_check() already no-ops when unarmed). Nothing to do.
@@ -484,6 +537,55 @@ func get_container_by_id(container_id: String) -> Inventory:
 		return overflow
 	return null
 
+# --- Held-item (click-grab) container ops ---------------------------------
+# Remove an item instance from an own-storage container and hand it back (for the
+# held-item system to carry on the cursor). Persists + refreshes. null if missing.
+func take_from_container(container_id: String, instance_id: String) -> Item:
+	var container := get_container_by_id(container_id)
+	if container == null:
+		return null
+	var item := container.remove_item(instance_id)
+	if item == null:
+		return null
+	persist_container(container_id)
+	inventory_ui.refresh()
+	return item
+
+# Drop a held item into an own-storage grid at a cell (rotation-aware). Returns:
+#   false -> didn't fit / blocked; caller keeps holding it, nothing changed
+#   null  -> placed cleanly; caller's hand is now empty
+#   Item  -> SWAPPED with the single item that was there; caller now holds THAT one
+func place_or_swap_in_container(container_id: String, item: Item, cell: Vector2i) -> Variant:
+	var container := get_container_by_id(container_id)
+	if container == null:
+		return false
+	var fp := item.footprint()
+	if cell.x < 0 or cell.y < 0 or cell.x + fp.x > container.width or cell.y + fp.y > container.height:
+		return false
+	var blockers := container.overlapping_items(cell.x, cell.y, fp.x, fp.y)
+	if blockers.is_empty():
+		if not container.place_item(item, cell.x, cell.y):
+			return false
+		persist_container(container_id)
+		inventory_ui.refresh()
+		return null
+	if blockers.size() != 1:
+		return false  # more than one item in the way — no clean swap
+	# Swap the single blocker out for ours (remember its spot so we can abort safely).
+	var displaced: Item = blockers[0]
+	var displaced_pos := Vector2i(-1, -1)
+	for entry in container.placements:
+		if entry["item"] == displaced:
+			displaced_pos = Vector2i(entry["x"], entry["y"])
+			break
+	container.remove_item(displaced.instance_id)
+	if not container.place_item(item, cell.x, cell.y):
+		container.place_item(displaced, displaced_pos.x, displaced_pos.y)
+		return false
+	persist_container(container_id)
+	inventory_ui.refresh()
+	return displaced
+
 func persist_overflow() -> void:
 	stats.save_data["overflow"] = overflow.to_dict()
 
@@ -521,6 +623,22 @@ func bank_material(item: Item, origin_container_id: String) -> void:
 	materials[removed.type] = materials.get(removed.type, 0) + removed.quantity
 	persist_materials()
 	persist_container(origin_container_id)
+	inventory_ui.refresh()
+
+# Drag-OUT of the Materials bank: pull ONE of a banked material into an own-storage
+# grid. Materials are non-stackable 1x1 items, so each drag withdraws a single unit
+# into the first free cell (drag again for more). The bank is only debited if the
+# item actually lands (grid not full), so a failed drop costs nothing.
+func withdraw_material_to_grid(type: String, dest_container_id: String) -> void:
+	if material_count(type) <= 0:
+		return
+	var dest := get_container_by_id(dest_container_id)
+	if dest == null:
+		return
+	if not dest.try_stack_or_place(Item.create(type, 1)):
+		return
+	consume_material(type, 1)
+	persist_container(dest_container_id)
 	inventory_ui.refresh()
 
 func move_between_own_containers(origin_id: String, item_instance_id: String, dest_id: String, x: int, y: int) -> void:
@@ -643,13 +761,21 @@ func close_crafting_panel() -> void:
 	crafting_ui.visible = false
 
 # --- Crafting (called by crafting_ui.gd) ----------------------------------
-# How many of an item the player has across the bag AND the Materials tab.
+# How many of an item the player has across the bag, the Materials bank, AND (in the
+# hub) the stash — so hub crafting can draw straight from stashed ingredients.
 func item_available(item_type: String) -> int:
 	var total := material_count(item_type)
 	for entry in inventory.placements:
 		var it: Item = entry["item"]
 		if it.type == item_type:
 			total += it.quantity
+	# The stash is only reachable in the hub; count it there so you don't have to
+	# haul ingredients into your bag just to craft with them.
+	if _is_in_hub():
+		for tab in stash_tabs:
+			for entry in tab.placements:
+				if entry["item"].type == item_type:
+					total += entry["item"].quantity
 	return total
 
 # How many items satisfying a recipe ingredient (a wildcard like
@@ -666,7 +792,9 @@ func can_craft(recipe: Dictionary) -> bool:
 			return false
 	return true
 
-# Consume `count` of an ingredient — Materials tab first, then loose from the bag.
+# Consume `count` of an ingredient — Materials bank first, then loose from the bag,
+# then (in the hub) from the stash tabs. Order keeps the loose/bag copies for when
+# you're out on a run where the stash is unreachable.
 func _consume_ingredient(ingredient: String, count: int) -> void:
 	var remaining := count
 	for t in ItemData.CRAFTING_WILDCARDS.get(ingredient, [ingredient]):
@@ -675,6 +803,8 @@ func _consume_ingredient(ingredient: String, count: int) -> void:
 			consume_material(t, from_mat)
 			remaining -= from_mat
 		while remaining > 0 and _consume_one_of_type(t):
+			remaining -= 1
+		while remaining > 0 and _is_in_hub() and _consume_one_from_stash(t):
 			remaining -= 1
 		if remaining <= 0:
 			return
@@ -718,11 +848,26 @@ func _consume_one_of_type(type: String) -> bool:
 		return true
 	return false
 
+# Consume one of `type` from the stash tabs — hub crafting only (the stash isn't
+# reachable on a run). Mirrors _consume_one_of_type but scans every numbered tab.
+func _consume_one_from_stash(type: String) -> bool:
+	for tab in stash_tabs:
+		for entry in tab.placements:
+			var item: Item = entry["item"]
+			if item.type != type:
+				continue
+			item.quantity -= 1
+			if item.quantity <= 0:
+				tab.remove_item(item.instance_id)
+			persist_stash()
+			return true
+	return false
+
 func workbench_set_element(slot: int, element: String) -> bool:
 	var weapon: Weapon = weapon_slots[slot] if slot >= 0 and slot < weapon_slots.size() else null
 	if weapon == null or weapon.element == element:
 		return false
-	# Element crystals are named crystal_fire / crystal_holy / crystal_air —
+	# Element crystals are named crystal_<element> (crystal_fire, crystal_ice, …) —
 	# consume the one matching the target element, from the banked Materials tab
 	# first, then any loose one in the backpack.
 	var crystal := "crystal_" + element
@@ -996,6 +1141,7 @@ func split_item(item: Item, container_id: String = "player") -> void:
 	var container := get_container_by_id(container_id)
 	if container == null:
 		return
+	@warning_ignore("integer_division")  # intentional: split the stack in half, drop remainder
 	var half := item.quantity / 2
 	if half <= 0:
 		return
@@ -1060,20 +1206,30 @@ func has_gear_attribute(attr_id: String) -> bool:
 # lives on the authority); harmless if called elsewhere.
 func _refresh_gear_effects() -> void:
 	var vitality := 1.1 if has_gear_attribute("belt_vitality") else 1.0
-	max_health = BASE_MAX_HEALTH * vitality
+	# Base health × the belt_vitality trait, plus any flat Health from gear stats.
+	max_health = BASE_MAX_HEALTH * vitality + _gear_stat_sum("health")
 	# Re-assigning health fires its setter, which refreshes the health bar with
 	# the new max (clamped down if vitality was just lost).
 	health = min(health, max_health)
-	# Blessed Band shield capacity = BLESSED_BAND_SHIELD per equipped band. When a
+	# Blessed Band barrier capacity = BLESSED_BAND_BARRIER per equipped band. When a
 	# band is newly equipped (capacity just went up) grant that fresh buffer; the
-	# shield otherwise only ever goes DOWN via damage, so it isn't refilled here.
-	var new_max_shield := BLESSED_BAND_SHIELD * _count_equipped_blessed_bands()
-	if new_max_shield > max_shield:
-		shield += new_max_shield - max_shield
-	max_shield = new_max_shield
-	shield = minf(shield, max_shield)
+	# barrier otherwise only ever goes DOWN via damage, so it isn't refilled here.
+	var new_max_barrier := BLESSED_BAND_BARRIER * _count_equipped_blessed_bands()
+	if new_max_barrier > max_barrier:
+		barrier += new_max_barrier - max_barrier
+	max_barrier = new_max_barrier
+	barrier = minf(barrier, max_barrier)
 	stealth_silent = has_gear_attribute("cloak_silent")
 	stealth_unseen_still = has_gear_attribute("cloak_unseen_still")
+	# Gear "mana" stat raises the wielded weapons' mana cap (mana lives on the
+	# weapon — see weapon.gd). Push the current bonus onto both slots, clamp any
+	# now-over-cap pool down, and refresh the mana bar to show the new max.
+	var mana_bonus := _gear_stat_sum("mana")
+	for w: Weapon in weapon_slots:
+		if w != null:
+			w.bonus_max_mana = mana_bonus
+			w.mana = minf(w.mana, w.effective_max_mana())
+	refresh_mana_ui()
 
 func _count_equipped_blessed_bands() -> int:
 	var n := 0
@@ -1083,8 +1239,39 @@ func _count_equipped_blessed_bands() -> int:
 			n += 1
 	return n
 
-# Called when the shield is fully spent: every equipped Blessed Band breaks into
-# 1 scrap dropped into the bag, freeing its ring slot (which drops max_shield to
+# --- Combat stats (weapon + gear) ----------------------------------------
+# Sums a flat stat bonus (Attack/Defense/Crit Rate/Crit Damage) across every
+# equipped, unbroken gear piece's `stats` dict. Empty on all gear today, so this is
+# 0 for every stat until gear grants them. Authority-only (gear lives on the
+# authority); on a remote copy the gear is null so this is 0.
+func _gear_stat_sum(stat: String) -> float:
+	var total := 0.0
+	for gear in _all_gear():
+		if gear != null and gear.durability > 0.0:
+			total += gear.stats.get(stat, 0.0)
+	return total
+
+# Attack = the equipped weapon's Attack + gear Attack — the base damage of a cast.
+func get_attack() -> float:
+	var w := get_equipped_weapon()
+	var weapon_attack: float = w.attack if w != null else 0.0
+	return weapon_attack + _gear_stat_sum("attack")
+
+func get_crit_rate() -> float:
+	var w := get_equipped_weapon()
+	var weapon_crit: float = w.crit_rate if w != null else 0.0
+	return weapon_crit + _gear_stat_sum("crit_rate")
+
+func get_crit_damage() -> float:
+	var w := get_equipped_weapon()
+	var weapon_crit: float = w.crit_damage if w != null else 0.0
+	return weapon_crit + _gear_stat_sum("crit_damage")
+
+func get_defense() -> float:
+	return _gear_stat_sum("defense")
+
+# Called when the barrier is fully spent: every equipped Blessed Band breaks into
+# 1 scrap dropped into the bag, freeing its ring slot (which drops max_barrier to
 # 0 via _refresh_gear_effects inside set_equipped).
 func _break_blessed_bands() -> void:
 	var broke := false
@@ -1121,6 +1308,9 @@ func _drain_gear_durability() -> void:
 		inventory_ui.refresh()
 
 func persist_equipment() -> void:
+	# Each entry is a saved dict OR null (empty slot) — the ternary's two branches are
+	# deliberately different types; the values only ever land in a Dictionary.
+	@warning_ignore("incompatible_ternary")
 	var data := {
 		"backpack": equipped_backpack.to_dict() if equipped_backpack != null else null,
 		"belt": equipped_belt.to_dict() if equipped_belt != null else null,
@@ -1717,19 +1907,24 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 	# disagree (e.g. one shows 26, another 28).
 	if !is_multiplayer_authority():
 		return
+	# Resolve the hit from stats HERE (defender authority): base = attacker Attack
+	# (hitbox.damage), crit rolled from the attacker's crit stats + a +50/+50 bonus if
+	# their element beats ours, then our Defense reduces it (Diablo-style DR).
 	var final_damage: float = damage
-	if hitbox != null and "attacker_weapon" in hitbox and "attacker_element" in hitbox:
-		var multiplier := SpellData.get_damage_multiplier(
-			hitbox.attacker_weapon,
-			hitbox.attacker_element,
-			network_weapon_type,
-			network_element
-		)
-		final_damage = damage * multiplier
-	# Cloak/robe armor trait: 5% less damage.
+	var is_crit := false
+	if hitbox != null and "attacker_element" in hitbox:
+		var advantage := SpellData.has_advantage(hitbox.attacker_element, network_element)
+		var crit_rate: float = hitbox.attacker_crit_rate + (50.0 if advantage else 0.0)
+		var crit_damage: float = hitbox.attacker_crit_damage + (50.0 if advantage else 0.0)
+		is_crit = randf() * 100.0 < crit_rate
+		if is_crit:
+			final_damage *= 1.0 + crit_damage / 100.0
+	# Cloak/robe armor trait: 5% less damage (stacks with Defense).
 	if has_gear_attribute("cloak_armor"):
 		final_damage *= 0.95
-	_broadcast_damage_number.rpc(final_damage, hitbox != null and hitbox.is_crit)
+	# Defense stat: diminishing-returns damage reduction.
+	final_damage *= 1.0 - SpellData.damage_reduction(get_defense())
+	_broadcast_damage_number.rpc(final_damage, is_crit)
 	take_damage(final_damage)
 	# Getting hit wears down equipped gear; a piece that breaks loses its trait.
 	_drain_gear_durability()
@@ -1749,13 +1944,13 @@ func take_damage(amount: float) -> void:
 	# effect, with no separate attacker-type check needed.
 	if _is_in_hub():
 		return
-	# Shield soaks damage first; if it empties, the Blessed Band(s) providing it
+	# Barrier soaks damage first; if it empties, the Blessed Band(s) providing it
 	# break, and any leftover damage carries through to health.
-	if shield > 0.0:
-		var absorbed := minf(shield, amount)
-		shield -= absorbed
+	if barrier > 0.0:
+		var absorbed := minf(barrier, amount)
+		barrier -= absorbed
 		amount -= absorbed
-		if shield <= 0.0:
+		if barrier <= 0.0:
 			_break_blessed_bands()
 	if amount <= 0.0:
 		return
@@ -1773,18 +1968,47 @@ func _is_in_hub() -> bool:
 # Phoenix Ash from OUR bag for the faster/stronger version if we have one).
 func _check_revive(delta: float) -> void:
 	var target = _nearest_downed_ally()
-	if target == null or not Input.is_action_pressed("interact"):
+	# Revive (and the prompt itself) only exist while we're carrying Phoenix Ash.
+	# No ash, or no downed ally in range → nothing to show, nothing to do.
+	if target == null or not _has_item("phoenix_ash"):
+		_hide_revive_prompt()
 		_revive_progress = 0.0
 		return
-	var has_ash := _has_item("phoenix_ash")
-	var duration: float = REVIVE_TIME_ASH if has_ash else REVIVE_TIME_BASE
-	_revive_progress += delta
-	if _revive_progress < duration:
-		return
-	_revive_progress = 0.0
-	if has_ash:
+	# Retarget our on-screen prompt if the nearest downed ally changed.
+	if target != _revive_prompt_target:
+		_hide_revive_prompt()
+		_revive_prompt_target = target
+	var holding := Input.is_action_pressed("interact")
+	if holding:
+		_revive_progress += delta
+	else:
+		_revive_progress = 0.0
+	_show_revive_prompt(target, holding)
+	if holding and _revive_progress >= REVIVE_TIME:
+		_revive_progress = 0.0
 		_consume_one_of_type("phoenix_ash")
-	target.request_revive.rpc(REVIVE_HP_ASH if has_ash else REVIVE_HP_BASE)
+		target.request_revive.rpc(REVIVE_HEALTH_FRACTION)
+		_hide_revive_prompt()
+
+# Show the revive prompt over `target` (on OUR screen only — each peer drives its
+# own local copy). While holding interact it reads as a fill percentage.
+func _show_revive_prompt(target, holding: bool) -> void:
+	if target == null or not ("revive_prompt" in target) or target.revive_prompt == null:
+		return
+	target.revive_prompt.visible = true
+	if holding:
+		target.revive_prompt.text = "Reviving… %d%%" % int(_revive_progress / REVIVE_TIME * 100.0)
+	else:
+		target.revive_prompt.text = REVIVE_PROMPT_TEXT
+
+# Hide whatever downed ally's prompt we last turned on, and reset it to its
+# default text. Safe to call any frame (no-op if we weren't showing one).
+func _hide_revive_prompt() -> void:
+	if _revive_prompt_target != null and is_instance_valid(_revive_prompt_target):
+		if "revive_prompt" in _revive_prompt_target and _revive_prompt_target.revive_prompt != null:
+			_revive_prompt_target.revive_prompt.visible = false
+			_revive_prompt_target.revive_prompt.text = REVIVE_PROMPT_TEXT
+	_revive_prompt_target = null
 
 # Closest OTHER player showing the replicated downed (prone) anim, within range.
 # death_state isn't replicated, so network_body_anim is how we spot a downed ally.
@@ -1812,20 +2036,24 @@ func _has_item(item_type: String) -> bool:
 # Revive request sent by a reviving ally; only the downed player's own authority
 # actually performs it, and only if still genuinely downed.
 @rpc("any_peer", "call_local", "reliable")
-func request_revive(health_amount: float) -> void:
+func request_revive(health_fraction: float) -> void:
 	if !is_multiplayer_authority() or death_state != DeathState.DOWNED:
 		return
 	downed_ui.visible = false
 	give_up_hold_timer = 0.0
 	death_state = DeathState.ALIVE
 	hurtbox.is_invincible = false
-	health = clampf(health_amount, 0.0, max_health)
+	# Fraction of our OWN max health, so gear-boosted health scales the revive.
+	health = clampf(max_health * health_fraction, 0.0, max_health)
 	play_legs_anim("idle")
 	play_body_anim("idle")
 
 func die() -> void:
 	death_state = DeathState.DOWNED
 	downed_timer = DOWNED_DURATION
+	# If we were mid-revive over an ally when we went down, drop that prompt —
+	# _check_revive won't run again to clear it while we're downed.
+	_hide_revive_prompt()
 	give_up_hold_timer = 0.0
 	downed_ui.visible = true
 	downed_ui.update(downed_timer, DOWNED_DURATION, give_up_hold_timer, GIVE_UP_HOLD_DURATION)
@@ -1931,7 +2159,7 @@ func lose_everything_if_in_expedition() -> bool:
 	_drop_death_bag_and_reset_gear()
 	return true
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if multiplayer.multiplayer_peer == null:
 		return
 	if multiplayer.multiplayer_peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
@@ -1941,16 +2169,31 @@ func _process(_delta: float) -> void:
 			update_aim()
 		network_rotation = sprite.rotation
 		network_legs_rotation = legs.rotation
+		# Publish our authoritative position for remote copies to interpolate.
+		net_position = global_position
 		_update_rain_marker()
 		return
+	# Remote copy: interpolate position from buffered snapshots (no raw snapping =
+	# no rubberband) and ease rotations toward their replicated targets.
+	# Adopt the FIRST observed value without pushing it — until the authority's
+	# first sync lands net_position is still its (0,0) default, and pushing that
+	# would yank the freshly-placed copy to the origin. So the placement position
+	# is held until real data flows, then interpolation takes over.
+	if _last_net_pos == Vector2(INF, INF):
+		_last_net_pos = net_position
+	elif net_position != _last_net_pos:
+		_pos_interp.push(net_position)
+		_last_net_pos = net_position
+	if _pos_interp.has_data():
+		global_position = _pos_interp.sample()
+	sprite.rotation = rotate_toward(sprite.rotation, network_rotation, REMOTE_ROT_LERP * delta)
+	legs.rotation = rotate_toward(legs.rotation, network_legs_rotation, REMOTE_ROT_LERP * delta)
 	if network_anim != _applied_legs_anim:
-		legs_animation_player.play(network_anim)
+		_safe_play(legs_animation_player, network_anim)
 		_applied_legs_anim = network_anim
 	if network_body_anim != _applied_body_anim:
-		body_animation_player.play(network_body_anim)
+		_safe_play(body_animation_player, network_body_anim)
 		_applied_body_anim = network_body_anim
-	sprite.rotation = network_rotation
-	legs.rotation = network_legs_rotation
 	# death_state/hurtbox.is_invincible are never replicated (they're local-
 	# only on the authority), so a remote peer's own copy of this hurtbox
 	# never learns a downed player should stop taking hits — their own
@@ -1989,11 +2232,18 @@ func _physics_process(delta):
 				_finish_death()
 	else:
 		check_inventory_toggle()
+		check_map_toggle()
 		attack_timer = max(attack_timer - delta, 0.0)
+		# Any open menu (inventory OR the esc/pause menu) arms attack-suppression so the
+		# click that operates/closes it can't leak into a shot the frame it clears —
+		# attack_check() then ignores the still-held button until it's released.
+		if inventory_ui.visible or _esc_menu_open():
+			_block_attack_until_release = true
 		if inventory_ui.visible:
 			# Menu is up — no movement, no aiming, no attack input should
 			# reach the world (a click to place an item shouldn't also fire
-			# a spell).
+			# a spell). Also drop any revive prompt (we're not reviving now).
+			_hide_revive_prompt()
 			apply_friction(delta)
 			move_and_slide()
 		else:
@@ -2001,14 +2251,9 @@ func _physics_process(delta):
 			check_quick_slot_input()
 			_check_revive(delta)
 			state.call(delta)
-	var world = get_tree().get_first_node_in_group("world")
-	if world == null:
-		return
-	if world.shutting_down:
-		return
-	if !world.can_send_rpc():
-		return
-	world.server_send_player_state.rpc(global_position, network_anim, network_rotation)
+	# Position/anim/rotation now replicate via the MultiplayerSynchronizer only
+	# (net_position, published in _process) — the old per-frame server_send_player_state
+	# RPC that ran alongside it (and fought it, unbuffered) has been removed.
 
 func update_aim() -> void:
 	var controller_aim := get_controller_aim_direction()
@@ -2101,15 +2346,22 @@ func update_animations(input_vector: Vector2) -> void:
 	else:
 		play_legs_anim("idle")
 
+# Plays an animation only if it actually exists, so a not-yet-authored frame set
+# (e.g. new idle/death art still being drawn) doesn't spam "Animation not found"
+# every time it's requested — it just holds the current pose. The authority still
+# records the commanded name into network_anim/network_body_anim regardless, so it
+# "just works" for everyone the moment the animation is added.
+func _safe_play(ap: AnimationPlayer, anim_name: String) -> void:
+	if ap.has_animation(anim_name) and ap.current_animation != anim_name:
+		ap.play(anim_name)
+
 func play_legs_anim(anim_name: String):
-	if legs_animation_player.current_animation != anim_name:
-		legs_animation_player.play(anim_name)
+	_safe_play(legs_animation_player, anim_name)
 	if is_multiplayer_authority():
 		network_anim = anim_name
 
 func play_body_anim(anim_name: String):
-	if body_animation_player.current_animation != anim_name:
-		body_animation_player.play(anim_name)
+	_safe_play(body_animation_player, anim_name)
 	if is_multiplayer_authority():
 		network_body_anim = anim_name
 
@@ -2151,7 +2403,6 @@ func get_default_spell_data():
 	)
 
 func get_spell_data():
-	print(spell_input_sequence)
 	var equipped := get_equipped_weapon()
 	# A weapon at 0 durability can't cast sequence spells at all (regardless
 	# of mana), and whatever it does still cast gets none of its normal
@@ -2266,11 +2517,26 @@ func cast_spell(spell_data: Dictionary, reset_sequence: bool = true):
 	# refresh too — not just on the reset_sequence path below, since a
 	# sequence cast (reset_sequence=false) drains mana just the same.
 	refresh_spell_ui()
-	# Rolled once here (cast_spell() only ever runs on the casting player's
-	# own machine — see attack_check()'s authority-gated caller) and sent as
-	# a plain bool below, same reasoning as enemy.gd's fire_spell(): every
-	# peer has to apply the identical crit result, not re-roll their own.
-	var is_crit := SpellData.roll_crit(spell_data["weapon"])
+	# Combat stats for this cast: damage = Attack (weapon + gear). Crit is NOT rolled
+	# here — it's resolved at the DEFENDER's hit handler, which reads these crit stats
+	# off the hitbox and adds +50 each on element advantage.
+	var atk := get_attack()
+	var cr := get_crit_rate()
+	var cd := get_crit_damage()
+	# Client-side prediction: spawn OUR shot locally right now so it never waits on a
+	# server round-trip. The request below tells the server + other players to spawn
+	# their copies but skips echoing back to us (no duplicate). On a client this local
+	# copy is purely visual — enemy damage resolves on the server's authoritative copy.
+	spawn_spell_local(
+		spawn_position,
+		direction,
+		spell_data["weapon"],
+		spell_data["element"],
+		spell_data["form"],
+		name.to_int(),
+		atk, cr, cd,
+		spell_data.get("rarity", "common")
+	)
 	if multiplayer.is_server():
 		world.server_request_spawn_spell(
 			spawn_position,
@@ -2278,7 +2544,7 @@ func cast_spell(spell_data: Dictionary, reset_sequence: bool = true):
 			spell_data["weapon"],
 			spell_data["element"],
 			spell_data["form"],
-			is_crit,
+			atk, cr, cd,
 			spell_data.get("rarity", "common")
 		)
 	else:
@@ -2288,7 +2554,7 @@ func cast_spell(spell_data: Dictionary, reset_sequence: bool = true):
 			spell_data["weapon"],
 			spell_data["element"],
 			spell_data["form"],
-			is_crit,
+			atk, cr, cd,
 			spell_data.get("rarity", "common")
 		)
 	if reset_sequence:
@@ -2303,25 +2569,26 @@ func spawn_spell_local(
 	element: String,
 	form: String,
 	caster_id: int = -1,
-	is_crit: bool = false,
+	attack: float = 0.0,
+	crit_rate: float = 0.0,
+	crit_damage: float = 0.0,
 	rarity: String = "common"
 ) -> void:
 	if caster_id == -1:
 		caster_id = name.to_int()
-	var spell_data = all_spell_data.build_spell_data(
-		weapon,
-		element,
-		form,
-		rarity
-	)
-	# Dot forms (rain/beam) roll crit per-tick in their own scripts, so their base
-	# damage is left un-crit here; everything else bakes the one cast-time roll in.
-	if is_crit and not spell_data.get("dot", false):
-		spell_data["damage"] *= SpellData.CRIT_MULTIPLIER
+	var spell_data = all_spell_data.build_spell_data(weapon, element, form, rarity)
+	# Damage is the caster's Attack scaled by the FORM's multiplier (default = 1.0,
+	# spells 2-4x) so casting a mana spell actually out-damages the free basic. The
+	# attacker's crit stats ride on the hitbox so the DEFENDER resolves crit at hit
+	# time (+50 each on element advantage). No crit baked here — same for single-hit
+	# and DoT (both resolve at the defender).
+	spell_data["damage"] = attack * spell_data.get("damage_mult", 1.0)
+	spell_data["attacker_crit_rate"] = crit_rate
+	spell_data["attacker_crit_damage"] = crit_damage
 	var projectile = spell_data["scene"].instantiate()
 	get_tree().current_scene.add_child(projectile)
 	projectile.global_position = origin_position
-	projectile.setup_spell(direction.normalized(), spell_data, caster_id, is_crit)
+	projectile.setup_spell(direction.normalized(), spell_data, caster_id, false)
 
 func refresh_spell_ui() -> void:
 	if !is_multiplayer_authority():
@@ -2410,7 +2677,7 @@ func _update_rain_marker() -> void:
 		for i in 24:
 			var a := TAU * i / 24.0
 			# Base radius 8 matches the projectile's circle; scale applies size.
-			pts.append(Vector2(cos(a), sin(a)) * 8.0)
+			pts.append(Vector2(cos(a), sin(a)) * 32.0)
 		_rain_marker.polygon = pts
 		_rain_marker.z_index = -1
 		_rain_marker.visible = false
@@ -2433,7 +2700,18 @@ func _update_rain_marker() -> void:
 	_rain_marker.visible = show_marker
 
 func attack_check():
-	if get_equipped_weapon() == null:
+	var equipped := get_equipped_weapon()
+	if equipped == null:
+		return
+	# The fishing rod occupies the weapon slot but casts nothing — its "attack"
+	# (left click) is reserved for the reel minigame (see fishing_spot.gd).
+	if equipped.type == "fishing_rod":
+		return
+	# Don't let a menu-closing click leak into a shot: after a menu was open we ignore
+	# a still-HELD attack button until it's released, so only a fresh press fires.
+	if _block_attack_until_release:
+		if not Input.is_action_pressed("attack"):
+			_block_attack_until_release = false
 		return
 	var holding_spell_mode := Input.is_action_pressed("spell_mode_1") or Input.is_action_pressed("spell_mode_2")
 	if Input.is_action_pressed("attack") and attack_timer <= 0.0:

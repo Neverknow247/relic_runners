@@ -70,7 +70,8 @@ func spawn_player_locally(peer_id: int) -> void:
 	if sync:
 		sync.root_path = NodePath("..")
 		sync.set_multiplayer_authority(peer_id)
-		sync.public_visibility = false
+		# Broadcast ONLY our own player's synchronizer (see _finish_spawn_player_locally).
+		sync.public_visibility = (peer_id == world.multiplayer.get_unique_id())
 	world.players.add_child(player)
 	call_deferred("_finish_spawn_player_locally", peer_id)
 
@@ -82,7 +83,14 @@ func _finish_spawn_player_locally(peer_id: int) -> void:
 		set_player_active(player, false)
 	var sync = player.get_node_or_null("multiplayer_synchronizer")
 	if sync:
-		sync.public_visibility = false
+		# Our OWN player node is the authority for its synchronizer, so it MUST
+		# broadcast its net_position or nobody — the host included — ever sees us move
+		# (the "player 2 frozen on the host" bug). The server's per-peer visibility pass
+		# (update_all_synchronizer_visibility) runs ONLY on the server and only fixes
+		# the server's own synchronizers, so a client left at public_visibility=false
+		# synced to no one. Remote players' synchronizers are someone else's authority,
+		# so their visibility here is irrelevant — leave those off.
+		sync.public_visibility = (peer_id == world.multiplayer.get_unique_id())
 		sync.update_visibility()
 	world.request_player_cosmetics(peer_id)
 

@@ -8,12 +8,27 @@ var rarity: String = "common"
 var forms: Array
 # Every weapon has its own mana pool (not the player) — every spell costs
 # mana to cast (see SpellData.FORMS' mana_cost, deducted in player.gd's
-# cast_spell()). Flat 100 for every weapon type for now; a future pass can
+# cast_spell()). Flat 1000 base for every weapon type for now; a future pass can
 # vary max_mana per type here without touching anything that reads it.
 var mana: float
 var max_mana: float
+# Extra max mana granted by the WIELDER's gear (the "mana" gear stat — ItemData.
+# GEAR_STAT_POOL). Mana lives on the weapon, but gear lives on the player, so the
+# player pushes this in on every gear/equip change (player._refresh_gear_effects)
+# and clamps the pool to the new cap. NOT persisted — it's re-derived from live
+# gear each time. effective_max_mana() = max_mana + this.
+var bonus_max_mana: float = 0.0
 var durability: float
 var max_durability: float
+# The weapon's Attack stat — the base damage of every spell cast with it (plus the
+# player's gear Attack bonuses). Rolled once at creation; persisted so it doesn't
+# re-roll on load. See the combat stats rework.
+var attack: float
+# Crit stats (uncommon+ weapons only). Uncommon rolls ONE of these; rare rolls both.
+# Fed into the player's get_crit_rate()/get_crit_damage() and resolved at the
+# defender's hit handler. See ItemData.WEAPON_CRIT_BY_RARITY.
+var crit_rate: float = 0.0
+var crit_damage: float = 0.0
 
 func _init(_type: String = "tome", _rarity: String = "common") -> void:
 	type = _type
@@ -30,16 +45,37 @@ func _init(_type: String = "tome", _rarity: String = "common") -> void:
 	# Rarity scales the weapon's basic pools (Common = x1.0). Damage scaling is
 	# applied at cast time in SpellData.build_spell_data().
 	var mult := ItemData.rarity_stat_mult(rarity)
-	max_mana = 100.0 * mult
+	max_mana = 1000.0 * mult
 	mana = max_mana
 	max_durability = 100.0 * mult
 	durability = max_durability
+	# Attack is a flat, rarity-based roll (base 100): common = 100, uncommon 105-110,
+	# rare 110-120. Crit stats: uncommon gets ONE random crit stat (+5-10%), rare gets
+	# BOTH (+10-20%). See ItemData.WEAPON_ATTACK_BY_RARITY / WEAPON_CRIT_BY_RARITY.
+	var atk_band: Array = ItemData.WEAPON_ATTACK_BY_RARITY.get(rarity, ItemData.WEAPON_ATTACK_BY_RARITY["rare"])
+	attack = randi_range(int(atk_band[0]), int(atk_band[1]))
+	if rarity != "common":
+		var crit_band: Array = ItemData.WEAPON_CRIT_BY_RARITY.get(rarity, ItemData.WEAPON_CRIT_BY_RARITY["rare"])
+		if rarity == "uncommon":
+			# Exactly one random crit stat.
+			if randi() % 2 == 0:
+				crit_rate = randi_range(int(crit_band[0]), int(crit_band[1]))
+			else:
+				crit_damage = randi_range(int(crit_band[0]), int(crit_band[1]))
+		else:
+			# rare (and higher, for now) roll both.
+			crit_rate = randi_range(int(crit_band[0]), int(crit_band[1]))
+			crit_damage = randi_range(int(crit_band[0]), int(crit_band[1]))
+
+# Total mana capacity: the weapon's own pool plus the wielder's gear "mana" bonus.
+func effective_max_mana() -> float:
+	return max_mana + bonus_max_mana
 
 func use_mana(amount: float) -> void:
-	mana = clamp(mana - amount, 0.0, max_mana)
+	mana = clamp(mana - amount, 0.0, effective_max_mana())
 
 func restore_mana(amount: float) -> void:
-	mana = clamp(mana + amount, 0.0, max_mana)
+	mana = clamp(mana + amount, 0.0, effective_max_mana())
 
 func use_durability(amount: float) -> void:
 	durability = clamp(durability - amount, 0.0, max_durability)
@@ -76,6 +112,9 @@ func to_dict() -> Dictionary:
 		"max_mana": max_mana,
 		"durability": durability,
 		"max_durability": max_durability,
+		"attack": attack,
+		"crit_rate": crit_rate,
+		"crit_damage": crit_damage,
 	}
 
 static func from_dict(data: Dictionary) -> Weapon:
@@ -87,4 +126,7 @@ static func from_dict(data: Dictionary) -> Weapon:
 	weapon.max_mana = data.get("max_mana", weapon.max_mana)
 	weapon.durability = data.get("durability", weapon.durability)
 	weapon.max_durability = data.get("max_durability", weapon.max_durability)
+	weapon.attack = data.get("attack", weapon.attack)
+	weapon.crit_rate = data.get("crit_rate", weapon.crit_rate)
+	weapon.crit_damage = data.get("crit_damage", weapon.crit_damage)
 	return weapon

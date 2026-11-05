@@ -1,103 +1,43 @@
 extends Node
 class_name SpellRecipes
 
-const RECIPES := [
-	# Fire
-	{
-		"sequence": [2, 1, 1, 3, 0],
-		"element": "fire",
-		"form": "ball",
-	},
-	{
-		"sequence": [2, 1, 0],
-		"element": "fire",
-		"form": "bolt",
-	},
-	{
-		"sequence": [2, 1, 3, 1],
-		"element": "fire",
-		"form": "rain",
-	},
-	{
-		"sequence": [2, 0, 1, 2],
-		"element": "fire",
-		"form": "beam",
-	},
-	{
-		"sequence": [2, 3, 3, 1],
-		"element": "fire",
-		"form": "burst",
-	},
-	{
-		"sequence": [2, 0, 3, 2],
-		"element": "fire",
-		"form": "cone",
-	},
+# Cast recipes are GENERATED, not hand-authored: each element gets a unique 2-input
+# prefix, each form a prefix-free suffix, and a recipe's sequence is
+# ELEMENT_PREFIX[element] + FORM_SUFFIX[form] for every element x form. That keeps
+# every sequence globally unique AND prefix-free within an element (all of an
+# element's recipes share its 2-input prefix, then diverge by a prefix-free suffix —
+# compatible with player.gd's has_relevant_spell_prefix, and get_available_recipes
+# already filters to the equipped weapon's element + attached forms). The spell list
+# UI displays the sequences, so there's nothing to memorize; adding forms or elements
+# is just extending these two tables. Directional inputs are 0-3.
+const ELEMENT_PREFIX := {
+	"fire": [0, 0],
+	"lightning": [0, 1],
+	"ice": [0, 2],
+	"wind": [0, 3],
+	"nature": [1, 0],
+	"water": [1, 1],
+	"earth": [1, 2],
+}
+const FORM_SUFFIX := {
+	"bolt": [0],
+	"ball": [1, 0],
+	"rain": [1, 1],
+	"beam": [2],
+	"burst": [3, 0],
+	"cone": [3, 1],
+}
 
-	# Holy
-	{
-		"sequence": [0, 1, 1, 3, 2],
-		"element": "holy",
-		"form": "ball",
-	},
-	{
-		"sequence": [0, 1, 2],
-		"element": "holy",
-		"form": "bolt",
-	},
-	{
-		"sequence": [0, 1, 3, 1],
-		"element": "holy",
-		"form": "rain",
-	},
-	{
-		"sequence": [0, 2, 1, 0],
-		"element": "holy",
-		"form": "beam",
-	},
-	{
-		"sequence": [0, 3, 3, 1],
-		"element": "holy",
-		"form": "burst",
-	},
-	{
-		"sequence": [0, 2, 3, 0],
-		"element": "holy",
-		"form": "cone",
-	},
+static var RECIPES: Array = []
 
-	# Air
-	{
-		"sequence": [1, 3, 0, 1, 2],
-		"element": "air",
-		"form": "ball",
-	},
-	{
-		"sequence": [1, 3, 1],
-		"element": "air",
-		"form": "bolt",
-	},
-	{
-		"sequence": [1, 3, 2, 1],
-		"element": "air",
-		"form": "rain",
-	},
-	{
-		"sequence": [1, 2, 3, 1],
-		"element": "air",
-		"form": "beam",
-	},
-	{
-		"sequence": [1, 0, 0, 3],
-		"element": "air",
-		"form": "burst",
-	},
-	{
-		"sequence": [1, 2, 3, 2],
-		"element": "air",
-		"form": "cone",
-	},
-]
+static func _static_init() -> void:
+	for element in ELEMENT_PREFIX:
+		for form in FORM_SUFFIX:
+			RECIPES.append({
+				"sequence": (ELEMENT_PREFIX[element] as Array) + (FORM_SUFFIX[form] as Array),
+				"element": element,
+				"form": form,
+			})
 
 func get_spell_recipe_from_sequence(sequence: Array) -> Dictionary:
 	for recipe in RECIPES:

@@ -18,6 +18,10 @@ var AppID = "4710080"
 #var AppID = "2802410"
 #Space War
 #var AppID = "480"
+# Max players per lobby (host + joiners). Enforced by Steam at createLobby, and
+# shown as the "x/N" count on lobby buttons.
+const MAX_PLAYERS := 3
+
 var lobby_id = 0
 var peer : SteamMultiplayerPeer
 var is_host = false
@@ -148,8 +152,13 @@ func host_lobby(visibility := "public", server_name := "", password := ""):
 	pending_lobby_visibility = visibility
 	pending_lobby_name = server_name.strip_edges()
 	pending_lobby_password = password.strip_edges()
+	# Always a PUBLIC Steam lobby type even for "private" games: private games are
+	# still discovered via requestLobbyList (matched by name+password), and a true
+	# LOBBY_TYPE_PRIVATE wouldn't show up there at all. Privacy is enforced at the
+	# app level — the menu hides visibility=="private" lobbies from the browser and
+	# only lets you in with the matching name+password (see main_menu.gd).
 	var lobby_type = Steam.LobbyType.LOBBY_TYPE_PUBLIC
-	Steam.createLobby(lobby_type, 16)
+	Steam.createLobby(lobby_type, MAX_PLAYERS)
 	is_host = true
 
 func _on_lobby_created(result: int, _lobby_id: int):
@@ -261,7 +270,8 @@ func join_public_lobby(_lobby_id: int):
 		return
 	join_lobby(_lobby_id)
 
-func join_private_lobby(server_name: String, password: String):
+# Returns true if a matching private lobby was found and a join was started.
+func join_private_lobby(server_name: String, password: String) -> bool:
 	var wanted_name = server_name.strip_edges()
 	var wanted_password = password.strip_edges()
 	for lobby in cached_lobby_list:
@@ -270,5 +280,6 @@ func join_private_lobby(server_name: String, password: String):
 		var lobby_password = Steam.getLobbyData(lobby, "password")
 		if visibility == "private" and lobby_name == wanted_name and lobby_password == wanted_password:
 			join_lobby(lobby)
-			return
+			return true
 	print("No matching private lobby found.")
+	return false

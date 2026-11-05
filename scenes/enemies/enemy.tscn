@@ -2,9 +2,10 @@
 
 [ext_resource type="Script" uid="uid://dav5f1af77ave" path="res://scenes/enemies/enemy.gd" id="1_enemy"]
 [ext_resource type="PackedScene" uid="uid://duy4yhammffs2" path="res://scenes/characters/hurtbox.tscn" id="2_hurtbox"]
+[ext_resource type="Script" path="res://scenes/enemies/enemy_body.gd" id="3_body"]
 
 [sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_enemy"]
-properties/0/path = NodePath(".:position")
+properties/0/path = NodePath(".:net_position")
 properties/0/spawn = true
 properties/0/replication_mode = 1
 properties/1/path = NodePath(".:health")
@@ -24,7 +25,7 @@ properties/5/spawn = true
 properties/5/replication_mode = 1
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
-radius = 11.0
+radius = 48.0
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_health_bg"]
 bg_color = Color(0.1, 0.1, 0.1, 0.8)
@@ -33,79 +34,64 @@ bg_color = Color(0.1, 0.1, 0.1, 0.8)
 bg_color = Color(0.85, 0.15, 0.15, 1)
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_hurtbox"]
-radius = 16.0
+radius = 68.0
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_detection"]
-radius = 360.0
+radius = 1440.0
 
-[node name="enemy" type="CharacterBody2D"]
+[node name="enemy" type="CharacterBody2D" unique_id=1506056906]
 z_index = 50
 collision_layer = 32
 collision_mask = 33
 motion_mode = 1
 script = ExtResource("1_enemy")
 
-[node name="multiplayer_synchronizer" type="MultiplayerSynchronizer" parent="."]
+[node name="multiplayer_synchronizer" type="MultiplayerSynchronizer" parent="." unique_id=1736524179]
+replication_interval = 0.05
 replication_config = SubResource("SceneReplicationConfig_enemy")
 
-[node name="collision_shape_2d" type="CollisionShape2D" parent="."]
+[node name="collision_shape_2d" type="CollisionShape2D" parent="." unique_id=1333852256]
 shape = SubResource("CircleShape2D_body")
 
-[node name="visual_root" type="Node2D" parent="."]
+[node name="visual_root" type="Node2D" parent="." unique_id=140418545]
 
-[node name="color_rect" type="ColorRect" parent="visual_root"]
-offset_left = -16.0
-offset_top = -16.0
-offset_right = 16.0
-offset_bottom = 16.0
-color = Color(0.7, 0.1, 0.1, 1)
+[node name="body" type="Node2D" parent="visual_root" unique_id=671741215]
+script = ExtResource("3_body")
 
-[node name="facing_indicator" type="Node2D" parent="visual_root"]
+[node name="facing_indicator" type="Node2D" parent="visual_root" unique_id=1079527724]
 
-[node name="dot" type="ColorRect" parent="visual_root/facing_indicator"]
-offset_left = -8.0
-offset_top = -8.0
-offset_right = 8.0
-offset_bottom = 8.0
+[node name="dot" type="ColorRect" parent="visual_root/facing_indicator" unique_id=1170492874]
+offset_left = -32.0
+offset_top = -32.0
+offset_right = 32.0
+offset_bottom = 32.0
 
-[node name="health_bar" type="ProgressBar" parent="visual_root"]
-offset_left = -24.0
-offset_top = -44.0
-offset_right = 24.0
-offset_bottom = -32.0
+[node name="health_bar" type="ProgressBar" parent="visual_root" unique_id=1716478896]
+offset_left = -96.0
+offset_top = -176.0
+offset_right = 96.0
+offset_bottom = -128.0
 theme_override_styles/background = SubResource("StyleBoxFlat_health_bg")
 theme_override_styles/fill = SubResource("StyleBoxFlat_health_fill")
 value = 100.0
 show_percentage = false
 
-[node name="weapon_label" type="Label" parent="visual_root"]
-offset_left = -32.0
-offset_top = -32.0
-offset_right = 32.0
-offset_bottom = 32.0
-theme_override_colors/font_color = Color(0, 0, 0, 1)
-theme_override_colors/font_outline_color = Color(1, 1, 1, 1)
-theme_override_constants/outline_size = 8
-theme_override_font_sizes/font_size = 24
-text = "T"
-horizontal_alignment = 1
-vertical_alignment = 1
 
-[node name="hurtbox" parent="." instance=ExtResource("2_hurtbox")]
+[node name="hurtbox" parent="." unique_id=1076141902 instance=ExtResource("2_hurtbox")]
 collision_layer = 8
 
-[node name="collision_shape_2d" type="CollisionShape2D" parent="hurtbox"]
+[node name="collision_shape_2d" type="CollisionShape2D" parent="hurtbox" unique_id=700949001]
 shape = SubResource("CircleShape2D_hurtbox")
 
-[node name="detection_area" type="Area2D" parent="."]
+[node name="detection_area" type="Area2D" parent="." unique_id=103159019]
 collision_layer = 0
 collision_mask = 4
 
-[node name="collision_shape_2d" type="CollisionShape2D" parent="detection_area"]
+[node name="collision_shape_2d" type="CollisionShape2D" parent="detection_area" unique_id=424093090]
 shape = SubResource("CircleShape2D_detection")
 
-[node name="nav_agent" type="NavigationAgent2D" parent="."]
-path_desired_distance = 48.0
-target_desired_distance = 16.0
+[node name="nav_agent" type="NavigationAgent2D" parent="." unique_id=546381800]
+path_desired_distance = 192.0
+target_desired_distance = 64.0
 path_postprocessing = 1
-radius = 32.0
+radius = 128.0

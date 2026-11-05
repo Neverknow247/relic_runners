@@ -3,12 +3,12 @@
 [ext_resource type="Script" uid="uid://br5760pq51hcv" path="res://scenes/characters/player.gd" id="1_rp718"]
 [ext_resource type="Theme" uid="uid://dx7snotftebdm" path="res://ui/themes/menu_theme.tres" id="2_76oj4"]
 [ext_resource type="PackedScene" uid="uid://ctukarabqgugx" path="res://scenes/items/player_camera.tscn" id="2_atpat"]
-[ext_resource type="Texture2D" uid="uid://cto5u0onl4duv" path="res://assets/art/player/player_legs.png" id="4_kqtwu"]
+[ext_resource type="Texture2D" uid="uid://cmbqe4ryexv67" path="res://assets/art/player/player.png" id="4_kqtwu"]
 [ext_resource type="Texture2D" uid="uid://bhq3yfkrefr43" path="res://assets/art/player/player_empty.png" id="5_6eyoc"]
 [ext_resource type="PackedScene" uid="uid://duy4yhammffs2" path="res://scenes/characters/hurtbox.tscn" id="5_atpat"]
 
 [sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_atpat"]
-properties/0/path = NodePath(".:position")
+properties/0/path = NodePath(".:net_position")
 properties/0/spawn = true
 properties/0/replication_mode = 1
 properties/1/path = NodePath(".:network_anim")
@@ -40,7 +40,7 @@ properties/9/spawn = true
 properties/9/replication_mode = 1
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_dyp2m"]
-radius = 16.0
+radius = 48.0
 
 [sub_resource type="Animation" id="Animation_6eyoc"]
 length = 0.001
@@ -54,7 +54,7 @@ tracks/0/keys = {
 "times": PackedFloat32Array(0),
 "transitions": PackedFloat32Array(1),
 "update": 1,
-"values": [12]
+"values": [0]
 }
 
 [sub_resource type="Animation" id="Animation_atpat"]
@@ -69,7 +69,7 @@ tracks/0/keys = {
 "times": PackedFloat32Array(0),
 "transitions": PackedFloat32Array(1),
 "update": 1,
-"values": [12]
+"values": [0]
 }
 
 [sub_resource type="Animation" id="Animation_7vyk4"]
@@ -84,14 +84,14 @@ tracks/0/keys = {
 "times": PackedFloat32Array(0),
 "transitions": PackedFloat32Array(1),
 "update": 1,
-"values": [13]
+"values": [0]
 }
 
 [sub_resource type="Animation" id="Animation_kqtwu"]
 resource_name = "walk"
-length = 0.6
+length = 0.7
 loop_mode = 1
-step = 0.05
+step = 0.07
 tracks/0/type = "value"
 tracks/0/imported = false
 tracks/0/enabled = true
@@ -99,10 +99,10 @@ tracks/0/path = NodePath("visual_root/legs:frame")
 tracks/0/interp = 1
 tracks/0/loop_wrap = true
 tracks/0/keys = {
-"times": PackedFloat32Array(0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55),
-"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+"times": PackedFloat32Array(0, 0.071428575, 0.14285715, 0.21428572, 0.2857143, 0.35714287, 0.42857143, 0.5, 0.5714286, 0.64285713),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
 "update": 1,
-"values": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+"values": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 }
 
 [sub_resource type="AnimationLibrary" id="AnimationLibrary_legs"]
@@ -177,69 +177,89 @@ _data = {
 }
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_kqtwu"]
-radius = 16.0
+radius = 48.0
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_atpat"]
 radius = 24.0
 
-[node name="player" type="CharacterBody2D"]
+[node name="player" type="CharacterBody2D" unique_id=1782881120]
 z_index = 100
 collision_layer = 2
+motion_mode = 1
 script = ExtResource("1_rp718")
 
-[node name="multiplayer_synchronizer" type="MultiplayerSynchronizer" parent="."]
+[node name="multiplayer_synchronizer" type="MultiplayerSynchronizer" parent="." unique_id=8002239]
+replication_interval = 0.033
 replication_config = SubResource("SceneReplicationConfig_atpat")
 
-[node name="player_camera" parent="." instance=ExtResource("2_atpat")]
+[node name="player_camera" parent="." unique_id=1658606843 instance=ExtResource("2_atpat")]
+zoom = Vector2(0.75, 0.75)
 
-[node name="name_label" type="Label" parent="."]
-offset_left = -64.0
-offset_top = -48.0
-offset_right = 1215.9999
-offset_bottom = 117.0
+[node name="name_label" type="Label" parent="." unique_id=189960651]
+offset_left = -174.0
+offset_top = -192.00002
+offset_right = 3306.0
+offset_bottom = 463.0
 scale = Vector2(0.1, 0.1)
 theme = ExtResource("2_76oj4")
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 48
-theme_override_font_sizes/font_size = 120
+theme_override_font_sizes/font_size = 480
 text = "Neverknow247"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="visual_root" type="Node2D" parent="."]
+[node name="revive_prompt" type="Label" parent="." unique_id=189960652]
+visible = false
+offset_left = -64.0
+offset_top = -213.0
+offset_right = 1215.9999
+offset_bottom = -48.0
+scale = Vector2(0.1, 0.1)
+theme = ExtResource("2_76oj4")
+theme_override_colors/font_color = Color(1, 0.78, 0.28, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 48
+theme_override_font_sizes/font_size = 120
+text = "Hold E to Revive"
+horizontal_alignment = 1
+vertical_alignment = 1
 
-[node name="legs" type="Sprite2D" parent="visual_root"]
+[node name="visual_root" type="Node2D" parent="." unique_id=2046578044]
+
+[node name="legs" type="Sprite2D" parent="visual_root" unique_id=999316613]
 texture = ExtResource("4_kqtwu")
-hframes = 14
-frame = 12
+hframes = 10
 
-[node name="sprite" type="Sprite2D" parent="visual_root"]
+[node name="sprite" type="Sprite2D" parent="visual_root" unique_id=1009100037]
+visible = false
 texture = ExtResource("5_6eyoc")
 hframes = 4
 vframes = 2
 
-[node name="collision_shape_2d" type="CollisionShape2D" parent="."]
+[node name="collision_shape_2d" type="CollisionShape2D" parent="." unique_id=1582219167]
 position = Vector2(2.3841858e-07, 0)
 shape = SubResource("CircleShape2D_dyp2m")
 
-[node name="legs_animation_player" type="AnimationPlayer" parent="."]
+[node name="legs_animation_player" type="AnimationPlayer" parent="." unique_id=589281117]
 libraries/ = SubResource("AnimationLibrary_legs")
 autoplay = &"RESET"
 
-[node name="body_animation_player" type="AnimationPlayer" parent="."]
+[node name="body_animation_player" type="AnimationPlayer" parent="." unique_id=1277591132]
 libraries/ = SubResource("AnimationLibrary_body")
 
-[node name="hurtbox" parent="." instance=ExtResource("5_atpat")]
+[node name="hurtbox" parent="." unique_id=1853109174 instance=ExtResource("5_atpat")]
 collision_layer = 4
 
-[node name="collision_shape_2d" type="CollisionShape2D" parent="hurtbox"]
+[node name="collision_shape_2d" type="CollisionShape2D" parent="hurtbox" unique_id=1706113948]
 shape = SubResource("CircleShape2D_kqtwu")
 
-[node name="roof_sense" type="Area2D" parent="."]
+[node name="roof_sense" type="Area2D" parent="." unique_id=1723318606]
+visible = false
 collision_layer = 0
 collision_mask = 16
 
-[node name="collision_shape_2d" type="CollisionShape2D" parent="roof_sense"]
+[node name="collision_shape_2d" type="CollisionShape2D" parent="roof_sense" unique_id=744790305]
 shape = SubResource("CircleShape2D_atpat")
 
 [connection signal="body_entered" from="roof_sense" to="." method="_on_roof_sense_body_entered"]

@@ -1,0 +1,83 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://ui/fishing_ui.gd" id="1_fishing_ui"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_fishing_bg"]
+bg_color = Color(0.09, 0.09, 0.11, 0.98)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.35, 0.55, 0.7, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+
+[node name="fishing_ui" type="CanvasLayer"]
+layer = 12
+visible = false
+script = ExtResource("1_fishing_ui")
+
+[node name="root" type="CenterContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="panel" type="PanelContainer" parent="root"]
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_fishing_bg")
+
+[node name="margin" type="MarginContainer" parent="root/panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 48
+theme_override_constants/margin_top = 40
+theme_override_constants/margin_right = 48
+theme_override_constants/margin_bottom = 40
+
+[node name="vbox" type="VBoxContainer" parent="root/panel/margin"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="title_label" type="Label" parent="root/panel/margin/vbox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 52
+text = "Reel it in!"
+horizontal_alignment = 1
+
+[node name="prompt_label" type="Label" parent="root/panel/margin/vbox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+theme_override_colors/font_color = Color(0.85, 0.85, 0.9, 1)
+text = "Click when the marker is in the zone!"
+horizontal_alignment = 1
+
+[node name="track" type="Control" parent="root/panel/margin/vbox"]
+custom_minimum_size = Vector2(900, 72)
+layout_mode = 2
+
+[node name="track_bg" type="ColorRect" parent="root/panel/margin/vbox/track"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.16, 0.16, 0.2, 1)
+
+[node name="zone" type="ColorRect" parent="root/panel/margin/vbox/track"]
+layout_mode = 0
+offset_right = 120.0
+offset_bottom = 72.0
+color = Color(0.35, 0.8, 0.35, 1)
+
+[node name="marker" type="ColorRect" parent="root/panel/margin/vbox/track"]
+layout_mode = 0
+offset_right = 12.0
+offset_bottom = 72.0
+color = Color(1, 1, 1, 1)
+
+[node name="result_label" type="Label" parent="root/panel/margin/vbox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+horizontal_alignment = 1

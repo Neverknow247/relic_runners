@@ -9,7 +9,7 @@ extends Node2D
 
 @onready var label: Label = $label
 
-const RISE_DISTANCE := 60.0
+const RISE_DISTANCE := 240.0
 const DURATION := 0.6
 
 func setup(amount: float, color: Color, is_crit: bool = false) -> void:
@@ -17,7 +17,7 @@ func setup(amount: float, color: Color, is_crit: bool = false) -> void:
 	label.modulate = color
 	if is_crit:
 		label.text += "!"
-		label.add_theme_font_size_override("font_size", 52)
+		label.add_theme_font_size_override("font_size", 208)
 	var tween := create_tween()
 	tween.tween_property(self, "position:y", position.y - RISE_DISTANCE, DURATION) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)

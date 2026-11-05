@@ -20,7 +20,7 @@ func _physics_process(delta: float) -> void:
 	for area in hitbox.get_overlapping_areas():
 		if not area is Hurtbox:
 			continue
-		if hitbox.caster_id != 0 and area.owner_id == hitbox.caster_id:
+		if not hitbox.can_hit(area):
 			continue
 		if _hit_ids.has(area.owner_id):
 			continue

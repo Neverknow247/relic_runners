@@ -1,0 +1,73 @@
+[gd_scene format=3 uid="uid://cglyi4tdax4x1"]
+
+[ext_resource type="Script" uid="uid://cmj6a8w3w6qg7" path="res://ui/map_ui.gd" id="1_map_ui"]
+[ext_resource type="Script" uid="uid://bi82tphi7dq2k" path="res://ui/map_view.gd" id="2_map_view"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_map_bg"]
+bg_color = Color(0.09, 0.09, 0.11, 0.98)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.4, 0.45, 0.55, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+
+[node name="map_ui" type="CanvasLayer" unique_id=123554896]
+layer = 13
+visible = false
+script = ExtResource("1_map_ui")
+
+[node name="root" type="ColorRect" parent="." unique_id=89074104]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.45)
+
+[node name="panel" type="PanelContainer" parent="root" unique_id=1182005754]
+layout_mode = 0
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -700.0
+offset_top = -520.0
+offset_right = 700.0
+offset_bottom = 520.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_map_bg")
+
+[node name="margin" type="MarginContainer" parent="root/panel" unique_id=1216999143]
+layout_mode = 2
+theme_override_constants/margin_left = 32
+theme_override_constants/margin_top = 28
+theme_override_constants/margin_right = 32
+theme_override_constants/margin_bottom = 28
+
+[node name="vbox" type="VBoxContainer" parent="root/panel/margin" unique_id=1471521553]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="title_label" type="Label" parent="root/panel/margin/vbox" unique_id=272509463]
+layout_mode = 2
+theme_override_font_sizes/font_size = 48
+text = "Map"
+
+[node name="legend_label" type="Label" parent="root/panel/margin/vbox" unique_id=1423414717]
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.75, 0.78, 0.85, 1)
+theme_override_font_sizes/font_size = 24
+text = "You (blue)   Allies (orange)   Portals: grey inactive · yellow opening · green open · dark closed · blue entrance"
+
+[node name="map_view" type="Control" parent="root/panel/margin/vbox" unique_id=538619794]
+custom_minimum_size = Vector2(1336, 860)
+clip_contents = true
+layout_mode = 2
+size_flags_vertical = 3
+script = ExtResource("2_map_view")

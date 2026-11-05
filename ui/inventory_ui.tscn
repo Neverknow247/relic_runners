@@ -61,9 +61,9 @@ script = ExtResource("1_ui")
 [node name="panel_container" type="PanelContainer" parent="."]
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -80.0
+offset_left = -340.0
 offset_top = 120.0
-offset_right = -80.0
+offset_right = -340.0
 offset_bottom = 120.0
 grow_horizontal = 0
 grow_vertical = 1
@@ -160,7 +160,13 @@ tab_index = 3
 custom_minimum_size = Vector2(110, 90)
 layout_mode = 2
 theme_override_font_sizes/font_size = 32
-text = "M"
+text = "C"
+
+[node name="gems_tab_button" type="Button" parent="panel_container/margin_container/root_vbox/columns_row/left_column/stash_column/stash_tab_row"]
+custom_minimum_size = Vector2(110, 90)
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "G"
 
 [node name="move_all_button" type="Button" parent="panel_container/margin_container/root_vbox/columns_row/left_column/stash_column"]
 custom_minimum_size = Vector2(0, 90)

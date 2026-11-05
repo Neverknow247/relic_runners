@@ -13,7 +13,7 @@ var player = null
 
 # Hover tooltip (same custom-panel pattern as weapon_slot_button.gd, since a
 # native Control tooltip is a Window and mispositions on the scaled canvas).
-const HOVER_DELAY := 0.5
+const HOVER_DELAY := 0.05
 var tooltip: PanelContainer
 var tooltip_label: RichTextLabel
 var tooltip_style: StyleBoxFlat
@@ -32,6 +32,23 @@ func _ready() -> void:
 	add_child(tooltip)
 	mouse_entered.connect(func(): is_hovering = true; hover_timer = 0.0)
 	mouse_exited.connect(func(): is_hovering = false; hover_timer = 0.0; tooltip.visible = false)
+	# Click = held-item grab/equip (fires on a click, not a drag).
+	pressed.connect(_on_slot_click)
+
+func _iui():
+	return player.inventory_ui if player != null else null
+
+func _on_slot_click() -> void:
+	if !_has_valid_slot():
+		return
+	var iui = _iui()
+	if iui == null:
+		return
+	if iui.is_holding():
+		if ItemData.is_usable(iui.held_item.type):
+			iui.try_place_slot("quick_" + str(slot_index))
+	elif player.quick_slots[slot_index] != null:
+		iui.grab_from_slot("quick_" + str(slot_index))
 
 func _process(delta: float) -> void:
 	if !is_hovering or tooltip.visible:
@@ -74,6 +91,9 @@ func refresh() -> void:
 func _get_drag_data(_at_position: Vector2) -> Variant:
 	if !_has_valid_slot():
 		return null
+	var iui = _iui()
+	if iui != null and iui.is_holding():
+		return null  # no native drag while an item is held
 	var item: Item = player.quick_slots[slot_index]
 	if item == null:
 		return null

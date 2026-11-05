@@ -1,0 +1,1310 @@
+extends CharacterBody2D
+class_name Enemy
+
+# Multiplayer authority is left at the Godot default (peer 1 / the server) —
+# unlike players, no single peer owns an enemy, so nothing calls
+# set_multiplayer_authority() here.
+
+const WEAPON_TYPES := ["tome", "orb", "wand"]
+# Enemies roll a random element from the full roster (single source: SpellData).
+const ELEMENT_TYPES := SpellData.ELEMENT_ORDER
+
+const WEAPON_LETTERS := {
+	"tome": "T",
+	"orb": "O",
+	"wand": "W",
+}
+
+var all_spell_data = SpellData.new()
+var all_spell_recipes = SpellRecipes.new()
+
+const DamageNumberScene := preload("res://scenes/effects/damage_number.tscn")
+
+func _spawn_damage_number(amount: float, color: Color, is_crit: bool = false) -> void:
+	var num = DamageNumberScene.instantiate()
+	get_tree().current_scene.add_child(num)
+	num.global_position = global_position + Vector2(0, -32)
+	num.setup(amount, color, is_crit)
+
+@export var max_health := 100.0
+
+# Loot: which pool (in ItemData.ENEMY_LOOT_POOLS) this enemy type draws from, and
+# how many rarity-weighted rolls a kill yields. Different enemy types will set a
+# different pool/range later; "basic" is the only pool for now.
+@export var loot_pool := "basic"
+@export var loot_rolls_min := 1
+@export var loot_rolls_max := 3
+var health := max_health:
+	set(value):
+		health = value
+		if health_bar:
+			health_bar.value = health
+var is_dead := false:
+	set(value):
+		is_dead = value
+		if value:
+			velocity = Vector2.ZERO
+			if visual_root:
+				visual_root.visible = false
+			if hurtbox:
+				hurtbox.is_invincible = true
+			# Loot is rolled/broadcast from die() instead, not here — see its
+			# comment for why. Freeing is deferred (not instant) because this
+			# setter also runs on every remote peer the moment is_dead's
+			# on-change sync arrives — freeing the node immediately here would
+			# race against MultiplayerSynchronizer's own outgoing flush on the
+			# AUTHORITY side specifically: if the server frees the node in the
+			# same frame it sets is_dead = true, the synchronizer can be torn
+			# down before it ever gets a chance to actually send that final
+			# update, leaving remote peers permanently stuck seeing a "dead"
+			# enemy that never received the is_dead flag at all.
+			_defer_free()
+
+func _defer_free() -> void:
+	await get_tree().create_timer(0.3).timeout
+	if is_inside_tree():
+		queue_free()
+
+@export var move_speed := 240.0
+
+# While in range and firing, an enemy strafes sideways relative to the target
+# (flipping direction at random intervals) so it's a moving target that's harder
+# to line up a shot on — a light "try to avoid damage" behavior. Firing rate is
+# unaffected: it keeps casting every frame it can still see the target.
+@export var strafe_speed := 150.0
+const STRAFE_FLIP_MIN := 0.6
+const STRAFE_FLIP_MAX := 1.5
+var _strafe_sign := 1.0
+var _strafe_timer := 0.0
+
+# Casting behavior: stays put and casts while the target is within
+# cast_range and in line of sight; otherwise closes the distance. Fire rate
+# is no longer a flat timer — it's set per-shot from the same
+# FORMS[form]["attack_cooldown"] the player uses, so the enemy can loose
+# spells exactly as often as a player with the same weapon/form could.
+@export var cast_range := 640.0
+@export var tap_interval := 0.35
+var cast_timer := 0.0
+var tap_timer := 0.0
+var spell_input_sequence: Array[int] = []
+var target_recipe_sequence: Array = []
+# Fire this many plain default attacks between sequence spells (re-rolled each
+# time a sequence goes off) so enemies don't just spam sequences.
+const MIN_DEFAULTS_BETWEEN_SEQUENCES := 3
+const MAX_DEFAULTS_BETWEEN_SEQUENCES := 5
+var _default_shots_remaining := 0
+# The distance the cast we're about to make can actually reach (its projectile's
+# real travel range, or a short-range form's declared reach). The combat movement
+# closes in instead of strafing until the target is inside it, so shots always
+# connect instead of fizzling short.
+var _advance_range := 0.0
+# The next cast is decided (planned) up front so we know how close to get, then
+# only fired once we're in range — see _plan_next_cast / _execute_planned_cast.
+var _planned_form := ""
+var _planned_recipe: Dictionary = {}
+# Stand a bit inside a cast's max reach so shots comfortably land, not right at
+# the fizzle edge.
+const ENGAGE_MARGIN := 0.85
+# This enemy's default-attack reach (set in _ready). While closing in for a
+# shorter-range sequence, it keeps firing defaults out to this range so it's
+# applying pressure, not just tanking damage during the approach.
+var _default_range := 0.0
+# Small ± random spread on every shot's aim, so a stream of shots isn't a single
+# dodge-one-dodge-them-all line.
+const AIM_VARIANCE := deg_to_rad(5.0)
+# Cheap first-order target leading: aim where the target will be by the time the
+# shot reaches it, from a smoothed estimate of its velocity (target_velocities).
+const VELOCITY_SMOOTHING := 0.25
+var target_velocities: Dictionary = {}
+
+# Facing/vision cone: LOS is only granted within fov_degrees of the
+# direction the enemy is currently facing, and facing turns toward whatever
+# it's tracking (the point it's aiming at while casting, or its travel
+# direction while chasing) at a limited rate rather than snapping — so a
+# target directly behind it is genuinely out of view until it turns.
+@export var fov_degrees := 160.0
+@export var turn_speed := 6.0
+var facing_direction := Vector2.DOWN
+var current_visible_point := Vector2.ZERO
+@onready var facing_indicator: Node2D = $visual_root/facing_indicator
+const FACING_INDICATOR_DISTANCE := 48.0
+
+# This enemy's own weapon/element identity — used both when it casts spells
+# (as the attacker) and when a player's spell hits it (as the defender),
+# same as a player's equipped Weapon serves both roles. Replicated so every
+# peer shows the same color/letter and applies the same matchups regardless
+# of who detects a given hit.
+var attacker_weapon: String = "tome":
+	set(value):
+		attacker_weapon = value
+		_update_visual()
+var attacker_element: String = "fire":
+	set(value):
+		attacker_element = value
+		_update_visual()
+# The forms this enemy's weapon actually holds — rolled 1-3 at spawn (see
+# _ready()) from the type's capable list, exactly like a real weapon now
+# carries a subset of Form Stones rather than all three. Drives which
+# sequences it can cast AND, if its weapon drops, which forms the dropped
+# weapon comes with (see die()). Server-rolled and only ever read
+# server-side (AI casting runs on the authority; the fire_spell RPC carries
+# the chosen form string to peers), so it needs no replication — just
+# persistence across room revisits (see enemy_spawner.gd).
+var attacker_forms: Array = []
+
+@onready var hurtbox: Hurtbox = $hurtbox
+@onready var detection_area: Area2D = $detection_area
+@onready var visual_root: Node2D = $visual_root
+@onready var color_rect: ColorRect = $visual_root/color_rect
+@onready var weapon_label: Label = $visual_root/weapon_label
+@onready var health_bar: ProgressBar = $visual_root/health_bar
+@onready var nav_agent: NavigationAgent2D = $nav_agent
+
+var targets_in_range: Array[Hurtbox] = []
+var current_target: Hurtbox = null
+
+# Only updated while we can actually see the target — this is where we
+# path to once LOS breaks, not their live position. If we arrive there
+# without re-spotting them, we give up (current_target = null) instead of
+# omnisciently continuing to track wherever they currently are.
+var last_known_position: Vector2 = Vector2.ZERO
+
+# Corner-easing: if we're barely moving over a short window while trying to
+# chase (jammed against a corner), stop pushing straight at the next
+# waypoint and instead slide along the wall we're stuck on. Checked over a
+# window rather than per-frame, since normal per-frame movement is already
+# smaller than a naive single-frame threshold would allow for.
+var last_stuck_check_position: Vector2 = Vector2.ZERO
+var stuck_check_timer := 0.0
+var is_easing_around_corner := false
+const STUCK_CHECK_INTERVAL := 0.2
+const STUCK_DISTANCE := 32.0
+
+# Enemies now collide with each other (see enemy.tscn's collision_mask), so
+# hard collision alone would otherwise just shove them into each other's
+# blocked-path handling and feel jerky. A soft steering push away from
+# anyone crowding closer than min_enemy_separation, blended continuously
+# into the movement velocity, keeps a little personal space without them
+# ever having to hard-stop against one another.
+@export var min_enemy_separation := 28.0
+const BODY_RADIUS := 28.0
+const SEPARATION_CHECK_RADIUS := 160.0
+const SEPARATION_RESPONSE := 6.0
+
+# --- Performance ----------------------------------------------------------
+# Distance LOD: an enemy with no target and no player within SLEEP_RANGE does no
+# per-frame work at all (no LOS/separation physics queries, no pathing) until a
+# player comes near. SLEEP_RANGE is comfortably beyond the detection radius, so
+# an enemy always wakes well before it could ever need to notice anyone.
+const SLEEP_RANGE := 1200.0
+var _world: Node = null
+# Separation runs a physics query; recompute it only every few frames and reuse
+# the cached push in between (positions barely change frame-to-frame).
+const SEPARATION_RECALC_FRAMES := 3
+var _separation_cache := Vector2.ZERO
+var _separation_countdown := 0
+# Preallocated query objects, reused every frame — building a Shape2D + query
+# params on every call was needless per-frame garbage across every enemy.
+var _sep_shape: CircleShape2D
+var _sep_query: PhysicsShapeQueryParameters2D
+var _los_shape: CircleShape2D
+var _los_query: PhysicsShapeQueryParameters2D
+# A plain ray alongside the swept circle. cast_motion IGNORES any wall the swept
+# circle already overlaps at its origin — so an enemy standing within the circle's
+# radius of a wall (extremely common) would see straight through that exact wall.
+# The ray's origin is the enemy's center, which is always in open space (the body
+# collides with walls, so it can't be inside one), so the ray never ignores the
+# blocking wall. Requiring BOTH clear keeps the circle's corner-pinhole guard
+# while closing that see-through-the-wall-you're-touching leak.
+var _los_ray: PhysicsRayQueryParameters2D
+
+# When we give up on a target (arrived at their last known position without
+# re-spotting them), that same target is ineligible for re-acquisition for a
+# brief moment — otherwise a single flickering frame of LOS right where we
+# just stood (very plausible, since give-up happens right at/near the
+# corner they were last seen at) would re-lock on with no real gap at all.
+# Short enough that it's just an anti-flicker guard, not a real delay.
+var recently_lost_target: Hurtbox = null
+var lost_target_cooldown := 0.0
+const LOST_TARGET_COOLDOWN := 0.5
+
+# Even with zero LOS, a target close enough to hear is still "known" —
+# footsteps/casting noise don't care about walls or the vision cone the way
+# sight does, so this check is pure distance, no shape-cast or FOV test.
+# But a perfectly still player makes no noise to hear in the first place, so
+# hearing-based ACQUISITION (not ongoing awareness of an already-known
+# target — see the separate can_hear check in _physics_process) additionally
+# requires them to have actually moved since last physics frame.
+@export var hearing_radius := 256.0
+var last_target_positions: Dictionary = {}
+var target_is_moving: Dictionary = {}
+const MOVEMENT_THRESHOLD := 2.0
+
+# Getting hit from outside our vision/hearing range (a shot from off-screen
+# or from behind, out of the cone) has no current_target to chase — but it
+# shouldn't be a total non-event either. We pick a random reachable point
+# roughly where the shot direction points and go investigate. If nothing
+# navigable turns up near that guess (e.g. it's inside/behind a wall), we
+# still walk toward the edge of our own vision range in that direction
+# instead of just standing there.
+@export var investigate_distance := 560.0
+@export var investigate_jitter := 160.0
+const INVESTIGATE_ATTEMPTS := 8
+const MIN_INVESTIGATE_DISTANCE := 96.0
+var is_investigating := false
+var investigate_target := Vector2.ZERO
+
+# When there's nothing to chase, react to, or investigate, the enemy
+# alternates between wandering to a random reachable point near its spawn
+# and pausing to "look around" (search) before picking the next wander
+# point. Each search has a small chance of relocating "home" (spawn_position)
+# to right where the enemy is standing, so a wandering enemy can gradually
+# drift to a new area over time instead of being tied to its original spot
+# forever.
+enum IdleState { WANDER, SEARCH }
+@export var wander_radius := 960.0
+@export var wander_radius_variance := 80.0
+@export var search_duration := 16.0
+@export var search_duration_variance := 2.0
+@export var search_turn_speed := 1.0
+@export var search_turn_speed_variance := 0.3
+@export var new_spawn_chance := 0.05
+const WANDER_SNAP_TOLERANCE := 160.0
+var spawn_position := Vector2.ZERO
+var idle_state: int = IdleState.WANDER
+var wander_target := Vector2.ZERO
+var wander_target_valid := false
+var search_timer := 0.0
+# Rolled once per enemy at spawn so it stays consistent for that enemy's
+# whole lifetime, rather than being different every single search — the
+# goal is desyncing different enemies from each other, not variety within
+# one enemy's own repeated cycles.
+var actual_search_turn_speed := 0.0
+
+# Region RIDs existing on the nav map doesn't guarantee their polygon data
+# has actually finished syncing into it yet — map_get_iteration_id() > 0
+# wasn't a reliable signal for this (see _physics_process's guard), so
+# this counts consecutive frames of "the map reports regions" and only
+# trusts it once that's held for a few frames running, not just once.
+var nav_ready_frames := 0
+const NAV_READY_FRAME_MARGIN := 3
+
+# If we're stuck fighting a corner (is_easing_around_corner staying true)
+# for too long while wandering, the picked point is unreachable in practice
+# — abandon it and roll a new one rather than grinding against the wall
+# forever.
+var wander_stuck_time := 0.0
+const WANDER_STUCK_TIMEOUT := 1.0
+
+# Hard backstop independent of the above: wander_stuck_time resets to 0 the
+# instant any single 0.2s window shows enough movement, which incidental
+# jitter (a nearby enemy's separation push, a glancing bounce off the wall)
+# can trigger repeatedly without ever adding up to real progress — letting
+# an enemy stay wedged against a wall indefinitely instead of the ~1 second
+# that mechanism is supposed to guarantee. This timer can't be reset by
+# anything short of actually finishing or abandoning the leg, so it's a
+# real ceiling on how long any single wander leg can run.
+var wander_leg_timer := 0.0
+var wander_leg_max_duration := 0.0
+const WANDER_LEG_TIMEOUT_MULTIPLIER := 4.0
+const WANDER_LEG_MIN_TIMEOUT := 6.0
+
+# After losing an actively-chased player (not just giving up on an
+# investigation), the enemy wanders 0-3 times before deliberately heading
+# back to spawn_position once, then resumes free wandering from there.
+# -1 means "not in that countdown" (normal free-roaming).
+var post_chase_wanders_remaining := -1
+
+# Group behavior: a follower has no wander/search logic of its own — it just
+# treats its leader's current position as if it were its own spawn_position,
+# so it drifts along with wherever the leader wanders instead of sitting at
+# a fixed point. Combat (LOS/hearing/casting/investigating) is entirely
+# independent per enemy either way; this only changes the wander anchor.
+# null means "no leader" — either always solo, or the leader has died and
+# this enemy already got promoted (or fell back) to being its own leader.
+var leader: Enemy = null
+
+# All members of this enemy's spawn group (including the leader), the SAME
+# Array object shared by reference across every member — set once by
+# enemy_spawner.gd. Never pruned in place (see promote_new_leader(), which
+# filters into a local copy instead) so every member's view of "who's still
+# around" stays consistent within a frame regardless of processing order.
+var group: Array[Enemy] = []
+
+func get_wander_anchor() -> Vector2:
+	if leader != null and is_instance_valid(leader) and !leader.is_dead:
+		return leader.global_position
+	return spawn_position
+
+# Runs on every surviving follower once their leader is confirmed gone.
+# Rather than each one independently going solo, the group promotes its
+# most-senior surviving member (deterministic: first non-dead entry in the
+# shared, never-mutated group list) to be the new leader, and everyone else
+# just follows them instead. Safe to call redundantly from multiple
+# members in the same frame regardless of _physics_process order — see the
+# comment on `group` above.
+func promote_new_leader() -> void:
+	var survivors: Array = group.filter(func(m): return is_instance_valid(m) and !m.is_dead)
+	if survivors.is_empty():
+		spawn_position = global_position
+		leader = null
+		return
+	var new_leader: Enemy = null
+	for m in survivors:
+		if m.leader == null:
+			new_leader = m
+			break
+	if new_leader == null:
+		new_leader = survivors[0]
+	if new_leader == self:
+		spawn_position = global_position
+		leader = null
+	else:
+		leader = new_leader
+
+# Groupmates within earshot of whatever just happened (spotting the player,
+# or getting hit by them) react too, instead of only the one enemy that
+# actually noticed anything. known_target null means we only have a rough
+# direction (e.g. a blind hit), so nearby idle groupmates go investigate
+# that point rather than being handed a definite lock they didn't earn.
+func alert_nearby_group(known_target: Hurtbox, known_point: Vector2) -> void:
+	for member in group:
+		if member == self or !is_instance_valid(member) or member.is_dead:
+			continue
+		if member.current_target != null:
+			continue
+		if global_position.distance_to(member.global_position) > hearing_radius:
+			continue
+		if known_target != null:
+			member.current_target = known_target
+			member.last_known_position = known_point
+		else:
+			member.start_investigating(member.global_position.direction_to(known_point))
+
+func _ready() -> void:
+	hurtbox.hurt.connect(_on_hurtbox_hurt)
+	detection_area.area_entered.connect(_on_detection_area_entered)
+	detection_area.area_exited.connect(_on_detection_area_exited)
+	# Vision radius and the projectile travel cap are the same number by design
+	# (SpellData.ENGAGEMENT_RANGE) so you can't hit an enemy from beyond where it
+	# could ever spot you. Drive it from the constant here — duplicate the shape
+	# first so we're not mutating the shared resource every other enemy uses.
+	var det_shape := detection_area.get_node("collision_shape_2d") as CollisionShape2D
+	if det_shape != null and det_shape.shape is CircleShape2D:
+		det_shape.shape = det_shape.shape.duplicate()
+		(det_shape.shape as CircleShape2D).radius = SpellData.ENGAGEMENT_RANGE
+	# name.hash() (not get_instance_id()) so this identifier is identical on
+	# every peer's local copy of this same static, room-baked enemy —
+	# get_instance_id() is process-local and would differ per peer, silently
+	# breaking self-hit exclusion on whichever clients don't match.
+	hurtbox.owner_id = name.hash()
+	# In the "enemies" group on every peer so a beam this enemy casts can resolve
+	# it as its caster (by matching name.hash()) the same way a player beam finds
+	# its caster in world.players — see beam_projectile.gd.
+	add_to_group("enemies")
+	health_bar.max_value = max_health
+	health_bar.value = health
+	if is_multiplayer_authority():
+		attacker_weapon = WEAPON_TYPES.pick_random()
+		attacker_element = ELEMENT_TYPES.pick_random()
+		attacker_forms = _roll_forms(attacker_weapon)
+		# How far this enemy's plain default attack reaches — used to keep up
+		# default-attack pressure while closing in for a shorter-range sequence.
+		_default_range = SpellData.get_effective_range(attacker_weapon, attacker_element, "default", true) * ENGAGE_MARGIN
+		spawn_position = global_position
+		# Face a random direction to start (rolled per-enemy) so a freshly spawned
+		# group isn't all staring the same way.
+		facing_direction = Vector2.RIGHT.rotated(randf_range(0.0, TAU))
+		# Rolled once and kept for this enemy's life — magnitude varies, and the
+		# sign randomly flips so some search by sweeping clockwise and others
+		# counter-clockwise instead of every enemy spinning the same way.
+		actual_search_turn_speed = max(0.1, search_turn_speed + randf_range(-search_turn_speed_variance, search_turn_speed_variance))
+		if randf() < 0.5:
+			actual_search_turn_speed = -actual_search_turn_speed
+		# Start idle by looking around rather than immediately wandering off.
+		idle_state = IdleState.SEARCH
+		search_timer = search_duration + randf_range(-search_duration_variance, search_duration_variance)
+		# Open an engagement with a run of default attacks before the first
+		# sequence, rather than possibly leading with a sequence.
+		_default_shots_remaining = randi_range(MIN_DEFAULTS_BETWEEN_SEQUENCES, MAX_DEFAULTS_BETWEEN_SEQUENCES)
+		# Build the reusable physics-query objects once (only the authority runs
+		# the queries that use them — see _physics_process's early-out above).
+		_sep_shape = CircleShape2D.new()
+		_sep_shape.radius = SEPARATION_CHECK_RADIUS
+		_sep_query = PhysicsShapeQueryParameters2D.new()
+		_sep_query.shape = _sep_shape
+		_sep_query.collision_mask = 32
+		_sep_query.exclude = [get_rid()]
+		_los_shape = CircleShape2D.new()
+		_los_shape.radius = 16.0
+		_los_query = PhysicsShapeQueryParameters2D.new()
+		_los_query.shape = _los_shape
+		_los_query.collision_mask = 1
+		_los_query.exclude = [get_rid()]
+		_los_ray = PhysicsRayQueryParameters2D.new()
+		_los_ray.collision_mask = 1
+		_los_ray.exclude = [get_rid()]
+		_los_ray.hit_from_inside = true
+	_update_visual()
+
+# 1-3 distinct forms from the weapon type's capable list, shuffled so it's a
+# random subset (not always the first N). Mirrors how a looted weapon carries
+# an arbitrary handful of Form Stones rather than the full set.
+func _roll_forms(weapon_type: String) -> Array:
+	var pool: Array = SpellData.get_capable_forms(weapon_type).duplicate()
+	pool.shuffle()
+	var count: int = clampi(randi_range(1, 3), 1, pool.size())
+	return pool.slice(0, count)
+
+func _update_visual() -> void:
+	if !color_rect or !weapon_label:
+		return
+	var element_data: Dictionary = SpellData.ELEMENTS.get(attacker_element, SpellData.ELEMENTS["default"])
+	color_rect.color = element_data["color"]
+	weapon_label.text = WEAPON_LETTERS.get(attacker_weapon, "?")
+
+# facing_direction itself is only ever simulated on the authority (see
+# _physics_process's early return above), but the indicator's on-screen
+# position needs to update for every peer — this runs unconditionally so
+# remote viewers, who only ever receive facing_direction via replication,
+# still see the dot move instead of sitting frozen at its spawn position.
+# Networked position: the server (authority) writes its true global_position here
+# each frame; remote copies buffer + interpolate it (see NetInterpolator) instead
+# of snapping to raw replicated values, which is what made remote enemies jitter.
+@export var net_position := Vector2.ZERO
+var _pos_interp := NetInterpolator.new()
+var _last_net_pos := Vector2(INF, INF)
+
+func _process(_delta: float) -> void:
+	if is_multiplayer_authority():
+		# Publish our authoritative position for remote copies to interpolate.
+		net_position = global_position
+	else:
+		# Remote copy: interpolate toward buffered snapshots (no raw snapping).
+		# Adopt the first observed value without pushing it — before the first
+		# sync, net_position is still (0,0); pushing that would yank the enemy
+		# (which is already at its deterministic spawn spot) to the origin.
+		if _last_net_pos == Vector2(INF, INF):
+			_last_net_pos = net_position
+		elif net_position != _last_net_pos:
+			_pos_interp.push(net_position)
+			_last_net_pos = net_position
+		if _pos_interp.has_data():
+			global_position = _pos_interp.sample()
+	if facing_indicator:
+		facing_indicator.position = facing_direction * FACING_INDICATOR_DISTANCE
+
+func _physics_process(delta: float) -> void:
+	if !is_multiplayer_authority():
+		return
+	if is_dead:
+		return
+	if NavigationServer2D.map_get_regions(nav_agent.get_navigation_map()).is_empty():
+		# The nav map hasn't finished its first sync yet (region registration
+		# happens a frame or so after scene load) — every NavigationServer2D
+		# query against an empty map returns Vector2.ZERO instead of a real
+		# snapped point, which is exactly (0, 0), i.e. this room's own
+		# player spawn point. Querying it this early was making every
+		# freshly-spawned enemy's very first wander target resolve to the
+		# player's spawn, making it look like they'd all beelined straight
+		# there the instant the room loaded. Just wait for it to sync
+		# instead of trusting a bogus result.
+		nav_ready_frames = 0
+		velocity = Vector2.ZERO
+		move_and_slide()
+		return
+	nav_ready_frames += 1
+	if nav_ready_frames <= NAV_READY_FRAME_MARGIN:
+		# Regions existing doesn't guarantee their polygon data has fully
+		# synced into the map yet either — a few frames of margin past
+		# that first sign of life is cheap insurance against the exact
+		# same bug recurring.
+		velocity = Vector2.ZERO
+		move_and_slide()
+		return
+	if leader != null and (!is_instance_valid(leader) or leader.is_dead):
+		promote_new_leader()
+	cast_timer = max(cast_timer - delta, 0.0)
+	lost_target_cooldown = max(lost_target_cooldown - delta, 0.0)
+	# Distance LOD: with nothing to fight and no player anywhere near, skip the
+	# whole expensive frame (target scan, LOS/separation queries, pathing). The
+	# enemy just holds still until a player closes to SLEEP_RANGE — which is well
+	# outside its detection radius, so it never sleeps through a real encounter.
+	if current_target == null and _nearest_player_distance() > SLEEP_RANGE:
+		velocity = Vector2.ZERO
+		return
+	update_current_target()
+	if current_target != null:
+		is_investigating = false
+	if current_target == null:
+		if is_investigating:
+			if follow_nav_path(delta, investigate_target):
+				is_investigating = false
+		else:
+			update_idle(delta)
+		reset_casting()
+		move_and_slide()
+		if facing_indicator:
+			facing_indicator.position = facing_direction * FACING_INDICATOR_DISTANCE
+		return
+	var visible_point = get_visible_point(current_target)
+	# Stillness stealth (cloak_unseen_still) only prevents an enemy from SPOTTING
+	# you in the first place (see the acquisition check in update_current_target) —
+	# it does NOT hide you from an enemy already locked onto you. Once it's in
+	# combat with you, freezing won't break its line of sight; you have to actually
+	# break LOS / range and let it give up. Hearing-silence still gates can_hear.
+	var can_see := visible_point != null
+	var distance := global_position.distance_to(current_target.global_position)
+	var can_hear := distance <= hearing_radius and not _target_silent(current_target)
+	# Hearing reveals location the same as sight would (no wall/FOV check),
+	# but only sight lets us aim — you can't snipe someone you only hear
+	# through a wall, so current_visible_point stays sight-only.
+	var aware := can_see or can_hear
+	if aware:
+		last_known_position = current_target.global_position
+	if can_see:
+		current_visible_point = visible_point
+
+	if can_see and distance <= cast_range:
+		var to_target := current_visible_point - global_position
+		if _advance_range > 0.0 and distance > _advance_range:
+			# The sequence we're building is a short-range form (beam/burst) and
+			# the target is out of its range — close the gap instead of strafing.
+			velocity = to_target.normalized() * move_speed + compute_separation()
+		else:
+			# Strafe sideways while firing so we're a moving target — flip direction
+			# at random intervals so it isn't a predictable pendulum. Casting
+			# continues regardless (update_casting below), so movement never slows
+			# our fire.
+			_strafe_timer -= delta
+			if _strafe_timer <= 0.0:
+				_strafe_sign = 1.0 if randf() < 0.5 else -1.0
+				_strafe_timer = randf_range(STRAFE_FLIP_MIN, STRAFE_FLIP_MAX)
+			var perp := Vector2(-to_target.y, to_target.x).normalized()
+			velocity = perp * _strafe_sign * strafe_speed + compute_separation()
+		update_facing(delta, current_visible_point - global_position)
+		update_casting(delta, distance)
+		stuck_check_timer = 0.0
+		is_easing_around_corner = false
+	else:
+		# Chase the live position while we're still aware of them (in sight
+		# or in earshot) — otherwise head for their last-known spot and give
+		# up once we get there without re-spotting/re-hearing them.
+		var chase_target := current_target.global_position if aware else last_known_position
+		if follow_nav_path(delta, chase_target) and !aware:
+			recently_lost_target = current_target
+			lost_target_cooldown = LOST_TARGET_COOLDOWN
+			current_target = null
+			# Just lost an actively-chased player — start the wander/return
+			# cycle fresh rather than resuming whatever idle state we were
+			# in before we ever spotted them.
+			post_chase_wanders_remaining = randi_range(0, 3)
+			idle_state = IdleState.WANDER
+			wander_target_valid = false
+		reset_casting()
+	move_and_slide()
+	if facing_indicator:
+		facing_indicator.position = facing_direction * FACING_INDICATOR_DISTANCE
+
+# Steps one physics frame toward target_position along the nav mesh,
+# gliding around corners we're jammed against. Returns true once arrived
+# (navigation finished) so callers can decide what "arrived" means for them
+# (give up on a target, stop investigating, etc).
+func follow_nav_path(delta: float, target_position: Vector2) -> bool:
+	nav_agent.target_position = target_position
+	stuck_check_timer -= delta
+	if stuck_check_timer <= 0.0:
+		var moved := global_position.distance_to(last_stuck_check_position)
+		is_easing_around_corner = moved < STUCK_DISTANCE
+		last_stuck_check_position = global_position
+		stuck_check_timer = STUCK_CHECK_INTERVAL
+	if nav_agent.is_navigation_finished():
+		velocity = compute_separation()
+		return true
+	var next_point: Vector2 = nav_agent.get_next_path_position()
+	var desired_velocity := global_position.direction_to(next_point) * move_speed
+	if is_easing_around_corner and get_slide_collision_count() > 0:
+		# Average every simultaneous WALL collision's normal rather than
+		# just the first one — at a concave (inside) corner, two walls can
+		# both be colliding the same frame, and a tangent based on only one
+		# of them often points straight into the other, keeping us stuck
+		# even with easing "on". The averaged normal points roughly out of
+		# the corner vertex, so its tangent actually clears both walls.
+		# Other enemies are excluded here — they're moving too, so gliding
+		# along a tangent computed from one instant of their normal is
+		# jittery and doesn't represent stable geometry; separation
+		# (below) handles enemy-enemy spacing instead.
+		var normal_sum := Vector2.ZERO
+		var wall_hits := 0
+		for i in get_slide_collision_count():
+			var collision := get_slide_collision(i)
+			if collision.get_collider() is Enemy:
+				continue
+			normal_sum += collision.get_normal()
+			wall_hits += 1
+		if wall_hits > 0:
+			var normal: Vector2 = normal_sum.normalized()
+			var tangent := Vector2(-normal.y, normal.x)
+			if tangent.dot(desired_velocity) < 0.0:
+				tangent = -tangent
+			desired_velocity = tangent * move_speed
+	velocity = desired_velocity + compute_separation()
+	update_facing(delta, velocity)
+	return false
+
+# Soft push away from any other enemy crowding closer than
+# min_enemy_separation, scaled by how much that gap is being violated.
+# Continuous and additive rather than a hard stop, so a group moving
+# together drifts apart smoothly instead of jamming against each other.
+func compute_separation() -> Vector2:
+	# Throttled: the shape query is the single most-run physics cost across a
+	# crowd of enemies, and the push barely changes frame-to-frame. Recompute
+	# every few frames and reuse the cached value in between.
+	_separation_countdown -= 1
+	if _separation_countdown > 0:
+		return _separation_cache
+	_separation_countdown = SEPARATION_RECALC_FRAMES
+	var space_state := get_world_2d().direct_space_state
+	_sep_query.transform = Transform2D(0.0, global_position)
+	var results := space_state.intersect_shape(_sep_query, 8)
+	var desired_min := BODY_RADIUS * 2.0 + min_enemy_separation
+	var push := Vector2.ZERO
+	for result in results:
+		var other = result.get("collider")
+		if other == self or not other is Enemy:
+			continue
+		var offset: Vector2 = global_position - other.global_position
+		var dist := offset.length()
+		if dist >= desired_min:
+			continue
+		# When exactly overlapping, offset.normalized() is undefined — pick
+		# a direction from the two instance IDs rather than randf(), so
+		# it's the same every frame instead of re-rolling and making them
+		# jitter in a new random direction each tick while never actually
+		# separating.
+		var dir := offset.normalized() if dist > 0.001 \
+			else Vector2.RIGHT.rotated(float(get_instance_id() - other.get_instance_id()))
+		push += dir * (desired_min - dist)
+	_separation_cache = push * SEPARATION_RESPONSE
+	return _separation_cache
+
+# Distance to the closest player (INF if none / world not ready). Cheap loop over
+# the handful of players — used by the frame's distance-LOD early-out.
+func _nearest_player_distance() -> float:
+	if _world == null or not is_instance_valid(_world):
+		_world = get_tree().get_first_node_in_group("world")
+	if _world == null or _world.players == null:
+		return INF
+	var nearest := INF
+	for p in _world.players.get_children():
+		if p is Node2D:
+			var d := global_position.distance_to(p.global_position)
+			if d < nearest:
+				nearest = d
+	return nearest
+
+# Every living player's hurtbox (for LOS checks that must ignore the detection
+# ring, e.g. reacting to a shot from beyond our vision radius).
+func _players_hurtboxes() -> Array:
+	var out: Array = []
+	if _world == null or not is_instance_valid(_world):
+		_world = get_tree().get_first_node_in_group("world")
+	if _world == null or _world.players == null:
+		return out
+	for p in _world.players.get_children():
+		if "hurtbox" in p and p.hurtbox != null and is_instance_valid(p.hurtbox):
+			out.append(p.hurtbox)
+	return out
+
+# Getting shot spins us toward the threat and lets us scan for the shooter with
+# NO radius limit (but still real line of sight — never through walls, and
+# ignoring our facing cone since a hit makes us whip around): returns the nearest
+# player we can actually see, or null. This is what lets an enemy shot from open
+# ground just outside its normal vision radius still spot and lock onto the
+# shooter, instead of only trudging over to investigate the shot.
+func _spot_shooter_any_range() -> Hurtbox:
+	var best: Hurtbox = null
+	var best_dist := INF
+	for h in _players_hurtboxes():
+		if h.is_invincible:
+			continue
+		if not has_line_of_sight_any_direction(h):
+			continue
+		var d := global_position.distance_to(h.global_position)
+		if d < best_dist:
+			best_dist = d
+			best = h
+	return best
+
+func start_investigating(direction: Vector2) -> void:
+	# 95% of the time head roughly toward the shot (the original behavior);
+	# 5% of the time flee roughly away from it instead — keeps a
+	# blindsided enemy from being 100% predictable.
+	var chosen_direction := direction if randf() < 0.95 else -direction
+	var map_rid := nav_agent.get_navigation_map()
+	var guess := global_position + chosen_direction * investigate_distance
+	for i in INVESTIGATE_ATTEMPTS:
+		var candidate := guess + Vector2(
+			randf_range(-investigate_jitter, investigate_jitter),
+			randf_range(-investigate_jitter, investigate_jitter)
+		)
+		var snapped := NavigationServer2D.map_get_closest_point(map_rid, candidate)
+		# map_get_closest_point always returns *some* point on the mesh, even
+		# if the candidate was far off it (e.g. inside a wall) — only trust
+		# it as "near where the shot came from" if it didn't have to move
+		# the candidate more than our own jitter radius to get there. Also
+		# reject anything too close to where we're already standing — that
+		# would count as "arrived" on the very first frame, making the
+		# enemy appear to not react to the hit at all.
+		if snapped.distance_to(candidate) <= investigate_jitter \
+				and snapped.distance_to(global_position) >= MIN_INVESTIGATE_DISTANCE:
+			investigate_target = snapped
+			is_investigating = true
+			return
+	# No usable point near the guess — at least head toward the edge of our
+	# own vision range in that direction instead of not reacting at all.
+	var edge_point := global_position + chosen_direction * cast_range
+	investigate_target = safe_snap_to_nav(edge_point, investigate_jitter * 1.5)
+	is_investigating = true
+
+# A loud world noise (the exit portal charging — see exit_portal.gd's noise
+# pulses) draws idle enemies toward its source. Heard through walls like other
+# hearing, but it only sends them to INVESTIGATE the point — no free target lock,
+# and it never overrides an enemy already fighting a real target. Server-only
+# (AI runs on the authority alone). Re-fired periodically by the portal, so a
+# crowd steadily converges on and mills around it while it charges.
+func hear_world_noise(point: Vector2) -> void:
+	if !is_multiplayer_authority() or is_dead:
+		return
+	if current_target != null:
+		return
+	var snapped := NavigationServer2D.map_get_closest_point(nav_agent.get_navigation_map(), point)
+	# Already essentially there — don't thrash a fresh path every pulse; let it
+	# wander/hold around the portal instead.
+	if global_position.distance_to(snapped) <= MIN_INVESTIGATE_DISTANCE:
+		return
+	investigate_target = snapped
+	is_investigating = true
+
+func update_idle(delta: float) -> void:
+	match idle_state:
+		IdleState.WANDER:
+			if !wander_target_valid:
+				pick_next_wander_target()
+			if wander_target_valid:
+				wander_leg_timer += delta
+				var arrived := follow_nav_path(delta, wander_target)
+				if is_easing_around_corner:
+					wander_stuck_time += delta
+					if wander_stuck_time >= WANDER_STUCK_TIMEOUT:
+						# Stuck fighting this corner too long — this point
+						# isn't practically reachable, so give up on it and
+						# roll a fresh one next frame instead of grinding here.
+						wander_target_valid = false
+						wander_stuck_time = 0.0
+				else:
+					wander_stuck_time = 0.0
+				if wander_target_valid and wander_leg_timer >= wander_leg_max_duration:
+					# Absolute backstop: the check above can keep getting
+					# reset by incidental jitter that never amounts to real
+					# progress, so this timer — which nothing but finishing
+					# or abandoning the leg can reset — guarantees a real
+					# ceiling on how long any single wander leg can run.
+					wander_target_valid = false
+					wander_stuck_time = 0.0
+				if arrived:
+					idle_state = IdleState.SEARCH
+					search_timer = search_duration + randf_range(-search_duration_variance, search_duration_variance)
+					wander_stuck_time = 0.0
+		IdleState.SEARCH:
+			velocity = compute_separation()
+			# No fixed "desired" direction here (that's what update_facing
+			# eases toward) — searching is a continuous sweep, so just spin
+			# facing_direction directly at a steady rate.
+			facing_direction = facing_direction.rotated(actual_search_turn_speed * delta)
+			search_timer -= delta
+			if search_timer <= 0.0:
+				if randf() < new_spawn_chance:
+					spawn_position = global_position
+				wander_target_valid = false
+				# Fresh baseline so the corner-stuck check doesn't compare
+				# against a stale pre-search position and immediately think
+				# we're jammed the instant we start moving again.
+				last_stuck_check_position = global_position
+				stuck_check_timer = STUCK_CHECK_INTERVAL
+				idle_state = IdleState.WANDER
+
+func pick_next_wander_target() -> void:
+	# Varying the radius per-leg (on top of pick_random_point_near's own
+	# random angle/distance within it) gives each leg a slightly different
+	# reach — and therefore a slightly different travel time — so a whole
+	# group of enemies doesn't visibly settle into the same wander rhythm.
+	var radius = max(1.0, wander_radius + randf_range(-wander_radius_variance, wander_radius_variance))
+	var anchor := get_wander_anchor()
+	if post_chase_wanders_remaining > 0:
+		post_chase_wanders_remaining -= 1
+		wander_target = pick_random_point_near(anchor, radius)
+	elif post_chase_wanders_remaining == 0:
+		# Countdown's up — head deliberately back toward our anchor (the
+		# leader, if we still have one, otherwise our own spawn) once, then
+		# go back to free-roaming wander/search from there.
+		post_chase_wanders_remaining = -1
+		wander_target = safe_snap_to_nav(anchor, radius * 1.5)
+	else:
+		wander_target = pick_random_point_near(anchor, radius)
+	wander_target_valid = true
+	wander_leg_timer = 0.0
+	wander_leg_max_duration = max(
+		WANDER_LEG_MIN_TIMEOUT,
+		global_position.distance_to(wander_target) / move_speed * WANDER_LEG_TIMEOUT_MULTIPLIER
+	)
+
+func pick_random_point_near(center: Vector2, radius: float) -> Vector2:
+	var map_rid := nav_agent.get_navigation_map()
+	for i in INVESTIGATE_ATTEMPTS:
+		var candidate := center + Vector2.RIGHT.rotated(randf_range(0.0, TAU)) * randf_range(0.0, radius)
+		var snapped := NavigationServer2D.map_get_closest_point(map_rid, candidate)
+		if snapped.distance_to(candidate) <= WANDER_SNAP_TOLERANCE:
+			return snapped
+	return safe_snap_to_nav(center, radius * 1.5)
+
+# map_get_closest_point always returns *some* point on the mesh — if center
+# itself isn't actually near any navigable tile (e.g. an enemy_spawn marker
+# sitting outside the baked navigation area), that "closest point anywhere
+# on the whole map" can be clear across the level. Rather than let that drag
+# an enemy off toward some unrelated part of the map, only trust it within
+# max_distance of what we asked for; otherwise just stay where we are.
+func safe_snap_to_nav(point: Vector2, max_distance: float) -> Vector2:
+	var snapped := NavigationServer2D.map_get_closest_point(nav_agent.get_navigation_map(), point)
+	if snapped.distance_to(point) <= max_distance:
+		return snapped
+	return point
+
+func update_facing(delta: float, desired: Vector2) -> void:
+	if desired.length_squared() < 0.0001:
+		return
+	var target_angle := desired.angle()
+	var new_angle := rotate_toward(facing_direction.angle(), target_angle, turn_speed * delta)
+	facing_direction = Vector2.RIGHT.rotated(new_angle)
+
+const LOS_PEEK_RADIUS := 24.0
+const LOS_PEEK_OFFSETS: Array[Vector2] = [
+	Vector2.ZERO,
+	Vector2(LOS_PEEK_RADIUS, 0), Vector2(-LOS_PEEK_RADIUS, 0),
+	Vector2(0, LOS_PEEK_RADIUS), Vector2(0, -LOS_PEEK_RADIUS),
+]
+
+# --- Cloak stealth: a target player's replicated flags gate our perception ---
+# The target Hurtbox's parent is the player node, which carries the two
+# replicated stealth bits (see player.gd). "in" guards keep this safe for any
+# non-player hurtbox.
+func _target_silent(target: Hurtbox) -> bool:
+	var p = target.get_parent()
+	return p != null and "stealth_silent" in p and p.stealth_silent
+
+func _hidden_by_stillness(target: Hurtbox) -> bool:
+	var p = target.get_parent()
+	if p == null or not ("stealth_unseen_still" in p) or not p.stealth_unseen_still:
+		return false
+	# Only hidden while actually standing still (default true = assume moving, so
+	# we never wrongly hide a target whose movement we aren't tracking yet).
+	return not target_is_moving.get(target, true)
+
+func has_line_of_sight(target: Hurtbox) -> bool:
+	return get_visible_point(target) != null
+
+# LOS regardless of which way we're facing — used when a shot spins us around to
+# check for the shooter (getting hit makes us look everywhere, not just our cone).
+func has_line_of_sight_any_direction(target: Hurtbox) -> bool:
+	return get_visible_point(target, false) != null
+
+# Returns the world-space point we can actually see on target (so callers
+# can aim at what's really exposed instead of a possibly-blocked dead
+# center), or null if no part of them is both within our fov_degrees vision
+# cone and unobstructed.
+func get_visible_point(target: Hurtbox, check_fov := true) -> Variant:
+	# A zero-width ray (or even a few parallel rays) can still slip through
+	# the single-point diagonal gap where two wall tiles meet corner-to-
+	# corner. Sweeping an actual circle shape along the path has real width
+	# the whole way, so it can't pass through a gap smaller than its
+	# diameter — geometrically closes off the pinhole case entirely.
+	var space_state := get_world_2d().direct_space_state
+	var half_fov := deg_to_rad(fov_degrees * 0.5)
+	# Reuses the preallocated _los_query/_los_shape (mask + exclude set once in
+	# _ready) instead of building new ones each of the up-to-5 peek casts.
+	_los_query.transform = Transform2D(0.0, global_position)
+	# Check center-to-center first, then a few points around the target's
+	# body (peek offsets) rather than just its dead center — someone peeking
+	# out from behind a corner has their center still hidden but an edge of
+	# them already exposed, and that should count as spotted just like it
+	# would for a person actually looking.
+	for offset in LOS_PEEK_OFFSETS:
+		var point := target.global_position + offset
+		var to_point := point - global_position
+		if check_fov and to_point.length_squared() > 0.0001 and absf(facing_direction.angle_to(to_point)) > half_fov:
+			continue
+		# Ray from our center: catches any wall between us and the point,
+		# including one the swept circle would ignore for overlapping it at the
+		# origin (see _los_ray). A hit means blocked.
+		_los_ray.from = global_position
+		_los_ray.to = point
+		if not space_state.intersect_ray(_los_ray).is_empty():
+			continue
+		# Swept circle: real width the whole way, so it can't thread the
+		# single-point diagonal gap where two wall tiles meet corner-to-corner.
+		_los_query.motion = to_point
+		var result := space_state.cast_motion(_los_query)
+		if result.is_empty() or result[0] >= 1.0:
+			return point
+	return null
+
+# Updates one target's "moved since last frame" flag + smoothed velocity (for
+# shot leading). Smoothing rides out single-frame jitter.
+func _track_target_motion(h: Hurtbox, pdelta: float) -> void:
+	var last: Vector2 = last_target_positions.get(h, h.global_position)
+	target_is_moving[h] = h.global_position.distance_to(last) >= MOVEMENT_THRESHOLD
+	var inst_vel: Vector2 = (h.global_position - last) / pdelta
+	target_velocities[h] = target_velocities.get(h, Vector2.ZERO).lerp(inst_vel, VELOCITY_SMOOTHING)
+	last_target_positions[h] = h.global_position
+
+func update_current_target() -> void:
+	targets_in_range = targets_in_range.filter(func(h): return is_instance_valid(h))
+	# Track "moved since last physics frame" for every target in range,
+	# every frame, regardless of whether we end up needing it below — doing
+	# this unconditionally (rather than only inside the filter lambda) keeps
+	# it measuring "since last frame" instead of "since we last happened to
+	# check", which would misreport a player who just walked up and stopped
+	# as still moving.
+	var pdelta := get_physics_process_delta_time()
+	for h in targets_in_range:
+		_track_target_motion(h, pdelta)
+	# We can now stay locked on a target via LOS well beyond the detection ring
+	# (see the sticky-sight comment below), so keep tracking our current target's
+	# motion even once it's left that ring — otherwise its shot-leading velocity
+	# would go stale the moment it stepped outside our vision radius.
+	if current_target != null and is_instance_valid(current_target) and not targets_in_range.has(current_target):
+		_track_target_motion(current_target, pdelta)
+	# Leaving detection_area's radius must NOT clear current_target — that's
+	# exactly the "walked around a corner" case we want to keep chasing the
+	# last known position through. Only drop it here if the hurtbox itself
+	# is gone; actually losing an active chase is the give-up logic's job
+	# (arriving at last_known_position without re-spotting them).
+	if current_target and !is_instance_valid(current_target):
+		current_target = null
+	# A downed player reads as invincible on every peer (player.gd sets
+	# hurtbox.is_invincible while prone/dead — and the server's copy gets it via
+	# the replicated "prone" anim proxy), so treat them as effectively dead:
+	# drop them as a target and don't re-acquire them below. They stop being
+	# shot at until they're revived.
+	if current_target and current_target.is_invincible:
+		current_target = null
+		reset_casting()
+	# Acquiring a NEW target requires either line of sight or being within
+	# earshot AND actually moving (a perfectly still player makes no noise
+	# to hear) — sight alone would mean no detecting through walls just by
+	# proximity, but close enough to hear a moving target bypasses that
+	# entirely. Once engaged, losing both mid-chase doesn't drop the target
+	# immediately either (see the give-up logic in _physics_process), so the
+	# enemy can still pursue your last known position instead of forgetting
+	# you the instant you turn a corner.
+	if current_target == null and !targets_in_range.is_empty():
+		var detectable: Array = targets_in_range.filter(func(h):
+			# Downed/dead players (invincible hurtbox) are never acquired.
+			if h.is_invincible:
+				return false
+			if h == recently_lost_target and lost_target_cooldown > 0.0:
+				return false
+			# cloak_silent skips the hearing branch entirely (fall through to
+			# sight); cloak_unseen_still blocks sight while the target is still.
+			if global_position.distance_to(h.global_position) <= hearing_radius and not _target_silent(h):
+				return target_is_moving.get(h, false)
+			return has_line_of_sight(h) and not _hidden_by_stillness(h)
+		)
+		if !detectable.is_empty():
+			current_target = _closest_target(detectable)
+			alert_nearby_group(current_target, current_target.global_position)
+
+func _closest_target(hurtboxes: Array) -> Hurtbox:
+	var closest: Hurtbox = null
+	var closest_dist := INF
+	for h in hurtboxes:
+		var dist := global_position.distance_to(h.global_position)
+		if dist < closest_dist:
+			closest_dist = dist
+			closest = h
+	return closest
+
+func reset_casting() -> void:
+	spell_input_sequence.clear()
+	target_recipe_sequence.clear()
+	tap_timer = 0.0
+	_advance_range = 0.0
+	_planned_form = ""
+	_planned_recipe = {}
+
+func update_casting(delta: float, distance: float) -> void:
+	# Mid-sequence: keep tapping it out.
+	if !target_recipe_sequence.is_empty():
+		tap_timer -= delta
+		if tap_timer <= 0.0:
+			enter_next_tap()
+		return
+	if cast_timer > 0.0:
+		return
+	# Decide the next cast first (so we know its reach).
+	if _planned_form == "":
+		_plan_next_cast()
+	if distance <= _advance_range:
+		# In range for the planned cast — fire it (or start warming up a sequence).
+		_execute_planned_cast()
+	elif _planned_form != "default" and distance <= _default_range:
+		# Still closing in for a shorter-range sequence but the target is within
+		# plain-default reach — keep peppering them with default attacks so we're
+		# not just eating shots during the approach. Doesn't consume the planned
+		# sequence; it fires once we've closed the rest of the gap.
+		cast_default()
+
+# Choose what to cast next (a run of default attacks between sequences) and record
+# how close we need to be for it to land, WITHOUT firing yet.
+func _plan_next_cast() -> void:
+	# Only the forms this enemy's weapon actually holds — so its repertoire matches
+	# the weapon that drops.
+	var recipes: Array = all_spell_recipes.get_available_recipes(attacker_element, attacker_forms)
+	if recipes.is_empty() or _default_shots_remaining > 0:
+		_planned_form = "default"
+		_planned_recipe = {}
+	else:
+		_planned_recipe = recipes.pick_random()
+		_planned_form = _planned_recipe.get("form", "default")
+	_advance_range = SpellData.get_effective_range(attacker_weapon, attacker_element, _planned_form, true) * ENGAGE_MARGIN
+
+func _execute_planned_cast() -> void:
+	if _planned_recipe.is_empty():
+		_default_shots_remaining = max(_default_shots_remaining - 1, 0)
+		cast_default()
+	else:
+		_default_shots_remaining = randi_range(MIN_DEFAULTS_BETWEEN_SEQUENCES, MAX_DEFAULTS_BETWEEN_SEQUENCES)
+		target_recipe_sequence = _planned_recipe["sequence"].duplicate()
+		tap_timer = tap_interval
+	_planned_form = ""
+	_planned_recipe = {}
+
+func enter_next_tap() -> void:
+	var next_index := spell_input_sequence.size()
+	if next_index >= target_recipe_sequence.size():
+		reset_casting()
+		return
+	spell_input_sequence.append(target_recipe_sequence[next_index])
+	tap_timer = tap_interval
+	if spell_input_sequence.size() >= target_recipe_sequence.size():
+		cast_sequence()
+
+func cast_sequence() -> void:
+	var recipe := all_spell_recipes.get_spell_recipe_from_sequence(spell_input_sequence)
+	if recipe.is_empty():
+		cast_default()
+	else:
+		fire_spell(attacker_weapon, recipe["element"], recipe["form"])
+	reset_casting()
+
+func cast_default() -> void:
+	fire_spell(attacker_weapon, attacker_element, "default")
+
+func fire_spell(weapon: String, element: String, form: String) -> void:
+	if current_target == null:
+		return
+	var spell_data := all_spell_data.build_spell_data(weapon, element, form, "common", true)
+	# Aim at the actual point of them we can see (may be an edge peeking past a
+	# corner) rather than their dead center, which could still be behind cover.
+	var aim_point := current_visible_point
+	var direction: Vector2
+	var spawn_dist := -1.0
+	if spell_data.get("targeted", false):
+		# Targeted forms (rain) land ON the target's spot, clamped to the form's
+		# range — no lead or spread, it's a placed cast. rain_projectile.gd then
+		# LOS-clamps it to a wall if one's in the way.
+		var to_target := aim_point - global_position
+		spawn_dist = minf(to_target.length(), spell_data["spawn_offset"])
+		direction = to_target.normalized()
+	else:
+		# Predictive leading: shift the aim to where the target will be by the time
+		# a moving shot reaches it (time ≈ distance / projectile speed). Cheap
+		# first-order lead. Skipped for the speed-0 AoE forms (they don't travel).
+		var proj_speed: float = spell_data["speed"]
+		if proj_speed > 0.0:
+			var lead_time := global_position.distance_to(aim_point) / proj_speed
+			aim_point += target_velocities.get(current_target, Vector2.ZERO) * lead_time
+		# Small random spread so a burst of shots fans out slightly instead of
+		# stacking into one dodgeable line.
+		direction = global_position.direction_to(aim_point).rotated(randf_range(-AIM_VARIANCE, AIM_VARIANCE))
+	# Rolled once here (only ever runs on this enemy's own authoritative
+	# peer) and sent as a plain bool below — every peer must apply the same
+	# crit result, so it can't be re-rolled independently inside
+	# spawn_projectile(), which runs once per peer as the RPC lands.
+	var is_crit := SpellData.roll_crit(weapon)
+	_broadcast_spawn_projectile(weapon, element, form, direction, is_crit, spawn_dist)
+	# Per-form cooldown, but halved for enemies (ENEMY_COOLDOWN_MULT is baked into
+	# spell_data via the is_enemy flag above) so they fire about twice as fast as
+	# a player with the same weapon/form — paired with their slower projectiles.
+	cast_timer = spell_data["attack_cooldown"]
+
+# --- Room-scoped RPC dispatch --------------------------------------------
+# Every peer that has this enemy's room loaded simulates its own copy of the
+# enemy, so its RPCs must go ONLY to those peers. A blanket .rpc() also hits peers
+# in other rooms who've already freed this enemy: each logs a "get_cached_object
+# ... node is null" error, and — for the frequent, reliable projectile spawns —
+# the extra traffic floods the reliable channel enough to stall real messages
+# (players' own spell spawns arriving seconds late). Scope them exactly like
+# exit_portal / loot_container. Only ever called on the server (enemy AI + hurt
+# handling are authority-only).
+func _my_room_key() -> String:
+	var world = get_tree().get_first_node_in_group("world")
+	if world == null or world.world_rooms == null:
+		return ""
+	for key in world.world_rooms.loaded_rooms:
+		var scene = world.world_rooms.loaded_rooms[key].get("scene")
+		if scene != null and is_instance_valid(scene) and scene.is_ancestor_of(self):
+			return key
+	return ""
+
+# Server id + every peer currently in this enemy's room, or [] if the room can't
+# be resolved (callers then fall back to a plain broadcast).
+func _room_rpc_targets() -> Array:
+	var world = get_tree().get_first_node_in_group("world")
+	var room_key := _my_room_key()
+	if world == null or room_key == "":
+		return []
+	var ids := {multiplayer.get_unique_id(): true}
+	for pid in world.peers_in_room(room_key):
+		ids[pid] = true
+	return ids.keys()
+
+func _broadcast_spawn_projectile(weapon: String, element: String, form: String, direction: Vector2, is_crit: bool, spawn_dist: float) -> void:
+	var targets := _room_rpc_targets()
+	if targets.is_empty():
+		spawn_projectile.rpc(weapon, element, form, direction, is_crit, spawn_dist)
+		return
+	var server_id := multiplayer.get_unique_id()
+	for pid in targets:
+		if pid == server_id:
+			spawn_projectile(weapon, element, form, direction, is_crit, spawn_dist)
+		else:
+			spawn_projectile.rpc_id(pid, weapon, element, form, direction, is_crit, spawn_dist)
+
+@rpc("authority", "call_local", "reliable")
+func spawn_projectile(weapon: String, element: String, form: String, direction: Vector2, is_crit: bool = false, spawn_dist: float = -1.0) -> void:
+	var spell_data := all_spell_data.build_spell_data(weapon, element, form, "common", true)
+	# Dot forms roll crit per-tick, so leave their base damage un-crit here.
+	if is_crit and not spell_data.get("dot", false):
+		spell_data["damage"] *= SpellData.CRIT_MULTIPLIER
+	var projectile = spell_data["scene"].instantiate()
+	get_tree().current_scene.add_child(projectile)
+	# spawn_dist is set for targeted forms (rain lands on the player, clamped to
+	# range); otherwise fall back to the form's fixed spawn_offset.
+	var dist: float = spawn_dist if spawn_dist >= 0.0 else spell_data["spawn_offset"]
+	projectile.global_position = global_position + direction * dist
+	projectile.setup_spell(direction, spell_data, name.hash(), is_crit)
+
+func _on_detection_area_entered(area: Area2D) -> void:
+	if area is Hurtbox:
+		targets_in_range.append(area)
+
+func _on_detection_area_exited(area: Area2D) -> void:
+	if area is Hurtbox:
+		targets_in_range.erase(area)
+
+func _on_hurtbox_hurt(hitbox, damage) -> void:
+	# Authoritative damage number: only the enemy's authority (the server, which
+	# has this enemy's real attacker_weapon/element) computes it, then broadcasts
+	# so every peer shows the same value instead of recomputing from data clients
+	# may not have.
+	if !is_multiplayer_authority():
+		return
+	var final_damage: float = damage
+	if hitbox != null and "attacker_weapon" in hitbox and "attacker_element" in hitbox:
+		var multiplier := SpellData.get_damage_multiplier(
+			hitbox.attacker_weapon,
+			hitbox.attacker_element,
+			attacker_weapon,
+			attacker_element
+		)
+		final_damage = damage * multiplier
+	_emit_damage_number(final_damage, hitbox != null and hitbox.is_crit)
+	# Getting hit is an instant, unmissable cue of where the attack came
+	# from — snap facing straight there instead of easing over with
+	# turn_speed like normal tracking does.
+	if hitbox != null and is_instance_valid(hitbox):
+		var to_attacker = hitbox.global_position - global_position
+		if to_attacker.length_squared() > 0.0001:
+			facing_direction = to_attacker.normalized()
+			# Only react to acquire if we're not already tracking someone — a hit
+			# that lands while we're engaged doesn't need this. With no target,
+			# first do a radius-ignoring LOS scan for the shooter: if we can
+			# actually see a player (open ground, even well past our vision ring),
+			# lock straight onto them; otherwise fall back to just investigating
+			# the shot like before.
+			if current_target == null:
+				var shooter := _spot_shooter_any_range()
+				if shooter != null:
+					current_target = shooter
+					last_known_position = shooter.global_position
+				else:
+					start_investigating(facing_direction)
+			# Getting attacked alerts nearby groupmates too — use our actual
+			# current_target's live position if we have one (more accurate
+			# than the hit itself), otherwise just the point we were hit
+			# from, same as what we just used to start our own investigation.
+			var alert_point = current_target.global_position if current_target != null else hitbox.global_position
+			alert_nearby_group(current_target, alert_point)
+	take_damage(final_damage)
+
+# Room-scoped like the projectile spawn above (same "don't spam other rooms'
+# peers with node-null errors" reasoning) — the damage number only matters to
+# peers who actually have this enemy.
+func _emit_damage_number(amount: float, is_crit: bool) -> void:
+	var targets := _room_rpc_targets()
+	if targets.is_empty():
+		_broadcast_damage_number.rpc(amount, is_crit)
+		return
+	var server_id := multiplayer.get_unique_id()
+	for pid in targets:
+		if pid == server_id:
+			_broadcast_damage_number(amount, is_crit)
+		else:
+			_broadcast_damage_number.rpc_id(pid, amount, is_crit)
+
+# Shows the authoritative damage number on every peer (call_local so the server
+# shows it too) — the single place an enemy's damage number is spawned now.
+@rpc("authority", "call_local", "unreliable")
+func _broadcast_damage_number(amount: float, is_crit: bool) -> void:
+	_spawn_damage_number(amount, Color(1, 0.9, 0.3), is_crit)
+
+func take_damage(amount: float) -> void:
+	if is_dead:
+		return
+	health = clamp(health - amount, 0.0, max_health)
+	if health <= 0.0:
+		die()
+
+func die() -> void:
+	# Rolled/broadcast here rather than in the is_dead setter below (despite
+	# the TODO comment sitting right there) — that setter body runs once
+	# server-side directly and once more per client every time replication
+	# applies the incoming synced value, so rolling loot there would have
+	# every client uselessly (and separately) roll RNG too. die() is only
+	# ever reachable server-side (take_damage() <- _on_hurtbox_hurt(), which
+	# early-returns for non-authority), so this is the one place it actually
+	# only runs once.
+	var world = get_tree().get_first_node_in_group("world")
+	if world:
+		# Rarity-weighted rolls from this enemy type's pool. If the pool's "@weapon"
+		# slot is rolled, the drop is this enemy's actual weapon — its live
+		# element/forms are passed so world_loot.gd stamps them onto the dropped
+		# Weapon (which otherwise defaults every type to "fire" and no forms).
+		var weapon_override := {
+			"type": attacker_weapon,
+			"element": attacker_element,
+			"forms": attacker_forms.duplicate(),
+		}
+		world.spawn_pool_loot(global_position, loot_pool, loot_rolls_min, loot_rolls_max, weapon_override)
+	is_dead = true

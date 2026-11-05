@@ -37,7 +37,7 @@ func _clamp_to_wall() -> void:
 	if not hit.is_empty():
 		# Sit just short of the wall rather than embedded in it.
 		var toward: Vector2 = (global_position - origin).normalized()
-		global_position = hit["position"] - toward * 16.0
+		global_position = hit["position"] - toward * 64.0
 
 func _physics_process(delta: float) -> void:
 	super._physics_process(delta)
@@ -53,10 +53,8 @@ func _apply_tick() -> void:
 	for area in hitbox.get_overlapping_areas():
 		if not area is Hurtbox:
 			continue
-		if hitbox.caster_id != 0 and area.owner_id == hitbox.caster_id:
+		if not hitbox.can_hit(area):
 			continue
-		var dmg := tick_base
-		hitbox.is_crit = randf() * 100.0 < spell_data.get("crit_chance", 0.0)
-		if hitbox.is_crit:
-			dmg *= spell_data.get("crit_multiplier", 1.0)
-		area.take_hit(hitbox, dmg)
+		# Crit is resolved per tick at the defender's _on_hurtbox_hurt (it reads the
+		# attacker crit stats off the hitbox), so just pass the base tick damage.
+		area.take_hit(hitbox, tick_base)

@@ -11,8 +11,8 @@ class_name BeamProjectile
 const TICK_INTERVAL := 0.2
 # Almost the screen's vertical half-height (~360), so a beam reaches near the top/
 # bottom edge but never off-screen.
-const MAX_LENGTH := 340.0
-const BEAM_WIDTH := 24.0
+const MAX_LENGTH := 1360.0
+const BEAM_WIDTH := 96.0
 # Walls (layer 1) + enemy bodies (layer 32) stop the beam.
 const CUTOFF_MASK := 1 | 32
 
@@ -85,10 +85,8 @@ func _apply_tick() -> void:
 	for area in hitbox.get_overlapping_areas():
 		if not area is Hurtbox:
 			continue
-		if hitbox.caster_id != 0 and area.owner_id == hitbox.caster_id:
+		if not hitbox.can_hit(area):
 			continue
-		var dmg := tick_base
-		hitbox.is_crit = randf() * 100.0 < spell_data.get("crit_chance", 0.0)
-		if hitbox.is_crit:
-			dmg *= spell_data.get("crit_multiplier", 1.0)
-		area.take_hit(hitbox, dmg)
+		# Crit is resolved per tick at the defender's _on_hurtbox_hurt (it reads the
+		# attacker crit stats off the hitbox), so just pass the base tick damage.
+		area.take_hit(hitbox, tick_base)

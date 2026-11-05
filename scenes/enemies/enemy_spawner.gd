@@ -15,9 +15,9 @@ extends Node2D
 const EnemyScene := preload("res://scenes/enemies/enemy.tscn")
 
 @export var spawn_chance := 0.5
-@export var min_group_size := 1
-@export var max_group_size := 5
-@export var group_spread := 192.0
+@export var min_group_size := 2
+@export var max_group_size := 3
+@export var group_spread := 768.0
 
 # Matches Enemy.BODY_RADIUS * 2 + a bit more than Enemy.min_enemy_separation
 # — a fixed constant here rather than reading those directly since the
@@ -25,8 +25,16 @@ const EnemyScene := preload("res://scenes/enemies/enemy.tscn")
 # even exists. Keeps siblings from being placed close enough to spawn
 # already overlapping, which made compute_separation() and hard collision
 # fight each other into visibly glitching instead of calmly drifting apart.
-const MIN_SPAWN_DISTANCE := 96.0
+const MIN_SPAWN_DISTANCE := 384.0
 const SPAWN_PLACEMENT_ATTEMPTS := 10
+
+# Which enemy archetype a pack rolls (weighted), and the chance each enemy in it is an
+# Elite. Rolled off the spawn point's DETERMINISTIC rng so every peer agrees. The four
+# elemental shapes (see enemy.gd ARCHETYPES); a whole pack is a single shape.
+const ARCHETYPE_WEIGHTS := {"pentagon": 30, "triangle": 30, "circle": 25, "square": 15}
+# Per-enemy tier: mostly bronze, a rare silver (the old "elite"). GOLD is never rolled
+# — it's auto-assigned to all enemies inside future locked areas, which don't exist yet.
+const SILVER_CHANCE := 0.15
 
 # Set by world_rooms.gd right after instantiating this room's scene, before
 # it's added to the tree (so it's already set by the time _ready() runs).
@@ -86,10 +94,40 @@ func _wait_one_physics_frame() -> bool:
 	await get_tree().physics_frame
 	return is_inside_tree()
 
+# One weighted archetype pick for the whole pack (deterministic).
+func _pick_archetype(rng: RandomNumberGenerator) -> String:
+	var total := 0
+	for w in ARCHETYPE_WEIGHTS.values():
+		total += w
+	var roll := rng.randi_range(1, total)
+	var cum := 0
+	for a in ARCHETYPE_WEIGHTS:
+		cum += ARCHETYPE_WEIGHTS[a]
+		if roll <= cum:
+			return a
+	return "pentagon"
+
+# Per-archetype pack size [min, max] (inclusive), rolled off the deterministic rng.
+# Falls back to the min/max_group_size exports for any archetype not listed.
+const GROUP_SIZES := {
+	"pentagon": [2, 2],
+	"triangle": [2, 3],
+	"circle": [3, 4],
+	"square": [1, 2],
+}
+func _group_size_for(group_archetype: String, rng: RandomNumberGenerator) -> int:
+	var bounds: Array = GROUP_SIZES.get(group_archetype, [min_group_size, max_group_size])
+	return rng.randi_range(bounds[0], bounds[1])
+
 func spawn_group(
 	point: Marker2D, rng: RandomNumberGenerator, map_rid: RID, saved_state: Dictionary
 ) -> void:
-	var group_size := rng.randi_range(min_group_size, max_group_size)
+	# Pack archetype first (it decides the pack size), both off the deterministic rng.
+	var group_archetype := _pick_archetype(rng)
+	var group_size := _group_size_for(group_archetype, rng)
+	# 1-2 shared element types for the whole pack (seeded, so every peer agrees) —
+	# each member rolls its own element from just these (see Enemy._ready).
+	var group_element_palette := Enemy.pick_group_elements(rng)
 	# Shared by reference across every member of this group — see
 	# Enemy.group / Enemy.promote_new_leader() / Enemy.alert_nearby_group().
 	var members: Array[Enemy] = []
@@ -106,6 +144,11 @@ func spawn_group(
 		# this spawner itself is already in the tree.
 		enemy.position = to_local(safe_pos)
 		enemy.group = members
+		enemy.group_elements = group_element_palette
+		# Whole pack shares the archetype; tier (Silver) is per-enemy — a tougher one
+		# mixed in. Set BEFORE add_child so the enemy's _ready applies the preset.
+		enemy.archetype = group_archetype
+		enemy.tier = "silver" if rng.randf() < SILVER_CHANCE else "bronze"
 		if i == 0:
 			leader = enemy
 		else:

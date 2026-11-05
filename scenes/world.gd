@@ -10,6 +10,10 @@ const ZONE_SCENES = {
 	"hub/room_1" : "res://scenes/levels/hub/hub_room_1.tscn",
 	"hub/room_2" : "res://scenes/levels/hub/hub_room_2.tscn",
 	
+	"village/main" : "res://scenes/levels/village/village_main.tscn",
+	"village/room_1" : "res://scenes/levels/dungeon/dungeon_room_1.tscn",
+	"village/room_2" : "res://scenes/levels/dungeon/dungeon_room_2.tscn",
+	
 	"dungeon/main" : "res://scenes/levels/dungeon/dungeon_main.tscn",
 	"dungeon/room_1" : "res://scenes/levels/dungeon/dungeon_room_1.tscn",
 	"dungeon/room_2" : "res://scenes/levels/dungeon/dungeon_room_2.tscn",
@@ -18,6 +22,16 @@ const ZONE_SCENES = {
 }
 
 const EXPEDITION_TARGETS = {
+	"village": {
+		"zone": "village",
+		"room": "main",
+		# dungeon_main.tscn's doors/portals group picks one of its exit
+		# portals at random as the arrival point (see world_rooms.gd's
+		# get_spawn_global_position() and portal_group.gd) — cemetery_main
+		# doesn't have a doors/portals group yet, so it still just uses its
+		# single fixed "default" spawn_points marker.
+		"spawn": "random_portal",
+	},
 	"dungeon": {
 		"zone": "dungeon",
 		"room": "main",
@@ -132,6 +146,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	var local_player = get_local_player()
 	if local_player != null and local_player.close_inventory_if_open():
+		return
+	# Esc also backs out of the map overlay before it opens the esc menu.
+	if local_player != null and local_player.close_map_if_open():
 		return
 	esc_menu.toggle()
 
@@ -411,6 +428,16 @@ func client_change_location(zone: String, room: String, spawn_point:= "default")
 		# real (possibly loot-enriched) backpack back to disk.
 		Stats.save_data["items"] = {}
 		Stats.save_data["equipment"] = {}
+		# Weapons are part of the death penalty too now (you drop BOTH weapon slots
+		# on death — see player.gd's _drop_death_bag_and_reset_gear), so this
+		# optimistic snapshot wipe has to clear them as well. Without it, an
+		# ungraceful stop mid-run (window close / crash / alt+F4 / power loss)
+		# reloads with your equipped weapon still in hand while every other item is
+		# gone — "lost all my items but kept my weapon". Live weapon_slots are
+		# untouched, same as items/equipment above: you keep using it this session,
+		# only the persisted snapshot loses it.
+		Stats.save_data["weapons"] = []
+		Stats.save_data["active_slot"] = 0
 		SaveAndLoad.save_all()
 	if arriving_in_hub:
 		var local_player = get_local_player()
@@ -644,7 +671,7 @@ func client_apply_player_cosmetics(peer_id: int, cosmetics: Dictionary) -> void:
 	if player_name.strip_edges() == "":
 		player_name = "Player %s" % peer_id
 	player.get_node("name_label").modulate = color
-	player.get_node("visual_root").modulate = color
+	#player.get_node("visual_root").modulate = color
 	var label = player.get_node("name_label")
 	if label:
 		label.text = player_name
@@ -716,6 +743,8 @@ func broadcast_expedition_seed(seed_value: int):
 	# A new expedition is a new instance — clear out where enemies were
 	# left in every room from the last one so this one starts fresh.
 	Stats.expedition_room_state = {}
+	# Looted containers refill for a fresh expedition too.
+	Stats.expedition_looted_containers = {}
 
 func launch_expedition(expedition_id: String):
 	world_expeditions.launch_expedition(expedition_id)
@@ -727,11 +756,28 @@ func get_local_player() -> Node:
 	var my_id := multiplayer.get_unique_id()
 	return players.get_node(str(my_id)) if players.has_node(str(my_id)) else null
 
-func spawn_pool_loot(position: Vector2, pool_id: String, rolls_min: int, rolls_max: int, weapon_override: Dictionary) -> void:
-	world_loot.roll_pool_loot(position, pool_id, rolls_min, rolls_max, weapon_override)
+func spawn_pool_loot(world_pos: Vector2, pool_id: String, rolls_min: int, rolls_max: int, weapon_override: Dictionary) -> void:
+	world_loot.roll_pool_loot(world_pos, pool_id, rolls_min, rolls_max, weapon_override)
+
+# Generic per-entry loot-table drop (enemies + new-format containers). Caller passes
+# the resolved table (ItemData.get_loot_table(type, tier)) + a context resolving the
+# @weapon/@crystal/@gear/@dust tokens. See world_loot.roll_loot_table.
+func spawn_loot(world_pos: Vector2, table: Array, context: Dictionary = {}, open_for_peer: int = 0) -> void:
+	world_loot.roll_loot_table(world_pos, table, context, open_for_peer)
+
+func spawn_container_loot(world_pos: Vector2, container_type: String, context: Dictionary = {}) -> void:
+	world_loot.roll_container_loot(world_pos, container_type, context)
+
+# Fishing (see fishing_spot.gd): roll one pending catch (server), and — once the
+# player lands the reel minigame — spawn that specific catch as a ground pile.
+func roll_fishing_catch(spot_type: String) -> Dictionary:
+	return world_loot.roll_fishing_catch(spot_type)
+
+func spawn_fished_item(world_pos: Vector2, item_type: String, qty: int) -> void:
+	world_loot.spawn_single_item(world_pos, item_type, qty)
 
 @rpc("authority", "call_local", "reliable")
-func broadcast_loot_pickup_spawned(pickup_id: String, position: Vector2, inventory_dict: Dictionary) -> void:
+func broadcast_loot_pickup_spawned(pickup_id: String, world_pos: Vector2, inventory_dict: Dictionary, open_for_peer: int = 0) -> void:
 	# This whole call chain originates from an Area2D's area_entered signal
 	# (hitbox -> hurtbox -> take_damage -> die() -> here), which fires while
 	# the physics server is still mid-flush of this frame's collision
@@ -739,17 +785,21 @@ func broadcast_loot_pickup_spawned(pickup_id: String, position: Vector2, invento
 	# to register its shapes with the physics server immediately and hits
 	# "Can't change this state while flushing queries". Deferring the actual
 	# spawn to the next idle frame sidesteps that entirely.
-	_spawn_loot_pickup_deferred.call_deferred(pickup_id, position, inventory_dict)
+	_spawn_loot_pickup_deferred.call_deferred(pickup_id, world_pos, inventory_dict, open_for_peer)
 
-func _spawn_loot_pickup_deferred(pickup_id: String, position: Vector2, inventory_dict: Dictionary) -> void:
+func _spawn_loot_pickup_deferred(pickup_id: String, world_pos: Vector2, inventory_dict: Dictionary, open_for_peer: int = 0) -> void:
 	# (No hub gate: each location loads at its own world offset now, so an
 	# expedition death bag broadcast to a peer already in the hub spawns far
 	# off-screen at the expedition's coords rather than on top of them — while
 	# legitimate hub drops still spawn normally at hub coords.)
 	var pickup = preload("res://scenes/items/loot_pickup.tscn").instantiate()
 	zone_objects.add_child(pickup)
-	pickup.global_position = position
+	pickup.global_position = world_pos
 	pickup.setup(pickup_id, inventory_dict)
+	# A container open passes its opener's peer id so ONE interact both spawns and opens
+	# the loot — auto-open the panel here for that peer (0 = normal drop, no auto-open).
+	if open_for_peer != 0 and open_for_peer == multiplayer.get_unique_id():
+		pickup._open_panel()
 
 func request_claim_item(pickup_id: String, item_instance_id: String, destination: String = "inventory") -> void:
 	if multiplayer.multiplayer_peer == null:
@@ -781,19 +831,19 @@ func broadcast_item_claimed(pickup_id: String, item_instance_id: String, claimer
 	if claimer_id == multiplayer.get_unique_id() and players.has_node(str(claimer_id)):
 		players.get_node(str(claimer_id)).receive_claimed_item(item_dict, destination)
 
-func request_drop_item(position: Vector2, item_dict: Dictionary) -> void:
+func request_drop_item(world_pos: Vector2, item_dict: Dictionary) -> void:
 	if multiplayer.multiplayer_peer == null:
 		return
 	if multiplayer.is_server():
-		world_loot.drop_item(position, item_dict)
+		world_loot.drop_item(world_pos, item_dict)
 	else:
-		server_request_drop_item.rpc(position, item_dict)
+		server_request_drop_item.rpc(world_pos, item_dict)
 
 @rpc("any_peer", "call_remote", "reliable")
-func server_request_drop_item(position: Vector2, item_dict: Dictionary) -> void:
+func server_request_drop_item(world_pos: Vector2, item_dict: Dictionary) -> void:
 	if !multiplayer.is_server():
 		return
-	world_loot.drop_item(position, item_dict)
+	world_loot.drop_item(world_pos, item_dict)
 
 @rpc("authority", "call_local", "reliable")
 func broadcast_item_added(pickup_id: String, item_dict: Dictionary) -> void:
@@ -802,50 +852,25 @@ func broadcast_item_added(pickup_id: String, item_dict: Dictionary) -> void:
 			pickup.add_item_locally(item_dict)
 			break
 
-func request_drop_death_bag(position: Vector2, items: Array) -> void:
+func request_drop_death_bag(world_pos: Vector2, items: Array) -> void:
 	if multiplayer.multiplayer_peer == null:
 		return
 	if multiplayer.is_server():
-		world_loot.drop_death_bag(position, items)
+		world_loot.drop_death_bag(world_pos, items)
 	else:
-		server_request_drop_death_bag.rpc(position, items)
+		server_request_drop_death_bag.rpc(world_pos, items)
 
 @rpc("any_peer", "call_remote", "reliable")
-func server_request_drop_death_bag(position: Vector2, items: Array) -> void:
+func server_request_drop_death_bag(world_pos: Vector2, items: Array) -> void:
 	if !multiplayer.is_server():
 		return
-	world_loot.drop_death_bag(position, items)
+	world_loot.drop_death_bag(world_pos, items)
 
-@rpc("any_peer", "unreliable")
-func server_send_player_state(pos: Vector2, anim: String, rotation: float):
-	if !multiplayer.is_server():
-		return
-	var sender_id = multiplayer.get_remote_sender_id()
-	var server_id = multiplayer.get_unique_id()
-	for viewer_id in player_locations.keys():
-		if viewer_id == sender_id:
-			continue
-		if !can_players_see_each_other(viewer_id, sender_id):
-			continue
-		if viewer_id == server_id:
-			client_receive_player_state(sender_id, pos, anim, rotation)
-		else:
-			client_receive_player_state.rpc_id(
-				viewer_id,
-				sender_id,
-				pos,
-				anim,
-				rotation
-			)
-
-@rpc("authority", "unreliable")
-func client_receive_player_state(peer_id: int, pos: Vector2, anim: String, rotation: float):
-	if !players.has_node(str(peer_id)):
-		return
-	var player = players.get_node(str(peer_id))
-	player.global_position = pos
-	player.network_anim = anim
-	player.network_rotation = rotation
+# (Removed: server_send_player_state / client_receive_player_state.) Player
+# position/anim/rotation now replicate solely through each player's
+# MultiplayerSynchronizer (net_position + network_anim/rotation), with remote-side
+# snapshot interpolation in player.gd. The old per-frame relayed RPC ran alongside
+# the synchronizer and fought it (dual unbuffered writers) — the rubberband source.
 
 
 
@@ -904,7 +929,7 @@ func refresh_visibility_for_all():
 			client_refresh_players.rpc_id(viewer_id, known_ids, visible_ids, sync_ready_ids)
 
 @rpc("any_peer", "call_remote", "reliable")
-func server_request_spawn_spell(origin_position: Vector2, direction: Vector2, weapon: String, element: String, form: String, is_crit: bool = false, rarity: String = "common") -> void:
+func server_request_spawn_spell(origin_position: Vector2, direction: Vector2, weapon: String, element: String, form: String, attack: float = 0.0, crit_rate: float = 0.0, crit_damage: float = 0.0, rarity: String = "common") -> void:
 	if !multiplayer.is_server():
 		return
 	var caster_id := multiplayer.get_remote_sender_id()
@@ -912,20 +937,24 @@ func server_request_spawn_spell(origin_position: Vector2, direction: Vector2, we
 		caster_id = multiplayer.get_unique_id()
 	var server_id := multiplayer.get_unique_id()
 	for viewer_id in player_locations.keys():
+		# The caster already spawned its own shot locally (client-side prediction in
+		# player.gd cast_spell), so never echo it back — that would double it.
+		if viewer_id == caster_id:
+			continue
 		var can_see: bool = can_players_see_each_other(viewer_id, caster_id)
 		if viewer_id == server_id:
 			# Also spawn on the server when it's simulating the caster's room but
 			# its own player isn't there (host in hub) — otherwise the caster's
 			# spell never exists on the authority and its enemies take no damage.
 			if can_see or server_has_players_room_loaded(caster_id):
-				client_spawn_spell(caster_id, origin_position, direction, weapon, element, form, is_crit, rarity)
+				client_spawn_spell(caster_id, origin_position, direction, weapon, element, form, attack, crit_rate, crit_damage, rarity)
 		elif can_see:
-			client_spawn_spell.rpc_id(viewer_id, caster_id, origin_position, direction, weapon, element, form, is_crit, rarity)
+			client_spawn_spell.rpc_id(viewer_id, caster_id, origin_position, direction, weapon, element, form, attack, crit_rate, crit_damage, rarity)
 
 @rpc("authority", "call_remote", "reliable")
-func client_spawn_spell(caster_id: int, origin_position: Vector2, direction: Vector2, weapon: String, element: String, form: String, is_crit: bool = false, rarity: String = "common") -> void:
+func client_spawn_spell(caster_id: int, origin_position: Vector2, direction: Vector2, weapon: String, element: String, form: String, attack: float = 0.0, crit_rate: float = 0.0, crit_damage: float = 0.0, rarity: String = "common") -> void:
 	if !players.has_node(str(caster_id)):
 		return
 	var caster = players.get_node(str(caster_id))
 	if caster.has_method("spawn_spell_local"):
-		caster.spawn_spell_local(origin_position, direction, weapon, element, form, -1, is_crit, rarity)
+		caster.spawn_spell_local(origin_position, direction, weapon, element, form, -1, attack, crit_rate, crit_damage, rarity)

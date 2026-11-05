@@ -22,7 +22,7 @@ var player = null
 # Same durability/mana hover tooltip as inventory_grid.gd's weapon items,
 # reimplemented here since this is a Button (mouse_entered/exited), not a
 # custom-drawn grid — 2x the size of inventory_grid's own, per request.
-const HOVER_DELAY := 0.5
+const HOVER_DELAY := 0.05
 var tooltip: PanelContainer
 var tooltip_label: RichTextLabel
 var tooltip_style: StyleBoxFlat
@@ -41,6 +41,22 @@ func _ready() -> void:
 	add_child(tooltip)
 	mouse_entered.connect(_on_mouse_entered)
 	mouse_exited.connect(_on_mouse_exited)
+	# Click = held-item grab/equip (fires on a click, not a drag; hand<->holster
+	# swap stays a drag gesture).
+	pressed.connect(_on_slot_click)
+
+func _iui():
+	return player.inventory_ui if player != null else null
+
+func _on_slot_click() -> void:
+	var iui = _iui()
+	if iui == null:
+		return
+	if iui.is_holding():
+		if ItemData.get_equip_slot(iui.held_item.type) == "weapon":
+			iui.try_place_slot(role)
+	elif player.weapon_slots[_current_slot_index()] != null:
+		iui.grab_from_slot(role)
 
 func _on_mouse_entered() -> void:
 	is_hovering = true
@@ -81,6 +97,9 @@ func _current_slot_index() -> int:
 func _get_drag_data(_at_position: Vector2) -> Variant:
 	if player == null:
 		return null
+	var iui = _iui()
+	if iui != null and iui.is_holding():
+		return null  # no native drag while an item is held
 	tooltip.visible = false
 	hover_timer = 0.0
 	var preview := Label.new()

@@ -7,12 +7,12 @@ z_index = 200
 script = ExtResource("1_dmg")
 
 [node name="label" type="Label" parent="."]
-offset_left = -60.0
-offset_top = -20.0
-offset_right = 60.0
-offset_bottom = 40.0
-theme_override_font_sizes/font_size = 36
+offset_left = -240.0
+offset_top = -80.0
+offset_right = 240.0
+offset_bottom = 160.0
+theme_override_font_sizes/font_size = 144
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
-theme_override_constants/outline_size = 8
+theme_override_constants/outline_size = 32
 horizontal_alignment = 1

@@ -76,7 +76,15 @@ func remove_item_locally(item_instance_id: String) -> void:
 	_refresh_open_panel()
 	if inventory.placements.is_empty():
 		if panel_open:
-			_close_panel()
+			# Grabbing the LAST item empties the pile — close the WHOLE inventory
+			# screen (like Take All does), not just the loot panel, so the player's
+			# bag doesn't linger open over nothing. close_inventory_if_open() runs
+			# close_loot_panel() internally, so panel_open + the open ref get cleared.
+			panel_open = false
+			var world = get_tree().get_first_node_in_group("world")
+			var local_player = world.get_local_player() if world != null else null
+			if local_player != null:
+				local_player.close_inventory_if_open()
 		queue_free()
 
 # Called by world.gd's broadcast_item_added on every peer whenever a player

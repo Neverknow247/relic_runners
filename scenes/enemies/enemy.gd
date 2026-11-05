@@ -6,7 +6,8 @@ class_name Enemy
 # set_multiplayer_authority() here.
 
 const WEAPON_TYPES := ["tome", "orb", "wand"]
-const ELEMENT_TYPES := ["fire", "holy", "air"]
+# Enemies roll a random element from the full roster (single source: SpellData).
+const ELEMENT_TYPES := SpellData.ELEMENT_ORDER
 
 const WEAPON_LETTERS := {
 	"tome": "T",
@@ -22,10 +23,20 @@ const DamageNumberScene := preload("res://scenes/effects/damage_number.tscn")
 func _spawn_damage_number(amount: float, color: Color, is_crit: bool = false) -> void:
 	var num = DamageNumberScene.instantiate()
 	get_tree().current_scene.add_child(num)
-	num.global_position = global_position + Vector2(0, -32)
+	num.global_position = global_position + Vector2(0, -128)
 	num.setup(amount, color, is_crit)
 
-@export var max_health := 100.0
+@export var max_health := 1000.0
+
+# Combat stats (stats rework). Attack = the base damage of this enemy's casts;
+# Defense reduces incoming damage (Diablo-style DR); crit is 0 for now. Rolled
+# server-side in _ready. Not replicated — outgoing Attack/crit ride the spawn RPC,
+# and Defense is read locally on the server (the enemy is always the server-side
+# defender).
+var attack: float = 0.0
+var defense: float = 0.0
+var crit_rate: float = 0.0
+var crit_damage: float = 0.0
 
 # Loot: which pool (in ItemData.ENEMY_LOOT_POOLS) this enemy type draws from, and
 # how many rarity-weighted rolls a kill yields. Different enemy types will set a
@@ -33,6 +44,85 @@ func _spawn_damage_number(amount: float, color: Color, is_crit: bool = false) ->
 @export var loot_pool := "basic"
 @export var loot_rolls_min := 1
 @export var loot_rolls_max := 3
+
+# --- Archetype + tier (set by enemy_spawner BEFORE add_child, deterministically) ---
+# archetype = a behavior/stat preset (ARCHETYPES); tier = a normal/elite strength +
+# visual multiplier (TIERS). Applied in _ready via _apply_archetype() on EVERY peer —
+# the spawner's seeded pick is identical across the party, so no replication is needed.
+@export var archetype := "pentagon"
+@export var tier := "bronze"
+var attacks_per_sec_range: Array = [1.0, 1.0]
+# Burst-and-cooldown: fire burst_count shots at the attacks_per_sec cadence, then wait
+# a random burst_cooldown_range [min,max] seconds before the next burst. max 0 = fire forever.
+var burst_count := 1
+var burst_cooldown_range: Array = [0.0, 0.0]
+var _burst_shots := 0
+
+# Elemental enemies (2026-08-30): no gear / weapons / spell-casting — each SHAPE just
+# does its one signature basic attack, so it's predictable and easy to add more. The
+# archetype key == the body glyph drawn (see enemy_body.gd). Stats are ABSOLUTE, in the
+# units you tune in: `move_speed` (world u/s), `bullet_speed` (world u/s — keep these
+# ABOVE the player's 1200 move speed so shots can't be walked away from), and
+# `attacks_per_sec` as a [min, max] RANGE (volleys/sec — a pentagon/triangle "attack"
+# is its whole fan; rolled fresh each shot so the cadence isn't metronomic).
+# `pellets` shots fan EVENLY across `spread_deg`, unless `pellet_angles_deg` gives an
+# explicit per-pellet offset list (custom/asymmetric fan). `burst_count` + `burst_cooldown` ([min,max]) = fire
+# N shots at that cadence then pause a random C-range seconds. See fire_spell.
+const ARCHETYPES := {
+	"pentagon": {
+		# 5-pellet shotgun fan. Per-pellet damage low (50); the full point-blank
+		# volley (~250) punishes, grazes are light. Mid range, slow cadence.
+		"move_speed": 600.0, "strafe_speed": 420.0,
+		"preferred_range": 1100.0, "cast_range": 2560.0,
+		"max_health": 1000.0, "attack": 50.0, "attacks_per_sec": [0.55, 0.65],
+		"burst_count": 2, "burst_cooldown": [3.0, 4.0],
+		# Custom (asymmetric) fan: center + a TIGHT inner pair (±14°) + a WIDER outer
+		# pair (±30°) → 60° total. pellet_angles_deg overrides the even spread_deg fan;
+		# spread_deg (60) is left as documentation of the overall width.
+		"pellets": 5, "spread_deg": 60.0, "pellet_angles_deg": [-30.0, -14.0, 0.0, 14.0, 30.0],
+		"bullet_speed": 1250.0, "aim_variance_deg": 5.0,
+		"body_size": 64.0,
+	},
+	"triangle": {
+		# Fast, fragile 3-pellet spread; spawns in swarms (see enemy_spawner group
+		# size). Low per-pellet damage (15) = chip pressure.
+		"move_speed": 700.0, "strafe_speed": 480.0,
+		"preferred_range": 960.0, "cast_range": 2080.0,
+		"max_health": 330.0, "attack": 15.0, "attacks_per_sec": [0.65, 0.75],
+		"burst_count": 3, "burst_cooldown": [2.5, 3.0],
+		"pellets": 3, "spread_deg": 34.0, "bullet_speed": 1300.0, "aim_variance_deg": 1.0,
+		"body_size": 48.0,
+	},
+	"circle": {
+		# Rapid single-shot stream — many weak bullets one after another (high
+		# attacks_per_sec). Fast mover, mid range, medium bulk.
+		"move_speed": 900.0, "strafe_speed": 480.0,
+		"preferred_range": 1200.0, "cast_range": 2400.0,
+		"max_health": 650.0, "attack": 22.0, "attacks_per_sec": [2.0, 3.0],
+		"burst_count": 5, "burst_cooldown": [1.5, 2.0],
+		"pellets": 1, "spread_deg": 0.0, "bullet_speed": 1350.0, "aim_variance_deg": 7.5,
+		"body_size": 56.0,
+	},
+	"square": {
+		# Sniper — one powerful, FAST shot at a time from long range. High single-hit
+		# damage; slow cadence; telegraphed + dodgeable.
+		"move_speed": 500.0, "strafe_speed": 300.0,
+		"preferred_range": 1900.0, "cast_range": 2800.0,
+		"max_health": 800.0, "attack": 300.0, "attacks_per_sec": [0.5, 0.55],
+		"burst_count": 5, "burst_cooldown": [2.0, 2.5],
+		"pellets": 1, "spread_deg": 0.0, "bullet_speed": 4000.0, "aim_variance_deg": 0.0,
+		"body_size": 60.0,
+	},
+}
+# Elites are a beefier, gold-tinted, bigger version of any archetype with better loot.
+const TIERS := {
+	# bronze = baseline, silver = the "elite" (tougher + better loot), gold = locked-area
+	# only (not spawned yet — see enemy_spawner). Loot comes from LOOT_TABLES[archetype]
+	# [tier]; these just scale stats + tint the sprite so a tier reads at a glance.
+	"bronze": {"health_mult": 1.0, "attack_mult": 1.0, "scale": 1.0, "tint": Color(1, 1, 1)},
+	"silver": {"health_mult": 2.0, "attack_mult": 1.5, "scale": 1.25, "tint": Color(0.8, 0.85, 0.95)},
+	"gold": {"health_mult": 4.0, "attack_mult": 2.0, "scale": 1.5, "tint": Color(1.0, 0.85, 0.35)},
+}
 var health := max_health:
 	set(value):
 		health = value
@@ -64,26 +154,44 @@ func _defer_free() -> void:
 	if is_inside_tree():
 		queue_free()
 
-@export var move_speed := 240.0
+@export var move_speed := 680.0
 
 # While in range and firing, an enemy strafes sideways relative to the target
 # (flipping direction at random intervals) so it's a moving target that's harder
 # to line up a shot on — a light "try to avoid damage" behavior. Firing rate is
 # unaffected: it keeps casting every frame it can still see the target.
-@export var strafe_speed := 150.0
+@export var strafe_speed := 420.0
 const STRAFE_FLIP_MIN := 0.6
 const STRAFE_FLIP_MAX := 1.5
 var _strafe_sign := 1.0
 var _strafe_timer := 0.0
+# Per-enemy sideways chase bias (set in _ready) — see FLANK_OFFSET_MAX / _flank_chase_target.
+var _flank_offset := 0.0
 
 # Casting behavior: stays put and casts while the target is within
 # cast_range and in line of sight; otherwise closes the distance. Fire rate
 # is no longer a flat timer — it's set per-shot from the same
 # FORMS[form]["attack_cooldown"] the player uses, so the enemy can loose
 # spells exactly as often as a player with the same weapon/form could.
-@export var cast_range := 640.0
+@export var cast_range := 2560.0
+# EtG-style: the enemy HOLDS around this distance and shoots — it never closes to
+# melee. It only casts forms that can reach from here (short-range forms are skipped
+# in favor of ranged defaults; see _plan_next_cast). Pursue if farther than
+# preferred_range + RANGE_BUFFER, back off if closer than preferred_range - RANGE_BUFFER,
+# hold/strafe within that band.
+@export var preferred_range := 1600.0
+# ELEMENTAL enemies (2026-08-30): true = an enemy NEVER casts spells, it only does
+# its archetype's signature basic attack (pentagon fan / triangle spread / circle
+# stream / square snipe). Default true — for lore, enemies are elemental: no gear,
+# no weapons, no casting, just predictable attacks. Flip false to re-enable the
+# dormant weapon-form/sequence casting (see _plan_next_cast). Element colors the
+# shot + drives the crit matchup either way.
+@export var uniform_bullets := true
 @export var tap_interval := 0.35
 var cast_timer := 0.0
+# Whether we had a target last frame — lets us detect a FRESH acquisition (null ->
+# target) and stagger the first shot by a random 0..ENGAGE_DELAY_MAX.
+var _was_engaged := false
 var tap_timer := 0.0
 var spell_input_sequence: Array[int] = []
 var target_recipe_sequence: Array = []
@@ -109,12 +217,17 @@ const ENGAGE_MARGIN := 0.85
 # applying pressure, not just tanking damage during the approach.
 var _default_range := 0.0
 # Small ± random spread on every shot's aim, so a stream of shots isn't a single
-# dodge-one-dodge-them-all line.
-const AIM_VARIANCE := deg_to_rad(5.0)
+# dodge-one-dodge-them-all line — a wider cone gives the volley more variety.
+var aim_variance := deg_to_rad(5.0)  # random per-shot aim spread (radians); per-archetype, set from aim_variance_deg in _apply_archetype
 # Cheap first-order target leading: aim where the target will be by the time the
 # shot reaches it, from a smoothed estimate of its velocity (target_velocities).
 const VELOCITY_SMOOTHING := 0.25
 var target_velocities: Dictionary = {}
+# Bounds on that lead, so a FAST target (e.g. someone rushing us) can't shift the
+# aim so far it overshoots behind us and the shot flips to point the wrong way.
+# Cap the flight-time estimate, AND the final lead offset to a fraction of the gap.
+const MAX_LEAD_TIME := 0.6
+const MAX_LEAD_FRACTION := 0.7
 
 # Facing/vision cone: LOS is only granted within fov_degrees of the
 # direction the enemy is currently facing, and facing turns toward whatever
@@ -126,7 +239,7 @@ var target_velocities: Dictionary = {}
 var facing_direction := Vector2.DOWN
 var current_visible_point := Vector2.ZERO
 @onready var facing_indicator: Node2D = $visual_root/facing_indicator
-const FACING_INDICATOR_DISTANCE := 48.0
+const FACING_INDICATOR_DISTANCE := 192.0
 
 # This enemy's own weapon/element identity — used both when it casts spells
 # (as the attacker) and when a player's spell hits it (as the defender),
@@ -154,13 +267,55 @@ var attacker_forms: Array = []
 @onready var hurtbox: Hurtbox = $hurtbox
 @onready var detection_area: Area2D = $detection_area
 @onready var visual_root: Node2D = $visual_root
-@onready var color_rect: ColorRect = $visual_root/color_rect
-@onready var weapon_label: Label = $visual_root/weapon_label
+@onready var body: EnemyBody = $visual_root/body
 @onready var health_bar: ProgressBar = $visual_root/health_bar
 @onready var nav_agent: NavigationAgent2D = $nav_agent
 
 var targets_in_range: Array[Hurtbox] = []
 var current_target: Hurtbox = null
+
+# --- Aggro ---------------------------------------------------------------
+# Recent damage each player has dealt to this enemy (peer_id -> tally), decaying
+# over time. The top-aggro player becomes/steals the target so whoever deals the
+# most damage pulls the enemy onto themselves — see _apply_aggro_target(). Lives
+# server-side only (all damage/AI handling is authority-gated).
+var _aggro: Dictionary = {}
+const AGGRO_DECAY := 12.0          # tally points shed per second
+const AGGRO_MIN := 1.0             # ignore trivial tallies
+const AGGRO_SWITCH_RATIO := 1.5    # must out-aggro the current target by this to steal
+
+# EtG "approach then hold": pursue to preferred_range, then hold within a small
+# deadzone around it (±RANGE_BUFFER) rather than twitching in/out to sit on the exact
+# distance. Only re-close if we've drifted more than the buffer beyond it, only back
+# off if the target has crowded more than the buffer inside it.
+const RANGE_BUFFER := 80.0
+# Each enemy's hold distance is jittered ±this fraction of its archetype preferred_range
+# (rolled once in _apply_archetype) so a pack doesn't all freeze at the exact same ring.
+const PREFERRED_RANGE_VARIANCE := 0.15
+# Combat velocity is EASED toward its target each frame (units/sec^2) instead of snapped,
+# so pursue<->strafe flips and the separation/flank nudges read as smooth motion, not
+# the frame-to-frame jitter of instantly reassigning velocity.
+const COMBAT_ACCEL := 6000.0
+# When an enemy first spots the player it waits a random 0..this before its FIRST shot,
+# so a group that all acquires the target at once doesn't fire one synchronized volley
+# (and their burst cycles start out of phase). Re-rolled on each fresh acquisition.
+const ENGAGE_DELAY_MAX := 1.0
+# Move faster while OUTSIDE our hold range (catching up / closing the gap) so enemies
+# don't feel sluggish on the approach, then settle to normal speed once in range.
+const PURSUE_SPEED_MULT := 1.25
+# Flank-chase: while chasing a target we can't yet shoot, aim at a point offset to one
+# side of the direct line (per-enemy signed `_flank_offset`, so packmates take DIFFERENT
+# nav routes and approach from spread bearings instead of single-filing behind you), plus
+# a lead ahead of the target's motion (so a faster fleeing player gets cut off, not just
+# tailed). Only affects the out-of-shooting-range chase branch.
+const FLANK_OFFSET_MAX := 700.0   # max sideways offset (world units), signed per enemy
+const CHASE_LEAD_TIME := 0.6      # seconds of the target's velocity to aim ahead
+const CHASE_LEAD_MAX := 700.0     # cap on that lead so it never overshoots wildly
+# Flanking: packmates whose bearing to the target is within this angle of ours push
+# each other sideways (tangentially, around the target) so the group fans out and
+# shots arrive from a spread of angles instead of one cluster. Emergent + local (per
+# group), so it copes with any pack size and walls. Push magnitude is strafe_speed.
+const FLANK_SPREAD_ANGLE := deg_to_rad(50.0)
 
 # Only updated while we can actually see the target — this is where we
 # path to once LOS breaks, not their live position. If we arrive there
@@ -177,7 +332,7 @@ var last_stuck_check_position: Vector2 = Vector2.ZERO
 var stuck_check_timer := 0.0
 var is_easing_around_corner := false
 const STUCK_CHECK_INTERVAL := 0.2
-const STUCK_DISTANCE := 32.0
+const STUCK_DISTANCE := 128.0
 
 # Enemies now collide with each other (see enemy.tscn's collision_mask), so
 # hard collision alone would otherwise just shove them into each other's
@@ -185,9 +340,16 @@ const STUCK_DISTANCE := 32.0
 # anyone crowding closer than min_enemy_separation, blended continuously
 # into the movement velocity, keeps a little personal space without them
 # ever having to hard-stop against one another.
-@export var min_enemy_separation := 28.0
-const BODY_RADIUS := 28.0
-const SEPARATION_CHECK_RADIUS := 160.0
+@export var min_enemy_separation := 112.0
+# Matches the actual physics CircleShape2D_body radius (enemy.tscn) — it was 28
+# here while the body was really 10px, which over-spread groups (desired_min was
+# 84px) and disagreed with the navmesh clearance. Kept in sync now.
+const BODY_RADIUS := 48.0
+# Extra half-width added to BODY_RADIUS when deciding an ally is "in our firing lane"
+# (see _ally_in_firing_lane) — roughly the bullet's own half-width plus a little slack
+# so we hold fire a touch before a shot would actually graze them.
+const ENEMY_LANE_CLEARANCE := 40.0
+const SEPARATION_CHECK_RADIUS := 640.0
 const SEPARATION_RESPONSE := 6.0
 
 # --- Performance ----------------------------------------------------------
@@ -195,7 +357,7 @@ const SEPARATION_RESPONSE := 6.0
 # per-frame work at all (no LOS/separation physics queries, no pathing) until a
 # player comes near. SLEEP_RANGE is comfortably beyond the detection radius, so
 # an enemy always wakes well before it could ever need to notice anyone.
-const SLEEP_RANGE := 1200.0
+const SLEEP_RANGE := 4800.0
 var _world: Node = null
 # Separation runs a physics query; recompute it only every few frames and reuse
 # the cached push in between (positions barely change frame-to-frame).
@@ -208,6 +370,14 @@ var _sep_shape: CircleShape2D
 var _sep_query: PhysicsShapeQueryParameters2D
 var _los_shape: CircleShape2D
 var _los_query: PhysicsShapeQueryParameters2D
+# A plain ray alongside the swept circle. cast_motion IGNORES any wall the swept
+# circle already overlaps at its origin — so an enemy standing within the circle's
+# radius of a wall (extremely common) would see straight through that exact wall.
+# The ray's origin is the enemy's center, which is always in open space (the body
+# collides with walls, so it can't be inside one), so the ray never ignores the
+# blocking wall. Requiring BOTH clear keeps the circle's corner-pinhole guard
+# while closing that see-through-the-wall-you're-touching leak.
+var _los_ray: PhysicsRayQueryParameters2D
 
 # When we give up on a target (arrived at their last known position without
 # re-spotting them), that same target is ineligible for re-acquisition for a
@@ -226,10 +396,10 @@ const LOST_TARGET_COOLDOWN := 0.5
 # hearing-based ACQUISITION (not ongoing awareness of an already-known
 # target — see the separate can_hear check in _physics_process) additionally
 # requires them to have actually moved since last physics frame.
-@export var hearing_radius := 256.0
+@export var hearing_radius := 1024.0
 var last_target_positions: Dictionary = {}
 var target_is_moving: Dictionary = {}
-const MOVEMENT_THRESHOLD := 2.0
+const MOVEMENT_THRESHOLD := 8.0
 
 # Getting hit from outside our vision/hearing range (a shot from off-screen
 # or from behind, out of the cone) has no current_target to chase — but it
@@ -238,10 +408,10 @@ const MOVEMENT_THRESHOLD := 2.0
 # navigable turns up near that guess (e.g. it's inside/behind a wall), we
 # still walk toward the edge of our own vision range in that direction
 # instead of just standing there.
-@export var investigate_distance := 560.0
-@export var investigate_jitter := 160.0
+@export var investigate_distance := 2240.0
+@export var investigate_jitter := 640.0
 const INVESTIGATE_ATTEMPTS := 8
-const MIN_INVESTIGATE_DISTANCE := 96.0
+const MIN_INVESTIGATE_DISTANCE := 384.0
 var is_investigating := false
 var investigate_target := Vector2.ZERO
 
@@ -253,14 +423,19 @@ var investigate_target := Vector2.ZERO
 # drift to a new area over time instead of being tied to its original spot
 # forever.
 enum IdleState { WANDER, SEARCH }
-@export var wander_radius := 960.0
-@export var wander_radius_variance := 80.0
+@export var wander_radius := 3840.0
+@export var wander_radius_variance := 320.0
 @export var search_duration := 16.0
 @export var search_duration_variance := 2.0
 @export var search_turn_speed := 1.0
 @export var search_turn_speed_variance := 0.3
 @export var new_spawn_chance := 0.05
-const WANDER_SNAP_TOLERANCE := 160.0
+# A follower wanders within THIS radius of its (moving) leader instead of the full
+# wander_radius, so a spawned pack stays a visible clump while patrolling rather
+# than scattering across the map into apparent lone enemies. Only a leaderless
+# enemy roams the full wander_radius around its own spawn.
+@export var follower_wander_radius := 1024.0
+const WANDER_SNAP_TOLERANCE := 640.0
 var spawn_position := Vector2.ZERO
 var idle_state: int = IdleState.WANDER
 var wander_target := Vector2.ZERO
@@ -321,6 +496,25 @@ var leader: Enemy = null
 # filters into a local copy instead) so every member's view of "who's still
 # around" stays consistent within a frame regardless of processing order.
 var group: Array[Enemy] = []
+
+# The 1-2 element types this whole spawn group draws from, so a pack reads as
+# cohesive instead of a rainbow of all 7 elements. Set by the spawner BEFORE
+# add_child (same Array shared across the group); each member then rolls its own
+# element from just this palette in _ready. Empty = fall back to the full roster.
+var group_elements: Array = []
+
+# Pick the 1-2 distinct element types for one spawn group off a seeded rng, so
+# every peer derives the same palette. The per-member element is then rolled
+# from this subset (see _ready).
+static func pick_group_elements(rng: RandomNumberGenerator) -> Array:
+	var pool: Array = ELEMENT_TYPES.duplicate()
+	var count: int = rng.randi_range(1, 2)
+	var result: Array = []
+	for i in count:
+		var idx: int = rng.randi_range(0, pool.size() - 1)
+		result.append(pool[idx])
+		pool.remove_at(idx)
+	return result
 
 func get_wander_anchor() -> Vector2:
 	if leader != null and is_instance_valid(leader) and !leader.is_dead:
@@ -393,17 +587,34 @@ func _ready() -> void:
 	# it as its caster (by matching name.hash()) the same way a player beam finds
 	# its caster in world.players — see beam_projectile.gd.
 	add_to_group("enemies")
+	# Archetype/tier preset (stats, fire rate, health, visual) — runs on every peer.
+	_apply_archetype()
 	health_bar.max_value = max_health
 	health_bar.value = health
 	if is_multiplayer_authority():
 		attacker_weapon = WEAPON_TYPES.pick_random()
-		attacker_element = ELEMENT_TYPES.pick_random()
+		# Draw from this group's cohesive 1-2 element palette if the spawner set
+		# one; otherwise (e.g. a stray/solo enemy) roll from the full roster.
+		attacker_element = group_elements.pick_random() if not group_elements.is_empty() else ELEMENT_TYPES.pick_random()
 		attacker_forms = _roll_forms(attacker_weapon)
+		# Attack/Defense/crit: Attack comes from _apply_archetype (archetype base ×
+		# tier multiplier); Defense/crit stay 0 for now.
 		# How far this enemy's plain default attack reaches — used to keep up
 		# default-attack pressure while closing in for a shorter-range sequence.
 		_default_range = SpellData.get_effective_range(attacker_weapon, attacker_element, "default", true) * ENGAGE_MARGIN
 		spawn_position = global_position
+		# Face a random direction to start (rolled per-enemy) so a freshly spawned
+		# group isn't all staring the same way.
+		facing_direction = Vector2.RIGHT.rotated(randf_range(0.0, TAU))
+		# Which side (and how far) this enemy biases its chase toward, so a pack fans out
+		# and flanks rather than stacking single-file on the target (see _flank_chase_target).
+		_flank_offset = randf_range(-FLANK_OFFSET_MAX, FLANK_OFFSET_MAX)
+		# Rolled once and kept for this enemy's life — magnitude varies, and the
+		# sign randomly flips so some search by sweeping clockwise and others
+		# counter-clockwise instead of every enemy spinning the same way.
 		actual_search_turn_speed = max(0.1, search_turn_speed + randf_range(-search_turn_speed_variance, search_turn_speed_variance))
+		if randf() < 0.5:
+			actual_search_turn_speed = -actual_search_turn_speed
 		# Start idle by looking around rather than immediately wandering off.
 		idle_state = IdleState.SEARCH
 		search_timer = search_duration + randf_range(-search_duration_variance, search_duration_variance)
@@ -419,11 +630,15 @@ func _ready() -> void:
 		_sep_query.collision_mask = 32
 		_sep_query.exclude = [get_rid()]
 		_los_shape = CircleShape2D.new()
-		_los_shape.radius = 16.0
+		_los_shape.radius = 64.0
 		_los_query = PhysicsShapeQueryParameters2D.new()
 		_los_query.shape = _los_shape
 		_los_query.collision_mask = 1
 		_los_query.exclude = [get_rid()]
+		_los_ray = PhysicsRayQueryParameters2D.new()
+		_los_ray.collision_mask = 1
+		_los_ray.exclude = [get_rid()]
+		_los_ray.hit_from_inside = true
 	_update_visual()
 
 # 1-3 distinct forms from the weapon type's capable list, shuffled so it's a
@@ -435,19 +650,52 @@ func _roll_forms(weapon_type: String) -> Array:
 	var count: int = clampi(randi_range(1, 3), 1, pool.size())
 	return pool.slice(0, count)
 
+# Body glyph: shape = archetype (pentagon/triangle/circle/square — the archetype key
+# IS the shape drawn), fill = element color, border = tier color. Re-run whenever
+# element/archetype/tier is known/changes.
 func _update_visual() -> void:
-	if !color_rect or !weapon_label:
+	if !body:
 		return
 	var element_data: Dictionary = SpellData.ELEMENTS.get(attacker_element, SpellData.ELEMENTS["default"])
-	color_rect.color = element_data["color"]
-	weapon_label.text = WEAPON_LETTERS.get(attacker_weapon, "?")
+	var half: float = ARCHETYPES.get(archetype, ARCHETYPES["pentagon"]).get("body_size", 64.0)
+	body.configure(archetype, element_data["color"], _tier_border(), half)
+
+const TIER_BORDERS := {
+	"bronze": Color(0.72, 0.45, 0.2),
+	"silver": Color(0.82, 0.84, 0.9),
+	"gold": Color(1.0, 0.82, 0.25),
+}
+func _tier_border() -> Color:
+	return TIER_BORDERS.get(tier, TIER_BORDERS["bronze"])
 
 # facing_direction itself is only ever simulated on the authority (see
 # _physics_process's early return above), but the indicator's on-screen
 # position needs to update for every peer — this runs unconditionally so
 # remote viewers, who only ever receive facing_direction via replication,
 # still see the dot move instead of sitting frozen at its spawn position.
+# Networked position: the server (authority) writes its true global_position here
+# each frame; remote copies buffer + interpolate it (see NetInterpolator) instead
+# of snapping to raw replicated values, which is what made remote enemies jitter.
+@export var net_position := Vector2.ZERO
+var _pos_interp := NetInterpolator.new()
+var _last_net_pos := Vector2(INF, INF)
+
 func _process(_delta: float) -> void:
+	if is_multiplayer_authority():
+		# Publish our authoritative position for remote copies to interpolate.
+		net_position = global_position
+	else:
+		# Remote copy: interpolate toward buffered snapshots (no raw snapping).
+		# Adopt the first observed value without pushing it — before the first
+		# sync, net_position is still (0,0); pushing that would yank the enemy
+		# (which is already at its deterministic spawn spot) to the origin.
+		if _last_net_pos == Vector2(INF, INF):
+			_last_net_pos = net_position
+		elif net_position != _last_net_pos:
+			_pos_interp.push(net_position)
+			_last_net_pos = net_position
+		if _pos_interp.has_data():
+			global_position = _pos_interp.sample()
 	if facing_indicator:
 		facing_indicator.position = facing_direction * FACING_INDICATOR_DISTANCE
 
@@ -491,6 +739,12 @@ func _physics_process(delta: float) -> void:
 		velocity = Vector2.ZERO
 		return
 	update_current_target()
+	# Fresh acquisition (was targetless, now have one): delay the first shot a random
+	# 0..ENGAGE_DELAY_MAX so a whole pack spotting you at once doesn't volley in unison
+	# and their burst cycles start out of phase. maxf so it never shortens a real cooldown.
+	if current_target != null and not _was_engaged:
+		cast_timer = maxf(cast_timer, randf_range(0.0, ENGAGE_DELAY_MAX))
+	_was_engaged = current_target != null
 	if current_target != null:
 		is_investigating = false
 	if current_target == null:
@@ -522,33 +776,62 @@ func _physics_process(delta: float) -> void:
 	if can_see:
 		current_visible_point = visible_point
 
-	if can_see and distance <= cast_range:
+	if can_see and distance <= cast_range and _center_shot_clear(current_target):
 		var to_target := current_visible_point - global_position
-		if _advance_range > 0.0 and distance > _advance_range:
-			# The sequence we're building is a short-range form (beam/burst) and
-			# the target is out of its range — close the gap instead of strafing.
-			velocity = to_target.normalized() * move_speed + compute_separation()
+		var dir := to_target.normalized()
+		# Clean lane to their center — hold at a FIXED comfortable range and shoot;
+		# never close to melee (this game has no melee). preferred_range is independent
+		# of the spell's reach; short-range forms are simply never planned.
+		_update_stuck_state(delta)
+		var move_intent := Vector2.ZERO
+		if distance > preferred_range + RANGE_BUFFER:
+			# PURSUE — we've drifted past the hold band; close the gap back to it, a bit
+			# faster than normal (we're outside our range, catching up).
+			move_intent = dir * move_speed * PURSUE_SPEED_MULT
+		elif distance < preferred_range - RANGE_BUFFER:
+			# TOO CLOSE — back off to keep our distance (still facing + firing).
+			move_intent = -dir * move_speed
 		else:
-			# Strafe sideways while firing so we're a moving target — flip direction
-			# at random intervals so it isn't a predictable pendulum. Casting
-			# continues regardless (update_casting below), so movement never slows
-			# our fire.
+			# HOLD — inside the ±RANGE_BUFFER band. Strafe sideways so we're a moving
+			# target, flipping direction at random intervals so it isn't a predictable
+			# pendulum. Firing continues regardless (update_casting below), so movement
+			# never slows our shots.
 			_strafe_timer -= delta
 			if _strafe_timer <= 0.0:
 				_strafe_sign = 1.0 if randf() < 0.5 else -1.0
 				_strafe_timer = randf_range(STRAFE_FLIP_MIN, STRAFE_FLIP_MAX)
 			var perp := Vector2(-to_target.y, to_target.x).normalized()
-			velocity = perp * _strafe_sign * strafe_speed + compute_separation()
+			move_intent = perp * _strafe_sign * strafe_speed
+		# Glide along a wall if our movement is grinding into one, so strafing or
+		# pursuing beside cover slides around the corner instead of jamming on it. Plus a
+		# tangential fan-out so packmates don't stack onto one bearing (see _flank_spread).
+		var target_velocity := _deflect_around_walls(move_intent) + compute_separation() \
+			+ _flank_spread(current_target.global_position)
+		# Ease toward the target velocity rather than snapping to it every frame, so the
+		# pursue<->strafe flips and separation/flank nudges glide instead of jittering.
+		velocity = velocity.move_toward(target_velocity, COMBAT_ACCEL * delta)
 		update_facing(delta, current_visible_point - global_position)
-		update_casting(delta, distance)
-		stuck_check_timer = 0.0
-		is_easing_around_corner = false
+		# Hold fire if an ally sits in our line to the target — we'd shoot them in the
+		# back (enemies CAN hurt each other again; see Hitbox.can_hit). We keep strafing
+		# (above) so our angle shifts to a clean lane, and cast_timer keeps counting in
+		# the main loop, so we loose the shot the instant the lane clears.
+		if not _ally_in_firing_lane(current_visible_point):
+			update_casting(delta, distance)
+	elif can_see and distance <= cast_range:
+		# We can SEE them (an edge peeking past cover) but a wall blocks a real shot at
+		# their center — planting here just plinks the corner (the bug where an enemy
+		# sat and shot the wall for free). Path AROUND the cover via the navmesh to earn
+		# a clean line, and hold fire until we have one.
+		follow_nav_path(delta, current_target.global_position)
+		update_facing(delta, current_visible_point - global_position)
+		reset_casting()
 	else:
 		# Chase the live position while we're still aware of them (in sight
 		# or in earshot) — otherwise head for their last-known spot and give
 		# up once we get there without re-spotting/re-hearing them.
-		var chase_target := current_target.global_position if aware else last_known_position
-		if follow_nav_path(delta, chase_target) and !aware:
+		var chase_target := _flank_chase_target(current_target) if aware else last_known_position
+		# Chasing means we're outside our range — close in a bit faster (PURSUE_SPEED_MULT).
+		if follow_nav_path(delta, chase_target, move_speed * PURSUE_SPEED_MULT) and !aware:
 			recently_lost_target = current_target
 			lost_target_cooldown = LOST_TARGET_COOLDOWN
 			current_target = null
@@ -563,50 +846,123 @@ func _physics_process(delta: float) -> void:
 	if facing_indicator:
 		facing_indicator.position = facing_direction * FACING_INDICATOR_DISTANCE
 
+# A per-enemy chase aim-point used while chasing (out of shooting range): offset to one
+# side of the direct line (so packmates path apart and flank rather than single-file) and
+# led ahead of the target's motion (so a faster fleeing player gets cut off, not tailed).
+func _flank_chase_target(target: Node2D) -> Vector2:
+	var base: Vector2 = target.global_position
+	var to_target := base - global_position
+	if to_target.length() < 1.0:
+		return base
+	var perp := Vector2(-to_target.y, to_target.x).normalized()
+	var lead: Vector2 = target_velocities.get(target, Vector2.ZERO) * CHASE_LEAD_TIME
+	if lead.length() > CHASE_LEAD_MAX:
+		lead = lead.normalized() * CHASE_LEAD_MAX
+	return base + lead + perp * _flank_offset
+
 # Steps one physics frame toward target_position along the nav mesh,
 # gliding around corners we're jammed against. Returns true once arrived
 # (navigation finished) so callers can decide what "arrived" means for them
-# (give up on a target, stop investigating, etc).
-func follow_nav_path(delta: float, target_position: Vector2) -> bool:
+# (give up on a target, stop investigating, etc). speed defaults to move_speed;
+# combat chase/pursue passes a boosted one (PURSUE_SPEED_MULT).
+func follow_nav_path(delta: float, target_position: Vector2, speed: float = -1.0) -> bool:
+	if speed < 0.0:
+		speed = move_speed
 	nav_agent.target_position = target_position
+	_update_stuck_state(delta)
+	if nav_agent.is_navigation_finished():
+		velocity = compute_separation()
+		return true
+	var next_point: Vector2 = nav_agent.get_next_path_position()
+	var desired_velocity := global_position.direction_to(next_point) * speed
+	desired_velocity = _deflect_around_walls(desired_velocity)
+	velocity = desired_velocity + compute_separation()
+	update_facing(delta, velocity)
+	return false
+
+# Every STUCK_CHECK_INTERVAL, flag whether we've barely moved (jammed against
+# geometry) so the wall-gliding below only kicks in when we're actually stuck,
+# not while walking a clear path. Runs in BOTH nav-pathing and combat movement so
+# an enemy holding/strafing beside a wall gets the same corner rescue.
+func _update_stuck_state(delta: float) -> void:
 	stuck_check_timer -= delta
 	if stuck_check_timer <= 0.0:
 		var moved := global_position.distance_to(last_stuck_check_position)
 		is_easing_around_corner = moved < STUCK_DISTANCE
 		last_stuck_check_position = global_position
 		stuck_check_timer = STUCK_CHECK_INTERVAL
-	if nav_agent.is_navigation_finished():
-		velocity = compute_separation()
-		return true
-	var next_point: Vector2 = nav_agent.get_next_path_position()
-	var desired_velocity := global_position.direction_to(next_point) * move_speed
-	if is_easing_around_corner and get_slide_collision_count() > 0:
-		# Average every simultaneous WALL collision's normal rather than
-		# just the first one — at a concave (inside) corner, two walls can
-		# both be colliding the same frame, and a tangent based on only one
-		# of them often points straight into the other, keeping us stuck
-		# even with easing "on". The averaged normal points roughly out of
-		# the corner vertex, so its tangent actually clears both walls.
-		# Other enemies are excluded here — they're moving too, so gliding
-		# along a tangent computed from one instant of their normal is
-		# jittery and doesn't represent stable geometry; separation
-		# (below) handles enemy-enemy spacing instead.
-		var normal_sum := Vector2.ZERO
-		var wall_hits := 0
-		for i in get_slide_collision_count():
-			var collision := get_slide_collision(i)
-			if collision.get_collider() is Enemy:
-				continue
-			normal_sum += collision.get_normal()
-			wall_hits += 1
-		if wall_hits > 0:
-			var normal: Vector2 = normal_sum.normalized()
-			var tangent := Vector2(-normal.y, normal.x)
-			if tangent.dot(desired_velocity) < 0.0:
-				tangent = -tangent
-			desired_velocity = tangent * move_speed
-	velocity = desired_velocity + compute_separation()
-	update_facing(delta, velocity)
+
+# If we're grinding against wall(s) instead of making progress, redirect the desired
+# movement ALONG the wall so we glide around the corner rather than push straight into
+# it. Averages every simultaneous WALL collision normal — at a concave (inside) corner
+# two walls collide the same frame, and a tangent from only one often points into the
+# other, keeping us stuck; the averaged normal points out of the corner vertex so its
+# tangent clears both. Other enemies are skipped (they move, so their normal is jittery
+# — separation spaces them). Only active while is_easing_around_corner, so clear-path
+# movement is untouched; preserves the desired speed magnitude.
+func _deflect_around_walls(desired: Vector2) -> Vector2:
+	if not is_easing_around_corner or get_slide_collision_count() == 0:
+		return desired
+	var normal_sum := Vector2.ZERO
+	var wall_hits := 0
+	for i in get_slide_collision_count():
+		var collision := get_slide_collision(i)
+		if collision.get_collider() is Enemy:
+			continue
+		normal_sum += collision.get_normal()
+		wall_hits += 1
+	if wall_hits == 0:
+		return desired
+	var normal: Vector2 = normal_sum.normalized()
+	var tangent := Vector2(-normal.y, normal.x)
+	if tangent.dot(desired) < 0.0:
+		tangent = -tangent
+	return tangent * desired.length()
+
+# True only with a clean firing lane to the target's CENTER — a ray plus a swept
+# circle (real width, closes the diagonal-corner pinhole) from us to their middle,
+# both clear of walls. A mere edge-peek (center blocked) keeps us AWARE of them but is
+# NOT enough to plant and shoot: our shots would just clip the corner. On a blocked
+# center the combat branch repositions around cover instead of plinking it.
+func _center_shot_clear(target: Hurtbox) -> bool:
+	var space_state := get_world_2d().direct_space_state
+	var to_center := target.global_position - global_position
+	_los_ray.from = global_position
+	_los_ray.to = target.global_position
+	if not space_state.intersect_ray(_los_ray).is_empty():
+		return false
+	_los_query.transform = Transform2D(0.0, global_position)
+	_los_query.motion = to_center
+	var result := space_state.cast_motion(_los_query)
+	return result.is_empty() or result[0] >= 1.0
+
+# True if a living ally enemy sits close enough to our line of fire (from us toward
+# aim_point) that a shot would pass through — and now damage — them. Only allies IN
+# FRONT of us and BEFORE the aim point count: our shots are single-hit and die on the
+# first body, so nobody past the target is ever at risk. Pure geometry (point-to-
+# segment), no physics query — cheap enough to run per firing enemy each frame.
+func _ally_in_firing_lane(aim_point: Vector2) -> bool:
+	var origin := global_position
+	var lane: Vector2 = aim_point - origin
+	var lane_len := lane.length()
+	if lane_len < 1.0:
+		return false
+	var lane_dir := lane / lane_len
+	# An ally clips the shot if its body center is within its radius + the bullet's
+	# half-width of the line.
+	var clearance := BODY_RADIUS + ENEMY_LANE_CLEARANCE
+	for other in get_tree().get_nodes_in_group("enemies"):
+		if other == self or not is_instance_valid(other):
+			continue
+		var to_other: Vector2 = other.global_position - origin
+		var along := to_other.dot(lane_dir)
+		# Ahead of us (a BODY_RADIUS lead-in so an ally right on top of us doesn't
+		# perma-block) and short of where our shot lands.
+		if along <= BODY_RADIUS or along >= lane_len:
+			continue
+		var perp := (to_other - lane_dir * along).length()
+		if perp <= clearance:
+			return true
 	return false
 
 # Soft push away from any other enemy crowding closer than
@@ -645,6 +1001,39 @@ func compute_separation() -> Vector2:
 	_separation_cache = push * SEPARATION_RESPONSE
 	return _separation_cache
 
+# A tangential push (around target_pos) away from packmates whose bearing to the
+# target is within FLANK_SPREAD_ANGLE of ours, so a group fans OUT around the player
+# instead of piling onto one arc — shots then arrive from a spread of angles (flanking)
+# rather than all from the same direction. Purely angular (distance-keeping stays with
+# the pursue/hold/backoff logic), local to the pack, and bounded, so it plays nicely
+# with separation + wall-gliding and copes with any pack size.
+func _flank_spread(target_pos: Vector2) -> Vector2:
+	var my_offset := global_position - target_pos
+	var my_dist := my_offset.length()
+	if my_dist < 1.0 or group.size() <= 1:
+		return Vector2.ZERO
+	var my_angle := my_offset.angle()
+	var push := 0.0
+	for other in group:
+		if other == self or not is_instance_valid(other) or other.is_dead:
+			continue
+		var od: Vector2 = other.global_position - target_pos
+		if od.length_squared() < 1.0:
+			continue
+		# How far around the target this ally sits from us, signed (+ = CCW of us).
+		var diff := wrapf(od.angle() - my_angle, -PI, PI)
+		var adiff := absf(diff)
+		if adiff >= FLANK_SPREAD_ANGLE or adiff < 0.0001:
+			continue
+		# Slide to the side AWAY from them; nearer bearings push harder.
+		push -= signf(diff) * (1.0 - adiff / FLANK_SPREAD_ANGLE)
+	if absf(push) < 0.001:
+		return Vector2.ZERO
+	# Unit CCW tangent around the target, scaled by the (clamped) crowding and our
+	# strafe speed so the fan-out never overpowers the pursue/hold movement.
+	var tangent := Vector2(-my_offset.y, my_offset.x) / my_dist
+	return tangent * clampf(push, -1.0, 1.0) * strafe_speed
+
 # Distance to the closest player (INF if none / world not ready). Cheap loop over
 # the handful of players — used by the frame's distance-LOD early-out.
 func _nearest_player_distance() -> float:
@@ -659,6 +1048,39 @@ func _nearest_player_distance() -> float:
 			if d < nearest:
 				nearest = d
 	return nearest
+
+# Every living player's hurtbox (for LOS checks that must ignore the detection
+# ring, e.g. reacting to a shot from beyond our vision radius).
+func _players_hurtboxes() -> Array:
+	var out: Array = []
+	if _world == null or not is_instance_valid(_world):
+		_world = get_tree().get_first_node_in_group("world")
+	if _world == null or _world.players == null:
+		return out
+	for p in _world.players.get_children():
+		if "hurtbox" in p and p.hurtbox != null and is_instance_valid(p.hurtbox):
+			out.append(p.hurtbox)
+	return out
+
+# Getting shot spins us toward the threat and lets us scan for the shooter with
+# NO radius limit (but still real line of sight — never through walls, and
+# ignoring our facing cone since a hit makes us whip around): returns the nearest
+# player we can actually see, or null. This is what lets an enemy shot from open
+# ground just outside its normal vision radius still spot and lock onto the
+# shooter, instead of only trudging over to investigate the shot.
+func _spot_shooter_any_range() -> Hurtbox:
+	var best: Hurtbox = null
+	var best_dist := INF
+	for h in _players_hurtboxes():
+		if h.is_invincible:
+			continue
+		if not has_line_of_sight_any_direction(h):
+			continue
+		var d := global_position.distance_to(h.global_position)
+		if d < best_dist:
+			best_dist = d
+			best = h
+	return best
 
 func start_investigating(direction: Vector2) -> void:
 	# 95% of the time head roughly toward the shot (the original behavior);
@@ -689,6 +1111,25 @@ func start_investigating(direction: Vector2) -> void:
 	# own vision range in that direction instead of not reacting at all.
 	var edge_point := global_position + chosen_direction * cast_range
 	investigate_target = safe_snap_to_nav(edge_point, investigate_jitter * 1.5)
+	is_investigating = true
+
+# A loud world noise (the exit portal charging — see exit_portal.gd's noise
+# pulses) draws idle enemies toward its source. Heard through walls like other
+# hearing, but it only sends them to INVESTIGATE the point — no free target lock,
+# and it never overrides an enemy already fighting a real target. Server-only
+# (AI runs on the authority alone). Re-fired periodically by the portal, so a
+# crowd steadily converges on and mills around it while it charges.
+func hear_world_noise(point: Vector2) -> void:
+	if !is_multiplayer_authority() or is_dead:
+		return
+	if current_target != null:
+		return
+	var snapped := NavigationServer2D.map_get_closest_point(nav_agent.get_navigation_map(), point)
+	# Already essentially there — don't thrash a fresh path every pulse; let it
+	# wander/hold around the portal instead.
+	if global_position.distance_to(snapped) <= MIN_INVESTIGATE_DISTANCE:
+		return
+	investigate_target = snapped
 	is_investigating = true
 
 func update_idle(delta: float) -> void:
@@ -744,7 +1185,12 @@ func pick_next_wander_target() -> void:
 	# random angle/distance within it) gives each leg a slightly different
 	# reach — and therefore a slightly different travel time — so a whole
 	# group of enemies doesn't visibly settle into the same wander rhythm.
-	var radius = max(1.0, wander_radius + randf_range(-wander_radius_variance, wander_radius_variance))
+	# Followers stay tight around their (moving) leader so the pack travels as a
+	# clump; only a leaderless enemy roams the full wander_radius around its spawn.
+	var base_radius := wander_radius
+	if leader != null and is_instance_valid(leader) and not leader.is_dead:
+		base_radius = follower_wander_radius
+	var radius = max(1.0, base_radius + randf_range(-wander_radius_variance, wander_radius_variance))
 	var anchor := get_wander_anchor()
 	if post_chase_wanders_remaining > 0:
 		post_chase_wanders_remaining -= 1
@@ -792,7 +1238,7 @@ func update_facing(delta: float, desired: Vector2) -> void:
 	var new_angle := rotate_toward(facing_direction.angle(), target_angle, turn_speed * delta)
 	facing_direction = Vector2.RIGHT.rotated(new_angle)
 
-const LOS_PEEK_RADIUS := 24.0
+const LOS_PEEK_RADIUS := 96.0
 const LOS_PEEK_OFFSETS: Array[Vector2] = [
 	Vector2.ZERO,
 	Vector2(LOS_PEEK_RADIUS, 0), Vector2(-LOS_PEEK_RADIUS, 0),
@@ -818,11 +1264,16 @@ func _hidden_by_stillness(target: Hurtbox) -> bool:
 func has_line_of_sight(target: Hurtbox) -> bool:
 	return get_visible_point(target) != null
 
+# LOS regardless of which way we're facing — used when a shot spins us around to
+# check for the shooter (getting hit makes us look everywhere, not just our cone).
+func has_line_of_sight_any_direction(target: Hurtbox) -> bool:
+	return get_visible_point(target, false) != null
+
 # Returns the world-space point we can actually see on target (so callers
 # can aim at what's really exposed instead of a possibly-blocked dead
 # center), or null if no part of them is both within our fov_degrees vision
 # cone and unobstructed.
-func get_visible_point(target: Hurtbox) -> Variant:
+func get_visible_point(target: Hurtbox, check_fov := true) -> Variant:
 	# A zero-width ray (or even a few parallel rays) can still slip through
 	# the single-point diagonal gap where two wall tiles meet corner-to-
 	# corner. Sweeping an actual circle shape along the path has real width
@@ -841,13 +1292,31 @@ func get_visible_point(target: Hurtbox) -> Variant:
 	for offset in LOS_PEEK_OFFSETS:
 		var point := target.global_position + offset
 		var to_point := point - global_position
-		if to_point.length_squared() > 0.0001 and absf(facing_direction.angle_to(to_point)) > half_fov:
+		if check_fov and to_point.length_squared() > 0.0001 and absf(facing_direction.angle_to(to_point)) > half_fov:
 			continue
+		# Ray from our center: catches any wall between us and the point,
+		# including one the swept circle would ignore for overlapping it at the
+		# origin (see _los_ray). A hit means blocked.
+		_los_ray.from = global_position
+		_los_ray.to = point
+		if not space_state.intersect_ray(_los_ray).is_empty():
+			continue
+		# Swept circle: real width the whole way, so it can't thread the
+		# single-point diagonal gap where two wall tiles meet corner-to-corner.
 		_los_query.motion = to_point
 		var result := space_state.cast_motion(_los_query)
 		if result.is_empty() or result[0] >= 1.0:
 			return point
 	return null
+
+# Updates one target's "moved since last frame" flag + smoothed velocity (for
+# shot leading). Smoothing rides out single-frame jitter.
+func _track_target_motion(h: Hurtbox, pdelta: float) -> void:
+	var last: Vector2 = last_target_positions.get(h, h.global_position)
+	target_is_moving[h] = h.global_position.distance_to(last) >= MOVEMENT_THRESHOLD
+	var inst_vel: Vector2 = (h.global_position - last) / pdelta
+	target_velocities[h] = target_velocities.get(h, Vector2.ZERO).lerp(inst_vel, VELOCITY_SMOOTHING)
+	last_target_positions[h] = h.global_position
 
 func update_current_target() -> void:
 	targets_in_range = targets_in_range.filter(func(h): return is_instance_valid(h))
@@ -858,14 +1327,15 @@ func update_current_target() -> void:
 	# check", which would misreport a player who just walked up and stopped
 	# as still moving.
 	var pdelta := get_physics_process_delta_time()
+	_decay_aggro(pdelta)
 	for h in targets_in_range:
-		var last: Vector2 = last_target_positions.get(h, h.global_position)
-		target_is_moving[h] = h.global_position.distance_to(last) >= MOVEMENT_THRESHOLD
-		# Smoothed velocity estimate for shot leading (see fire_spell). Smoothing
-		# rides out single-frame jitter so the lead point doesn't jump around.
-		var inst_vel: Vector2 = (h.global_position - last) / pdelta
-		target_velocities[h] = target_velocities.get(h, Vector2.ZERO).lerp(inst_vel, VELOCITY_SMOOTHING)
-		last_target_positions[h] = h.global_position
+		_track_target_motion(h, pdelta)
+	# We can now stay locked on a target via LOS well beyond the detection ring
+	# (see the sticky-sight comment below), so keep tracking our current target's
+	# motion even once it's left that ring — otherwise its shot-leading velocity
+	# would go stale the moment it stepped outside our vision radius.
+	if current_target != null and is_instance_valid(current_target) and not targets_in_range.has(current_target):
+		_track_target_motion(current_target, pdelta)
 	# Leaving detection_area's radius must NOT clear current_target — that's
 	# exactly the "walked around a corner" case we want to keep chasing the
 	# last known position through. Only drop it here if the hurtbox itself
@@ -905,6 +1375,66 @@ func update_current_target() -> void:
 		if !detectable.is_empty():
 			current_target = _closest_target(detectable)
 			alert_nearby_group(current_target, current_target.global_position)
+	# Damage aggro can override the geometric choice above (and STEAL an already-
+	# engaged target), so it runs every frame regardless of the null check.
+	_apply_aggro_target()
+
+# Sheds each attacker's damage tally over time so old damage stops mattering.
+func _decay_aggro(delta: float) -> void:
+	if _aggro.is_empty():
+		return
+	for peer in _aggro.keys():
+		var v: float = _aggro[peer] - AGGRO_DECAY * delta
+		if v <= 0.0:
+			_aggro.erase(peer)
+		else:
+			_aggro[peer] = v
+
+# The player who's dealt the most recent damage becomes the target, and can STEAL
+# an already-engaged target if it out-aggros the current one by AGGRO_SWITCH_RATIO
+# (hysteresis so it doesn't flip-flop). With no meaningful aggro this is a no-op and
+# the geometric acquisition stands. Aggro can target through walls ("you shot me,
+# I'm coming") — the enemy then paths toward them.
+func _apply_aggro_target() -> void:
+	if _aggro.is_empty():
+		return
+	var world = _get_world()
+	if world == null or world.players == null:
+		return
+	var top_peer := 0
+	var top_val := 0.0
+	for peer in _aggro:
+		if _aggro[peer] < AGGRO_MIN:
+			continue
+		if !world.players.has_node(str(peer)):
+			continue
+		var hb = world.players.get_node(str(peer)).hurtbox
+		if hb == null or hb.is_invincible:
+			continue
+		if _aggro[peer] > top_val:
+			top_val = _aggro[peer]
+			top_peer = peer
+	if top_peer == 0:
+		return
+	var top_hb: Hurtbox = world.players.get_node(str(top_peer)).hurtbox
+	if current_target == top_hb:
+		return
+	if current_target == null:
+		current_target = top_hb
+		last_known_position = top_hb.global_position
+		alert_nearby_group(current_target, current_target.global_position)
+		return
+	# Already engaged: steal only if the aggro leader clearly out-damages them.
+	var cur_peer: int = current_target.owner_id if "owner_id" in current_target else 0
+	var cur_val: float = _aggro.get(cur_peer, 0.0)
+	if top_val > cur_val and top_val >= cur_val * AGGRO_SWITCH_RATIO:
+		current_target = top_hb
+		last_known_position = top_hb.global_position
+
+func _get_world() -> Node:
+	if _world == null or not is_instance_valid(_world):
+		_world = get_tree().get_first_node_in_group("world")
+	return _world
 
 func _closest_target(hurtboxes: Array) -> Hurtbox:
 	var closest: Hurtbox = null
@@ -949,9 +1479,22 @@ func update_casting(delta: float, distance: float) -> void:
 # Choose what to cast next (a run of default attacks between sequences) and record
 # how close we need to be for it to land, WITHOUT firing yet.
 func _plan_next_cast() -> void:
+	# Balancing pass (uniform_bullets): fire only the plain default form so every
+	# enemy shot is the same flat projectile. Skips the whole form/sequence picker.
+	if uniform_bullets:
+		_planned_form = "default"
+		_planned_recipe = {}
+		_advance_range = _default_range
+		return
 	# Only the forms this enemy's weapon actually holds — so its repertoire matches
-	# the weapon that drops.
+	# the weapon that drops — AND only ones that can land from our hold distance, so
+	# the enemy stays ranged (EtG style) instead of closing into melee for a
+	# short-range form (burst/cone/beam). Unreachable forms fall back to defaults.
 	var recipes: Array = all_spell_recipes.get_available_recipes(attacker_element, attacker_forms)
+	recipes = recipes.filter(func(r):
+		var reach := SpellData.get_effective_range(attacker_weapon, attacker_element, r.get("form", "default"), true)
+		return reach * ENGAGE_MARGIN >= preferred_range
+	)
 	if recipes.is_empty() or _default_shots_remaining > 0:
 		_planned_form = "default"
 		_planned_recipe = {}
@@ -992,6 +1535,31 @@ func cast_sequence() -> void:
 func cast_default() -> void:
 	fire_spell(attacker_weapon, attacker_element, "default")
 
+# Applies the archetype's stat preset + the tier's multipliers/visual. Runs on every
+# peer in _ready (deterministic spawner pick → all peers agree), overriding the
+# enemy.tscn export defaults. See ARCHETYPES / TIERS.
+func _apply_archetype() -> void:
+	var a: Dictionary = ARCHETYPES.get(archetype, ARCHETYPES["pentagon"])
+	var t: Dictionary = TIERS.get(tier, TIERS["bronze"])
+	move_speed = a["move_speed"]
+	strafe_speed = a["strafe_speed"]
+	# Jitter each enemy's hold distance ±PREFERRED_RANGE_VARIANCE so a pack settles at a
+	# spread of rings instead of all freezing on the exact same one. Server-only-used
+	# (AI is authority-only), so a non-deterministic roll here can't desync anything.
+	preferred_range = a["preferred_range"] * randf_range(1.0 - PREFERRED_RANGE_VARIANCE, 1.0 + PREFERRED_RANGE_VARIANCE)
+	cast_range = a["cast_range"]
+	attacks_per_sec_range = a.get("attacks_per_sec", [1.0, 1.0])
+	burst_count = a.get("burst_count", 1)
+	burst_cooldown_range = a.get("burst_cooldown", [0.0, 0.0])
+	_burst_shots = 0
+	aim_variance = deg_to_rad(a.get("aim_variance_deg", 5.0))
+	attack = a["attack"] * t["attack_mult"]
+	max_health = a["max_health"] * t["health_mult"]
+	health = max_health
+	# Identity now reads off the body glyph: shape = archetype, fill = element, border =
+	# tier (see _update_visual). visual_root stays neutral (no tier scale/tint).
+	_update_visual()
+
 func fire_spell(weapon: String, element: String, form: String) -> void:
 	if current_target == null:
 		return
@@ -999,50 +1567,151 @@ func fire_spell(weapon: String, element: String, form: String) -> void:
 	# Aim at the actual point of them we can see (may be an edge peeking past a
 	# corner) rather than their dead center, which could still be behind cover.
 	var aim_point := current_visible_point
-	var direction: Vector2
-	var spawn_dist := -1.0
+	# Damage = this enemy's Attack (per pellet); the attacker's crit stats travel
+	# to the defender (crit resolved at hit time). Nothing rolled here.
 	if spell_data.get("targeted", false):
 		# Targeted forms (rain) land ON the target's spot, clamped to the form's
-		# range — no lead or spread, it's a placed cast. rain_projectile.gd then
-		# LOS-clamps it to a wall if one's in the way.
+		# range — no lead, spread, or fan. rain_projectile.gd LOS-clamps to a wall.
 		var to_target := aim_point - global_position
-		spawn_dist = minf(to_target.length(), spell_data["spawn_offset"])
-		direction = to_target.normalized()
+		var spawn_dist := minf(to_target.length(), spell_data["spawn_offset"])
+		_broadcast_spawn_projectile(weapon, element, form, to_target.normalized(), attack, crit_rate, crit_damage, spawn_dist, PackedFloat32Array([0.0]))
 	else:
+		var a: Dictionary = ARCHETYPES.get(archetype, ARCHETYPES["pentagon"])
+		# Each archetype sets its shot speed ABSOLUTELY (bullet_speed); convert to a
+		# multiplier on the flat enemy base speed so the fan spawner can apply it.
+		var base_speed: float = spell_data["speed"]
 		# Predictive leading: shift the aim to where the target will be by the time
-		# a moving shot reaches it (time ≈ distance / projectile speed). Cheap
-		# first-order lead. Skipped for the speed-0 AoE forms (they don't travel).
-		var proj_speed: float = spell_data["speed"]
+		# the shot reaches it (time ≈ distance / real shot speed). Cheap first-order
+		# lead. Skipped for speed-0 AoE forms (they don't travel).
+		var proj_speed: float = float(a.get("bullet_speed", base_speed))
+		var speed_mult: float = proj_speed / base_speed if base_speed > 0.0 else 1.0
 		if proj_speed > 0.0:
-			var lead_time := global_position.distance_to(aim_point) / proj_speed
-			aim_point += target_velocities.get(current_target, Vector2.ZERO) * lead_time
-		# Small random spread so a burst of shots fans out slightly instead of
-		# stacking into one dodgeable line.
-		direction = global_position.direction_to(aim_point).rotated(randf_range(-AIM_VARIANCE, AIM_VARIANCE))
-	# Rolled once here (only ever runs on this enemy's own authoritative
-	# peer) and sent as a plain bool below — every peer must apply the same
-	# crit result, so it can't be re-rolled independently inside
-	# spawn_projectile(), which runs once per peer as the RPC lands.
-	var is_crit := SpellData.roll_crit(weapon)
-	spawn_projectile.rpc(weapon, element, form, direction, is_crit, spawn_dist)
-	# Per-form cooldown, but halved for enemies (ENEMY_COOLDOWN_MULT is baked into
-	# spell_data via the is_enemy flag above) so they fire about twice as fast as
-	# a player with the same weapon/form — paired with their slower projectiles.
-	cast_timer = spell_data["attack_cooldown"]
+			# Bounded lead: cap the flight-time estimate, AND cap the resulting offset to
+			# a fraction of the gap, so a fast/rushing target can never push the aim past
+			# us (which used to flip the shot to fire the wrong way — "shots off track").
+			var gap := global_position.distance_to(aim_point)
+			var lead_time := minf(gap / proj_speed, MAX_LEAD_TIME)
+			var lead: Vector2 = target_velocities.get(current_target, Vector2.ZERO) * lead_time
+			if lead.length() > gap * MAX_LEAD_FRACTION:
+				lead = lead.normalized() * gap * MAX_LEAD_FRACTION
+			aim_point += lead
+		# Small random wobble on the whole shot; the fan (pellets/spread) provides the
+		# real spread for the shotgun/spread archetypes. spawn_projectile builds the
+		# fan from this one aimed direction so it matches on every peer.
+		var direction := global_position.direction_to(aim_point).rotated(randf_range(-aim_variance, aim_variance))
+		# The pellet fan is the archetype's BASIC attack (pentagon 5 / triangle 3;
+		# circle & square fire a single shot). Guarded on "default" so a re-enabled
+		# spell cast would still fire its own single-projectile pattern. The per-pellet
+		# angle offsets are computed HERE (server) and sent, so the whole volley is
+		# identical on every peer (see _pellet_offsets_for).
+		var offsets := PackedFloat32Array([0.0])
+		if form == "default":
+			offsets = _pellet_offsets_for(a)
+		_broadcast_spawn_projectile(weapon, element, form, direction, attack, crit_rate, crit_damage, -1.0, offsets, speed_mult)
+	# Cadence is rolled fresh each shot from the archetype's attacks_per_sec [min,max]
+	# range (volleys/sec) so the barrage isn't perfectly metronomic. Enemy AI timing is
+	# authority-only, so this randf is server-side and never desyncs.
+	var aps := randf_range(attacks_per_sec_range[0], attacks_per_sec_range[1])
+	cast_timer = 1.0 / maxf(aps, 0.01)
+	# Burst-and-cooldown: after burst_count shots at that cadence, wait a random
+	# burst_cooldown_range [min,max] instead before the next burst (max 0 = continuous).
+	if burst_count >= 1 and burst_cooldown_range[1] > 0.0:
+		_burst_shots += 1
+		if _burst_shots >= burst_count:
+			_burst_shots = 0
+			cast_timer = randf_range(burst_cooldown_range[0], burst_cooldown_range[1])
+
+# Per-shot angle offsets (radians, relative to the aimed direction) for one volley.
+# An archetype may specify an explicit `pellet_angles_deg` list (custom/asymmetric
+# fan — e.g. the pentagon's tight inner pair ±14 + wide outer pair ±30); otherwise
+# `pellets` shots are fanned EVENLY across `spread_deg`. A lone pellet fires straight.
+# Computed server-side and sent, so every peer's volley matches.
+func _pellet_offsets_for(a: Dictionary) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	if a.has("pellet_angles_deg"):
+		for deg in a["pellet_angles_deg"]:
+			out.append(deg_to_rad(float(deg)))
+		return out
+	var n: int = maxi(1, int(a.get("pellets", 1)))
+	var spread := deg_to_rad(float(a.get("spread_deg", 0.0)))
+	for i in n:
+		var frac := 0.0 if n <= 1 else float(i) / float(n - 1) - 0.5
+		out.append(frac * spread)
+	return out
+
+# --- Room-scoped RPC dispatch --------------------------------------------
+# Every peer that has this enemy's room loaded simulates its own copy of the
+# enemy, so its RPCs must go ONLY to those peers. A blanket .rpc() also hits peers
+# in other rooms who've already freed this enemy: each logs a "get_cached_object
+# ... node is null" error, and — for the frequent, reliable projectile spawns —
+# the extra traffic floods the reliable channel enough to stall real messages
+# (players' own spell spawns arriving seconds late). Scope them exactly like
+# exit_portal / loot_container. Only ever called on the server (enemy AI + hurt
+# handling are authority-only).
+func _my_room_key() -> String:
+	var world = get_tree().get_first_node_in_group("world")
+	if world == null or world.world_rooms == null:
+		return ""
+	for key in world.world_rooms.loaded_rooms:
+		var scene = world.world_rooms.loaded_rooms[key].get("scene")
+		if scene != null and is_instance_valid(scene) and scene.is_ancestor_of(self):
+			return key
+	return ""
+
+# Server id + every peer currently in this enemy's room, or [] if the room can't
+# be resolved (callers then fall back to a plain broadcast).
+func _room_rpc_targets() -> Array:
+	var world = get_tree().get_first_node_in_group("world")
+	var room_key := _my_room_key()
+	if world == null or room_key == "":
+		return []
+	var ids := {multiplayer.get_unique_id(): true}
+	for pid in world.peers_in_room(room_key):
+		ids[pid] = true
+	return ids.keys()
+
+func _broadcast_spawn_projectile(weapon: String, element: String, form: String, direction: Vector2, attack: float, crit_rate: float, crit_damage: float, spawn_dist: float, offsets: PackedFloat32Array = PackedFloat32Array(), speed_mult: float = 1.0) -> void:
+	var targets := _room_rpc_targets()
+	if targets.is_empty():
+		spawn_projectile.rpc(weapon, element, form, direction, attack, crit_rate, crit_damage, spawn_dist, offsets, speed_mult)
+		return
+	var server_id := multiplayer.get_unique_id()
+	for pid in targets:
+		if pid == server_id:
+			spawn_projectile(weapon, element, form, direction, attack, crit_rate, crit_damage, spawn_dist, offsets, speed_mult)
+		else:
+			spawn_projectile.rpc_id(pid, weapon, element, form, direction, attack, crit_rate, crit_damage, spawn_dist, offsets, speed_mult)
 
 @rpc("authority", "call_local", "reliable")
-func spawn_projectile(weapon: String, element: String, form: String, direction: Vector2, is_crit: bool = false, spawn_dist: float = -1.0) -> void:
-	var spell_data := all_spell_data.build_spell_data(weapon, element, form, "common", true)
-	# Dot forms roll crit per-tick, so leave their base damage un-crit here.
-	if is_crit and not spell_data.get("dot", false):
-		spell_data["damage"] *= SpellData.CRIT_MULTIPLIER
-	var projectile = spell_data["scene"].instantiate()
-	get_tree().current_scene.add_child(projectile)
-	# spawn_dist is set for targeted forms (rain lands on the player, clamped to
-	# range); otherwise fall back to the form's fixed spawn_offset.
-	var dist: float = spawn_dist if spawn_dist >= 0.0 else spell_data["spawn_offset"]
-	projectile.global_position = global_position + direction * dist
-	projectile.setup_spell(direction, spell_data, name.hash(), is_crit)
+func spawn_projectile(weapon: String, element: String, form: String, direction: Vector2, attack: float = 0.0, crit_rate: float = 0.0, crit_damage: float = 0.0, spawn_dist: float = -1.0, offsets: PackedFloat32Array = PackedFloat32Array(), speed_mult: float = 1.0) -> void:
+	# Fire one pellet per angle in `offsets` (radians, relative to the sent
+	# `direction`) — an empty list / a single 0.0 fires one straight shot. The server
+	# computes the offsets (even fan OR custom per-pellet, see _pellet_offsets_for)
+	# and sends the same list to every peer, so the whole volley matches across the
+	# party. Each pellet gets its OWN spell_data: the projectile keeps a reference to
+	# that dict (setup_spell), so sharing one would let them stomp each other.
+	var pellet_offsets := offsets
+	if pellet_offsets.is_empty():
+		pellet_offsets = PackedFloat32Array([0.0])
+	var base_angle := direction.angle()
+	for off in pellet_offsets:
+		var dir := Vector2.from_angle(base_angle + off)
+		var spell_data := all_spell_data.build_spell_data(weapon, element, form, "common", true)
+		# Damage = the enemy's Attack (per pellet); attacker crit stats ride on the
+		# hitbox so the defender resolves crit at hit time (single-hit and DoT alike).
+		spell_data["damage"] = attack
+		spell_data["attacker_crit_rate"] = crit_rate
+		spell_data["attacker_crit_damage"] = crit_damage
+		# Sniper etc. fire faster shots — scale only the velocity, not max_distance,
+		# so the shot reaches the same range but gets there quicker.
+		spell_data["speed"] = spell_data["speed"] * speed_mult
+		# spawn_dist is set for targeted forms (rain lands on the player, clamped to
+		# range); otherwise fall back to the form's fixed spawn_offset.
+		var dist: float = spawn_dist if spawn_dist >= 0.0 else spell_data["spawn_offset"]
+		var projectile = spell_data["scene"].instantiate()
+		get_tree().current_scene.add_child(projectile)
+		projectile.global_position = global_position + dir * dist
+		projectile.setup_spell(dir, spell_data, name.hash(), false)
 
 func _on_detection_area_entered(area: Area2D) -> void:
 	if area is Hurtbox:
@@ -1059,16 +1728,28 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 	# may not have.
 	if !is_multiplayer_authority():
 		return
+	# Resolve the hit from stats (server authority): base = attacker Attack
+	# (hitbox.damage), crit from the attacker's crit stats + a +50/+50 bonus if their
+	# element beats ours, then our Defense reduces it (Diablo-style DR).
 	var final_damage: float = damage
-	if hitbox != null and "attacker_weapon" in hitbox and "attacker_element" in hitbox:
-		var multiplier := SpellData.get_damage_multiplier(
-			hitbox.attacker_weapon,
-			hitbox.attacker_element,
-			attacker_weapon,
-			attacker_element
-		)
-		final_damage = damage * multiplier
-	_broadcast_damage_number.rpc(final_damage, hitbox != null and hitbox.is_crit)
+	var is_crit := false
+	if hitbox != null and "attacker_element" in hitbox:
+		var advantage := SpellData.has_advantage(hitbox.attacker_element, attacker_element)
+		var atk_crit_rate: float = hitbox.attacker_crit_rate + (50.0 if advantage else 0.0)
+		var atk_crit_damage: float = hitbox.attacker_crit_damage + (50.0 if advantage else 0.0)
+		is_crit = randf() * 100.0 < atk_crit_rate
+		if is_crit:
+			final_damage *= 1.0 + atk_crit_damage / 100.0
+	final_damage *= 1.0 - SpellData.damage_reduction(defense)
+	# Aggro: credit this damage to the attacking PLAYER. hitbox.caster_id is the
+	# player's peer id directly (enemy casts use name.hash(), so guard on it being a
+	# real player node). Whoever out-damages the current target pulls aggro — see
+	# _apply_aggro_target() in update_current_target().
+	if hitbox != null and "caster_id" in hitbox:
+		var aggro_world = _get_world()
+		if aggro_world != null and aggro_world.players != null and aggro_world.players.has_node(str(hitbox.caster_id)):
+			_aggro[hitbox.caster_id] = _aggro.get(hitbox.caster_id, 0.0) + final_damage
+	_emit_damage_number(final_damage, is_crit)
 	# Getting hit is an instant, unmissable cue of where the attack came
 	# from — snap facing straight there instead of easing over with
 	# turn_speed like normal tracking does.
@@ -1076,11 +1757,19 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 		var to_attacker = hitbox.global_position - global_position
 		if to_attacker.length_squared() > 0.0001:
 			facing_direction = to_attacker.normalized()
-			# Only start investigating if we're not already tracking someone —
-			# a hit that lands while we're engaged doesn't need this, we
-			# already know roughly where the threat is.
+			# Only react to acquire if we're not already tracking someone — a hit
+			# that lands while we're engaged doesn't need this. With no target,
+			# first do a radius-ignoring LOS scan for the shooter: if we can
+			# actually see a player (open ground, even well past our vision ring),
+			# lock straight onto them; otherwise fall back to just investigating
+			# the shot like before.
 			if current_target == null:
-				start_investigating(facing_direction)
+				var shooter := _spot_shooter_any_range()
+				if shooter != null:
+					current_target = shooter
+					last_known_position = shooter.global_position
+				else:
+					start_investigating(facing_direction)
 			# Getting attacked alerts nearby groupmates too — use our actual
 			# current_target's live position if we have one (more accurate
 			# than the hit itself), otherwise just the point we were hit
@@ -1088,6 +1777,21 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 			var alert_point = current_target.global_position if current_target != null else hitbox.global_position
 			alert_nearby_group(current_target, alert_point)
 	take_damage(final_damage)
+
+# Room-scoped like the projectile spawn above (same "don't spam other rooms'
+# peers with node-null errors" reasoning) — the damage number only matters to
+# peers who actually have this enemy.
+func _emit_damage_number(amount: float, is_crit: bool) -> void:
+	var targets := _room_rpc_targets()
+	if targets.is_empty():
+		_broadcast_damage_number.rpc(amount, is_crit)
+		return
+	var server_id := multiplayer.get_unique_id()
+	for pid in targets:
+		if pid == server_id:
+			_broadcast_damage_number(amount, is_crit)
+		else:
+			_broadcast_damage_number.rpc_id(pid, amount, is_crit)
 
 # Shows the authoritative damage number on every peer (call_local so the server
 # shows it too) — the single place an enemy's damage number is spawned now.
@@ -1113,14 +1817,10 @@ func die() -> void:
 	# only runs once.
 	var world = get_tree().get_first_node_in_group("world")
 	if world:
-		# Rarity-weighted rolls from this enemy type's pool. If the pool's "@weapon"
-		# slot is rolled, the drop is this enemy's actual weapon — its live
-		# element/forms are passed so world_loot.gd stamps them onto the dropped
-		# Weapon (which otherwise defaults every type to "fire" and no forms).
-		var weapon_override := {
-			"type": attacker_weapon,
-			"element": attacker_element,
-			"forms": attacker_forms.duplicate(),
-		}
-		world.spawn_pool_loot(global_position, loot_pool, loot_rolls_min, loot_rolls_max, weapon_override)
+		# Per-entry loot from this archetype+tier's table (ItemData.get_loot_table).
+		# Elemental enemies drop NO weapons/gear, so their tables carry no @weapon/
+		# @gear tokens — the context only needs the element to resolve @crystal
+		# (crystal_<element>), which fits the elemental theme.
+		var context := {"element": attacker_element}
+		world.spawn_loot(global_position, ItemData.get_loot_table(archetype, tier), context)
 	is_dead = true

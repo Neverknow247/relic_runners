@@ -9,6 +9,8 @@
 [ext_resource type="PackedScene" path="res://ui/workbench_ui.tscn" id="7_workbench"]
 [ext_resource type="PackedScene" path="res://ui/expedition_kit_ui.tscn" id="8_kit_ui"]
 [ext_resource type="PackedScene" path="res://ui/crafting_ui.tscn" id="9_crafting"]
+[ext_resource type="PackedScene" path="res://ui/fishing_ui.tscn" id="10_fishing"]
+[ext_resource type="PackedScene" path="res://ui/map_ui.tscn" id="11_map"]
 
 [node name="player_camera" type="Camera2D"]
 zoom = Vector2(3, 3)
@@ -28,5 +30,9 @@ zoom = Vector2(3, 3)
 [node name="workbench_ui" parent="." instance=ExtResource("7_workbench")]
 
 [node name="crafting_ui" parent="." instance=ExtResource("9_crafting")]
+
+[node name="fishing_ui" parent="." instance=ExtResource("10_fishing")]
+
+[node name="map_ui" parent="." instance=ExtResource("11_map")]
 
 [node name="expedition_kit_ui" parent="." instance=ExtResource("8_kit_ui")]

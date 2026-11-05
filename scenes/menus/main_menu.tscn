@@ -4,6 +4,18 @@
 [ext_resource type="Script" uid="uid://c4c57pmox1jey" path="res://scenes/menus/main_menu.gd" id="1_xqga4"]
 [ext_resource type="FontFile" uid="uid://dajgop274ppff" path="res://assets/fonts/Cinzel/static/Cinzel-SemiBold.ttf" id="3_2o76q"]
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_serverlist"]
+bg_color = Color(0.107, 0.107, 0.107, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.3, 0.3, 0.34, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
 [node name="main_menu" type="Control"]
 layout_mode = 3
 anchors_preset = 15
@@ -14,124 +26,144 @@ grow_vertical = 2
 theme = ExtResource("1_ovrgc")
 script = ExtResource("1_xqga4")
 
-[node name="margin_container" type="MarginContainer" parent="."]
+[node name="margin" type="MarginContainer" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 320
-theme_override_constants/margin_top = 80
-theme_override_constants/margin_right = 320
-theme_override_constants/margin_bottom = 80
+theme_override_constants/margin_left = 200
+theme_override_constants/margin_top = 60
+theme_override_constants/margin_right = 200
+theme_override_constants/margin_bottom = 60
 
-[node name="v_box_container" type="VBoxContainer" parent="margin_container"]
+[node name="root" type="VBoxContainer" parent="margin"]
 layout_mode = 2
 theme_override_constants/separation = 32
 
-[node name="label" type="Label" parent="margin_container/v_box_container"]
+[node name="title" type="Label" parent="margin/root"]
 layout_mode = 2
 theme_override_fonts/font = ExtResource("3_2o76q")
-theme_override_font_sizes/font_size = 240
+theme_override_font_sizes/font_size = 200
 text = "Relic Runners"
 horizontal_alignment = 1
 
-[node name="margin_container" type="MarginContainer" parent="margin_container/v_box_container"]
+[node name="columns" type="HBoxContainer" parent="margin/root"]
 layout_mode = 2
-theme_override_constants/margin_left = 640
-theme_override_constants/margin_top = 0
-theme_override_constants/margin_right = 640
+size_flags_vertical = 3
+theme_override_constants/separation = 96
 
-[node name="v_box_container" type="VBoxContainer" parent="margin_container/v_box_container/margin_container"]
-layout_mode = 2
-theme_override_constants/separation = 64
-alignment = 1
-
-[node name="h_box_container" type="HBoxContainer" parent="margin_container/v_box_container/margin_container/v_box_container"]
-layout_mode = 2
-theme_override_constants/separation = 128
-
-[node name="host_public_button" type="Button" parent="margin_container/v_box_container/margin_container/v_box_container/h_box_container"]
-custom_minimum_size = Vector2(1000, 234)
+[node name="host_col" type="VBoxContainer" parent="margin/root/columns"]
 layout_mode = 2
 size_flags_horizontal = 3
-text = "Host Public"
+theme_override_constants/separation = 28
 
-[node name="host_private_button" type="Button" parent="margin_container/v_box_container/margin_container/v_box_container/h_box_container"]
-custom_minimum_size = Vector2(1000, 234)
+[node name="host_header" type="Label" parent="margin/root/columns/host_col"]
 layout_mode = 2
-size_flags_horizontal = 3
-text = "Host Private"
+theme_override_font_sizes/font_size = 72
+text = "Host a Game"
+horizontal_alignment = 1
 
-[node name="h_box_container2" type="HBoxContainer" parent="margin_container/v_box_container/margin_container/v_box_container"]
+[node name="host_public_button" type="Button" parent="margin/root/columns/host_col"]
+custom_minimum_size = Vector2(0, 200)
 layout_mode = 2
-theme_override_constants/separation = 128
+text = "Host Public Game"
 
-[node name="private_host_name_line_edit" type="LineEdit" parent="margin_container/v_box_container/margin_container/v_box_container/h_box_container2"]
-custom_minimum_size = Vector2(1000, 0)
+[node name="host_or" type="Label" parent="margin/root/columns/host_col"]
 layout_mode = 2
-placeholder_text = "Private Host Name"
+theme_override_colors/font_color = Color(0.65, 0.65, 0.7, 1)
+text = "— or host a private game —"
+horizontal_alignment = 1
+
+[node name="host_name_edit" type="LineEdit" parent="margin/root/columns/host_col"]
+custom_minimum_size = Vector2(0, 120)
+layout_mode = 2
+placeholder_text = "Server Name"
 alignment = 1
 
-[node name="private_host_password_line_edit" type="LineEdit" parent="margin_container/v_box_container/margin_container/v_box_container/h_box_container2"]
-custom_minimum_size = Vector2(1000, 0)
+[node name="host_password_edit" type="LineEdit" parent="margin/root/columns/host_col"]
+custom_minimum_size = Vector2(0, 120)
 layout_mode = 2
-placeholder_text = "Private Host Password"
+placeholder_text = "Password"
 alignment = 1
+secret = true
 
-[node name="host_button" type="Button" parent="margin_container/v_box_container/margin_container/v_box_container"]
-visible = false
-custom_minimum_size = Vector2(0, 234)
+[node name="host_private_button" type="Button" parent="margin/root/columns/host_col"]
+custom_minimum_size = Vector2(0, 200)
+layout_mode = 2
+text = "Host Private Game"
+
+[node name="host_spacer" type="Control" parent="margin/root/columns/host_col"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="join_col" type="VBoxContainer" parent="margin/root/columns"]
 layout_mode = 2
 size_flags_horizontal = 3
-text = "Host Game"
+theme_override_constants/separation = 28
 
-[node name="v_box_container" type="VBoxContainer" parent="margin_container/v_box_container/margin_container/v_box_container"]
+[node name="join_header" type="Label" parent="margin/root/columns/join_col"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 72
+text = "Join a Game"
+horizontal_alignment = 1
+
+[node name="public_row" type="HBoxContainer" parent="margin/root/columns/join_col"]
 layout_mode = 2
 theme_override_constants/separation = 32
 
-[node name="label" type="Label" parent="margin_container/v_box_container/margin_container/v_box_container/v_box_container"]
+[node name="public_label" type="Label" parent="margin/root/columns/join_col/public_row"]
 layout_mode = 2
-text = "Join Game"
+size_flags_horizontal = 3
+text = "Public Games"
+vertical_alignment = 1
+
+[node name="refresh_button" type="Button" parent="margin/root/columns/join_col/public_row"]
+custom_minimum_size = Vector2(0, 120)
+layout_mode = 2
+text = "Refresh"
+
+[node name="server_list_background" type="PanelContainer" parent="margin/root/columns/join_col"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_serverlist")
+
+[node name="scroll" type="ScrollContainer" parent="margin/root/columns/join_col/server_list_background"]
+layout_mode = 2
+
+[node name="lobby_v_box" type="VBoxContainer" parent="margin/root/columns/join_col/server_list_background/scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 24
+
+[node name="join_or" type="Label" parent="margin/root/columns/join_col"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.65, 0.65, 0.7, 1)
+text = "— or join a private game —"
 horizontal_alignment = 1
 
-[node name="refresh_button" type="Button" parent="margin_container/v_box_container/margin_container/v_box_container/v_box_container"]
+[node name="join_name_edit" type="LineEdit" parent="margin/root/columns/join_col"]
+custom_minimum_size = Vector2(0, 120)
 layout_mode = 2
-text = "Refresh List"
+placeholder_text = "Server Name"
+alignment = 1
 
-[node name="server_list_background" type="ColorRect" parent="margin_container/v_box_container"]
+[node name="join_password_edit" type="LineEdit" parent="margin/root/columns/join_col"]
+custom_minimum_size = Vector2(0, 120)
 layout_mode = 2
-size_flags_vertical = 3
-color = Color(0.10747976, 0.10747973, 0.10747973, 1)
+placeholder_text = "Password"
+alignment = 1
+secret = true
 
-[node name="margin_container2" type="MarginContainer" parent="margin_container/v_box_container/server_list_background"]
-layout_mode = 0
-offset_right = 3200.0
-offset_bottom = 866.0
-size_flags_vertical = 3
-theme_override_constants/margin_left = 32
-theme_override_constants/margin_top = 32
-theme_override_constants/margin_right = 32
-theme_override_constants/margin_bottom = 32
-
-[node name="scroll_container" type="ScrollContainer" parent="margin_container/v_box_container/server_list_background/margin_container2"]
+[node name="join_private_button" type="Button" parent="margin/root/columns/join_col"]
+custom_minimum_size = Vector2(0, 200)
 layout_mode = 2
-size_flags_vertical = 3
+text = "Join Private Game"
 
-[node name="lobby_v_box" type="VBoxContainer" parent="margin_container/v_box_container/server_list_background/margin_container2/scroll_container"]
+[node name="status_label" type="Label" parent="margin/root"]
 layout_mode = 2
-theme_override_constants/separation = 64
-
-[node name="join_private_button" type="Button" parent="."]
-layout_mode = 0
-offset_left = 3184.0
-offset_top = 704.0
-offset_right = 3653.0
-offset_bottom = 827.0
-text = "Join Private"
-
-[connection signal="pressed" from="margin_container/v_box_container/margin_container/v_box_container/h_box_container/host_public_button" to="." method="_on_host_public_button_pressed"]
-[connection signal="pressed" from="margin_container/v_box_container/margin_container/v_box_container/h_box_container/host_private_button" to="." method="_on_host_private_button_pressed"]
-[connection signal="pressed" from="margin_container/v_box_container/margin_container/v_box_container/host_button" to="." method="_on_host_button_pressed"]
-[connection signal="pressed" from="margin_container/v_box_container/margin_container/v_box_container/v_box_container/refresh_button" to="." method="_on_refresh_button_pressed"]
+theme_override_font_sizes/font_size = 44
+theme_override_colors/font_color = Color(1, 0.85, 0.5, 1)
+text = ""
+horizontal_alignment = 1

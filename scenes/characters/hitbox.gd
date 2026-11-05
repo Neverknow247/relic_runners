@@ -10,16 +10,31 @@ class_name Hitbox
 var caster_id: int = 0
 var attacker_weapon: String = ""
 var attacker_element: String = ""
-# Set at spawn from a crit roll made once by the caster (see spell_data.gd's
-# roll_crit()) and transmitted through the spawn RPC — never re-rolled here,
-# so every peer that reads this agrees on the same result.
+# The attacker's Crit Rate / Crit Damage stats, carried here so the DEFENDER can
+# resolve crit at hit time (adding +50 each on element advantage — see each
+# _on_hurtbox_hurt). Crit is no longer rolled at cast; it's resolved per-hit on the
+# defender's authority, so all peers agree via the defender's damage-number broadcast.
+var attacker_crit_rate: float = 0.0
+var attacker_crit_damage: float = 0.0
+# Legacy field, no longer the source of truth (crit is resolved at the defender).
 var is_crit: bool = false
+
+# The single source of truth for "should this hitbox damage that hurtbox?" — used
+# by every damage path (this Area2D auto-hit, plus the DoT ticks in beam/rain/cone
+# and the ball's explosion, which drive damage themselves). Only ever skips the
+# caster's OWN hurtbox. (Enemies avoid hitting each other via AI — they hold fire
+# when an ally is in their firing lane, see enemy._ally_in_firing_lane — rather than
+# a bullet-level immunity, so a genuinely mis-aimed shot can still clip an ally.)
+func can_hit(hurtbox: Hurtbox) -> bool:
+	if caster_id != 0 and hurtbox.owner_id == caster_id:
+		return false
+	return true
 
 func _on_area_entered(hurtbox: Area2D) -> void:
 	if not auto_hit:
 		return
 	if not hurtbox is Hurtbox:
 		return
-	if caster_id != 0 and hurtbox.owner_id == caster_id:
+	if not can_hit(hurtbox):
 		return
 	hurtbox.take_hit(self, damage)

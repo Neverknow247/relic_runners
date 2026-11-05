@@ -87,12 +87,30 @@ func load_location_locally(zone: String, room: String, _old_zone: String = "", _
 	active_key = key
 
 const LOCATION_SPACING := 100000.0
+# Zone world-offset slots, ordered by distance from the origin (closest first). Rooms
+# load at distinct offsets so a HELD room's collision can't overlap the active one. This
+# used to be a single line — Vector2(0, idx * SPACING) — which flung high-index zones far
+# from the origin (dungeon/main at idx 6 => Y=600000). At ~600k, 32-bit float precision
+# is only ~0.06px, so move_and_slide fails to resolve wall collisions cleanly and PINS the
+# player against walls (verified live: hub at Y=0 fine, village at 300k fine, dungeon at
+# 600k stuck on every wall). A CENTERED, distance-ordered layout keeps every zone within
+# ~2 * SPACING (<= ~200k, comfortably inside the reliable range) of (0,0). SPACING stays
+# 100k (>> any level's size, so slots never overlap) and the key->slot map is fixed, so
+# all peers still agree on the offset. Extend the list if ZONE_SCENES grows past 16.
+const LOCATION_SLOTS: Array[Vector2i] = [
+	Vector2i(0, 0),
+	Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1),
+	Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1),
+	Vector2i(2, 0), Vector2i(0, 2), Vector2i(-2, 0), Vector2i(0, -2),
+	Vector2i(2, 1), Vector2i(1, 2), Vector2i(-1, 2),
+]
 
 func _location_offset(key: String) -> Vector2:
 	var idx: int = world.ZONE_SCENES.keys().find(key)
 	if idx < 0:
 		idx = 0
-	return Vector2(0, idx * LOCATION_SPACING)
+	var slot: Vector2i = LOCATION_SLOTS[idx % LOCATION_SLOTS.size()]
+	return Vector2(slot) * LOCATION_SPACING
 
 # Hides (server, someone else still there) or frees (everyone else) the room
 # currently shown as this peer's view, before a new one replaces it. Clients

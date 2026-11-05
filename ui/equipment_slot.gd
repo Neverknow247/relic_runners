@@ -16,7 +16,7 @@ var player = null
 
 # Hover tooltip (same custom-panel pattern as weapon_slot_button.gd) so equipped
 # gear shows its rolled trait + durability.
-const HOVER_DELAY := 0.5
+const HOVER_DELAY := 0.05
 var tooltip: PanelContainer
 var tooltip_label: RichTextLabel
 var tooltip_style: StyleBoxFlat
@@ -35,6 +35,22 @@ func _ready() -> void:
 	add_child(tooltip)
 	mouse_entered.connect(func(): is_hovering = true; hover_timer = 0.0)
 	mouse_exited.connect(func(): is_hovering = false; hover_timer = 0.0; tooltip.visible = false)
+	# Click = held-item grab/equip (fires on a click, not a drag — drag still unequips).
+	pressed.connect(_on_slot_click)
+
+func _iui():
+	return player.inventory_ui if player != null else null
+
+func _on_slot_click() -> void:
+	var iui = _iui()
+	if iui == null:
+		return
+	if iui.is_holding():
+		# Drop the held item onto this slot to equip it, if its type fits here.
+		if ItemData.get_equip_slot(iui.held_item.type) == _accepted_slot():
+			iui.try_place_slot(slot_type)
+	elif player.get_equipped(slot_type) != null:
+		iui.grab_from_slot(slot_type)
 
 func _process(delta: float) -> void:
 	if !is_hovering or tooltip.visible:
@@ -83,6 +99,9 @@ func refresh() -> void:
 func _get_drag_data(_at_position: Vector2) -> Variant:
 	if player == null:
 		return null
+	var iui = _iui()
+	if iui != null and iui.is_holding():
+		return null  # no native drag while an item is held
 	var item: Item = player.get_equipped(slot_type)
 	if item == null:
 		return null

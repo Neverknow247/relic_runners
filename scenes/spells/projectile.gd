@@ -32,6 +32,18 @@ func setup(_direction: Vector2, _projectile_type:= "basic"):
 	projectile_type = _projectile_type
 	rotation = direction.angle()
 
+# Bullet visual: a filled circle ringed in black so it stays readable on any tileset —
+# replaces the old ColorRect square. modulate (element/weapon color, set in setup_spell)
+# tints the WHITE fill to that color while the BLACK rim stays black (0*x=0). Drawn in
+# local space at radius 32 (matches the hitbox CircleShape2D) and scaled by the node's
+# scale (spell_data size). Circles are rotation-invariant, so the facing rotation above
+# doesn't distort them.
+const VISUAL_RADIUS := 32.0
+const OUTLINE_WIDTH := 6.0
+func _draw() -> void:
+	draw_circle(Vector2.ZERO, VISUAL_RADIUS, Color.BLACK)
+	draw_circle(Vector2.ZERO, VISUAL_RADIUS - OUTLINE_WIDTH, Color.WHITE)
+
 func _physics_process(delta: float) -> void:
 	position += direction * speed * delta
 	# Fizzle once we've travelled the cap's worth of distance. Cheap distance_to
@@ -81,6 +93,9 @@ func setup_spell(_direction: Vector2, _spell_data: Dictionary, caster_id: int = 
 	hitbox.auto_hit = spell_data.get("auto_hit", true)
 	hitbox.attacker_weapon = spell_data["weapon"]
 	hitbox.attacker_element = spell_data["element"]
+	# The attacker's crit stats ride along so the DEFENDER resolves crit at hit time.
+	hitbox.attacker_crit_rate = spell_data.get("attacker_crit_rate", 0.0)
+	hitbox.attacker_crit_damage = spell_data.get("attacker_crit_damage", 0.0)
 	hitbox.is_crit = crit
 	# Free after the form's ACTUAL lifetime. Started here (not in _ready) because
 	# lifetime is only known once setup_spell runs — the stationary pierce forms
@@ -93,8 +108,9 @@ func _on_visible_on_screen_notifier_2d_screen_exited() -> void:
 	queue_free()
 
 func _on_hitbox_area_entered(area: Area2D) -> void:
-	# Never react to the caster's own hurtbox.
-	if area is Hurtbox and hitbox.caster_id != 0 and area.owner_id == hitbox.caster_id:
+	# Pass over anything this projectile can't damage — the caster's own hurtbox,
+	# and allied enemies (so an enemy bullet doesn't die on an enemy in the way).
+	if area is Hurtbox and not hitbox.can_hit(area):
 		return
 	# Piercing forms (AoE zones, wedges, beams) pass through hurtboxes instead
 	# of being consumed by the first one they touch.

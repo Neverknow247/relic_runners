@@ -26,7 +26,7 @@ func is_area_free(x: int, y: int, w: int, h: int, ignore_instance_id := "") -> b
 		var other: Item = entry["item"]
 		if ignore_instance_id != "" and other.instance_id == ignore_instance_id:
 			continue
-		var other_footprint := ItemData.get_footprint(other.type)
+		var other_footprint := other.footprint()
 		if _rects_overlap(x, y, w, h, entry["x"], entry["y"], other_footprint.x, other_footprint.y):
 			return false
 	return true
@@ -42,8 +42,19 @@ func find_free_position(w: int, h: int) -> Vector2i:
 	return Vector2i(-1, -1)
 
 func can_place_at(item: Item, x: int, y: int) -> bool:
-	var footprint := ItemData.get_footprint(item.type)
+	var footprint := item.footprint()
 	return is_area_free(x, y, footprint.x, footprint.y, item.instance_id)
+
+# Placed items whose footprint overlaps the region (x,y,w,h). Used by the held-item
+# system to decide whether a click-drop onto occupied cells can SWAP (exactly one
+# item in the way) or must be rejected (several).
+func overlapping_items(x: int, y: int, w: int, h: int) -> Array:
+	var result: Array = []
+	for entry in placements:
+		var fp: Vector2i = entry["item"].footprint()
+		if _rects_overlap(x, y, w, h, entry["x"], entry["y"], fp.x, fp.y):
+			result.append(entry["item"])
+	return result
 
 func place_item(item: Item, x: int, y: int) -> bool:
 	if !can_place_at(item, x, y):
@@ -55,7 +66,7 @@ func move_item(instance_id: String, new_x: int, new_y: int) -> bool:
 	for entry in placements:
 		if entry["item"].instance_id != instance_id:
 			continue
-		var footprint := ItemData.get_footprint(entry["item"].type)
+		var footprint: Vector2i = entry["item"].footprint()
 		if !is_area_free(new_x, new_y, footprint.x, footprint.y, instance_id):
 			return false
 		entry["x"] = new_x
@@ -121,15 +132,15 @@ func try_stack_or_place(item: Item) -> bool:
 			existing.quantity += transfer
 			item.quantity -= transfer
 		while item.quantity > 0:
-			var footprint := ItemData.get_footprint(item.type)
-			var pos := find_free_position(footprint.x, footprint.y)
-			if pos == Vector2i(-1, -1):
+			var stack_footprint := item.footprint()
+			var stack_pos := find_free_position(stack_footprint.x, stack_footprint.y)
+			if stack_pos == Vector2i(-1, -1):
 				return false
 			var place_qty: int = min(item.quantity, max_stack)
-			place_item(Item.new(item.type, place_qty), pos.x, pos.y)
+			place_item(Item.new(item.type, place_qty), stack_pos.x, stack_pos.y)
 			item.quantity -= place_qty
 		return true
-	var footprint := ItemData.get_footprint(item.type)
+	var footprint := item.footprint()
 	var pos := find_free_position(footprint.x, footprint.y)
 	if pos == Vector2i(-1, -1):
 		return false

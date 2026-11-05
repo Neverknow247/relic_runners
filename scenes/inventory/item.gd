@@ -19,8 +19,23 @@ var rarity := "common"
 var attributes: Array = []
 var durability := 0.0
 var max_durability := 0.0
+# Flat stat bonuses this gear grants while equipped+unbroken (stat name -> amount),
+# summed by player.gd's _gear_stat_sum(). Empty on everything today — the hook the
+# future gear-generation pass will populate (Attack/Defense/Crit Rate/Crit Damage).
+var stats: Dictionary = {}
+# Grid rotation: when true the footprint is transposed (WxH -> HxW) for placement
+# and drawing. Meaningful only for non-square items. Toggled while an item is held
+# (inventory_ui, R key); persisted so a rotated placement survives save/load.
+var rotated := false
 
 const GEAR_MAX_DURABILITY := 100.0
+
+# Footprint accounting for rotation. EVERYTHING that places or draws an ITEM should
+# use this instead of ItemData.get_footprint(type), so rotated items occupy/hit-test
+# their transposed dimensions.
+func footprint() -> Vector2i:
+	var fp := ItemData.get_footprint(type)
+	return Vector2i(fp.y, fp.x) if rotated else fp
 
 func _init(_type := "scrap", _quantity := 1) -> void:
 	type = _type
@@ -30,17 +45,20 @@ func _init(_type := "scrap", _quantity := 1) -> void:
 # Factory that also attaches a fresh Weapon for weapon-type items (and keeps
 # instance_id in sync with it) — the constructor itself stays plain/generic
 # since only 3 of the many item types need this.
-static func create(_type := "scrap", _quantity := 1) -> Item:
+static func create(_type := "scrap", _quantity := 1, _rarity := "common") -> Item:
 	var item := Item.new(_type, _quantity)
 	if ItemData.get_equip_slot(_type) == "weapon":
-		item.weapon = Weapon.new(_type)
+		item.weapon = Weapon.new(_type, _rarity)
 		item.instance_id = item.weapon.instance_id
 	elif ItemData.is_gear(_type):
-		# Fresh gear: rarity-many rolled traits, full durability. (Looted gear
-		# overrides durability to a worn value afterward — see world_loot.gd.)
+		# Fresh gear: rarity-many rolled traits + rarity-rolled numeric stats (common
+		# = none), full durability. (Looted gear overrides durability to a worn value
+		# afterward — see world_loot.gd.)
+		item.rarity = _rarity
 		item.attributes = ItemData.roll_gear_attributes(
-			ItemData.get_equip_slot(_type), ItemData.rarity_gear_traits(item.rarity)
+			ItemData.get_equip_slot(_type), ItemData.rarity_gear_traits(_rarity)
 		)
+		item.stats = ItemData.roll_gear_stats(_rarity)
 		item.max_durability = GEAR_MAX_DURABILITY
 		item.durability = GEAR_MAX_DURABILITY
 	return item
@@ -54,6 +72,10 @@ func to_dict() -> Dictionary:
 		data["attributes"] = attributes
 		data["durability"] = durability
 		data["max_durability"] = max_durability
+	if not stats.is_empty():
+		data["stats"] = stats
+	if rotated:
+		data["rotated"] = true
 	return data
 
 static func from_dict(data: Dictionary) -> Item:
@@ -69,4 +91,6 @@ static func from_dict(data: Dictionary) -> Item:
 		item.attributes = [data["attribute"]]
 	item.durability = data.get("durability", 0.0)
 	item.max_durability = data.get("max_durability", 0.0)
+	item.stats = data.get("stats", {})
+	item.rotated = data.get("rotated", false)
 	return item
