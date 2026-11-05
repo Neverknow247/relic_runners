@@ -32,17 +32,40 @@ func setup(_direction: Vector2, _projectile_type:= "basic"):
 	projectile_type = _projectile_type
 	rotation = direction.angle()
 
-# Bullet visual: a filled circle ringed in black so it stays readable on any tileset —
-# replaces the old ColorRect square. modulate (element/weapon color, set in setup_spell)
-# tints the WHITE fill to that color while the BLACK rim stays black (0*x=0). Drawn in
-# local space at radius 32 (matches the hitbox CircleShape2D) and scaled by the node's
-# scale (spell_data size). Circles are rotation-invariant, so the facing rotation above
-# doesn't distort them.
+# Bullet visuals (the hitbox stays the radius-32 circle regardless). Drawn in local
+# space, scaled by the node's scale (spell_data size) and rotated to face travel.
+#  - Stationary zones (rain/beam/burst/cone, speed 0): the original black-ringed
+#    circle, tinted by modulate.
+#  - ENEMY shots: a dark-rimmed arrowhead diamond, element-coloured, white-hot core,
+#    so hostile fire never looks like yours, even in a matching element.
+#  - PLAYER shots: a black-outlined streak, tinted by modulate.
 const VISUAL_RADIUS := 32.0
 const OUTLINE_WIDTH := 6.0
+var _enemy_shot := false
+var _tint := Color.WHITE
+
 func _draw() -> void:
-	draw_circle(Vector2.ZERO, VISUAL_RADIUS, Color.BLACK)
-	draw_circle(Vector2.ZERO, VISUAL_RADIUS - OUTLINE_WIDTH, Color.WHITE)
+	if speed <= 0.0:
+		draw_circle(Vector2.ZERO, VISUAL_RADIUS, Color.BLACK)
+		draw_circle(Vector2.ZERO, VISUAL_RADIUS - OUTLINE_WIDTH, Color.WHITE)
+	elif _enemy_shot:
+		var r := VISUAL_RADIUS + 8.0
+		draw_colored_polygon(_diamond(r * 1.35, r), Color(0.06, 0.0, 0.04))
+		draw_colored_polygon(_diamond(r * 1.1, r * 0.78), _tint)
+		draw_circle(Vector2.ZERO, r * 0.34, _tint.lerp(Color.WHITE, 0.8))
+	else:
+		_draw_streak(VISUAL_RADIUS * 1.15, VISUAL_RADIUS * 0.62, Color.BLACK)
+		_draw_streak(VISUAL_RADIUS * 1.15 - OUTLINE_WIDTH, VISUAL_RADIUS * 0.62 - OUTLINE_WIDTH, Color.WHITE)
+
+# A diamond pointing along +x (travel direction): long axis `length`, half-width `w`.
+func _diamond(length: float, w: float) -> PackedVector2Array:
+	return PackedVector2Array([Vector2(length, 0), Vector2(0, w), Vector2(-length * 0.75, 0), Vector2(0, -w)])
+
+# A capsule along +x: half-length `half_len`, radius `r`.
+func _draw_streak(half_len: float, r: float, color: Color) -> void:
+	draw_rect(Rect2(-half_len, -r, half_len * 2.0, r * 2.0), color)
+	draw_circle(Vector2(half_len, 0), r, color)
+	draw_circle(Vector2(-half_len, 0), r, color)
 
 func _physics_process(delta: float) -> void:
 	position += direction * speed * delta
@@ -85,7 +108,12 @@ func setup_spell(_direction: Vector2, _spell_data: Dictionary, caster_id: int = 
 	damage = spell_data["damage"]
 	lifetime = spell_data["lifetime"]
 	scale = Vector2.ONE * spell_data["size"]
-	modulate = spell_data["color"]
+	_enemy_shot = spell_data.get("from_enemy", false)
+	_tint = spell_data["color"]
+	# Enemy shots draw their colours explicitly (see _draw); tinting the whole node
+	# would muddy the dark rim and the white core.
+	modulate = Color.WHITE if _enemy_shot and speed > 0.0 else spell_data["color"]
+	queue_redraw()
 	pierce = spell_data.get("pierce", false)
 	stop_on_wall = spell_data.get("stop_on_wall", true)
 	hitbox.caster_id = caster_id
@@ -115,10 +143,10 @@ func _on_hitbox_area_entered(area: Area2D) -> void:
 	# of being consumed by the first one they touch.
 	if pierce:
 		return
-	Fx.puff(get_tree(), global_position, modulate, scale.x)
+	Fx.puff(get_tree(), global_position, _tint, scale.x)
 	queue_free()
 
 func _on_hitbox_body_entered(_body: Node2D) -> void:
 	if stop_on_wall:
-		Fx.puff(get_tree(), global_position, modulate, scale.x * 0.7)
+		Fx.puff(get_tree(), global_position, _tint, scale.x * 0.7)
 		queue_free()
