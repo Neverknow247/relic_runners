@@ -256,7 +256,7 @@ func client_catch_up_waves(waves: Array, alive: Array) -> void:
 	for wave in waves:
 		if enemies_node.has_node(_wave_member_name(int(wave), 0)):
 			continue
-		_do_spawn_wave(int(wave))
+		_do_spawn_wave(int(wave), false)
 	var prefix := "portalwave_%s_" % name
 	for e in enemies_node.get_children():
 		if e is Enemy and String(e.name).begins_with(prefix) and !alive.has(String(e.name)):
@@ -276,7 +276,7 @@ func _room_enemies_node():
 # anchored to the portal. Runs on every peer with the same seed, so each ends up
 # with byte-identical enemies (matching node names) that the server then
 # replicates — exactly how enemy_spawner.gd handles the room's baked enemies.
-func _do_spawn_wave(wave: int) -> void:
+func _do_spawn_wave(wave: int, ping := true) -> void:
 	var room_key := _my_room_key()
 	var world = get_tree().get_first_node_in_group("world")
 	if world == null or room_key == "":
@@ -294,6 +294,11 @@ func _do_spawn_wave(wave: int) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = Stats.expedition_seed ^ name.hash() ^ (hash("portalwave") + wave * 2654435761)
 	var group_center := _pick_wave_center(rng, map_rid, space)
+	# Warn the players actually in this room where the wave is forming (an edge
+	# arrow + a tone). Not for catch-up re-creation of an old wave.
+	if ping and "%s/%s" % [world.my_zone, world.my_room] == room_key:
+		ThreatPing.show_at(get_tree(), group_center)
+		Sounds.play_sfx("windup", null, 0.0, 0.0)
 	# How big/nasty this wave is, ramped by how close the portal is to opening.
 	var plan := _wave_plan(wave, rng)
 	var group_size: int = plan["size"]
@@ -314,7 +319,7 @@ func _do_spawn_wave(wave: int) -> void:
 		# Per-enemy archetype + tier, off the same deterministic rng (in a fixed
 		# order so every peer rolls identical members). Set BEFORE add_child so the
 		# enemy's _ready() applies the archetype/tier preset (stats + look).
-		enemy.archetype = "pentagon" if rng.randf() < plan["pentagon_chance"] else "triangle"
+		enemy.archetype = _wave_archetype(rng, plan["progress"])
 		enemy.tier = "silver" if rng.randf() < plan["silver_chance"] else "bronze"
 		if i == 0:
 			leader = enemy
@@ -353,7 +358,32 @@ func _wave_plan(wave: int, rng: RandomNumberGenerator) -> Dictionary:
 		"size": size,
 		"pentagon_chance": pentagon_chance,
 		"silver_chance": silver_chance,
+		"progress": progress,
 	}
+
+# Wave members draw from the map's roster (MapDef.roster). Fodder (triangle,
+# circle) is always in; heavier shapes ramp in with the charge progress from the
+# opening quarter on, so early waves are swarms and the last ones hit hard.
+const WAVE_FODDER := ["triangle", "circle"]
+func _wave_archetype(rng: RandomNumberGenerator, progress: float) -> String:
+	var map := Stats.current_map()
+	var roster: Dictionary = map.roster if map != null and !map.roster.is_empty() else {"triangle": 35, "circle": 30, "pentagon": 25}
+	var ramp := clampf((progress - 0.25) / 0.75, 0.0, 1.0)
+	var weights := {}
+	var total := 0.0
+	for a in roster:
+		var w := float(roster[a]) * (1.0 if WAVE_FODDER.has(a) else ramp)
+		if w > 0.0:
+			weights[a] = w
+			total += w
+	if total <= 0.0:
+		return "triangle"
+	var roll := rng.randf() * total
+	for a in weights:
+		roll -= weights[a]
+		if roll <= 0.0:
+			return a
+	return weights.keys()[-1]
 
 # A nav-mesh point roughly WAVE_SPAWN_RADIUS from the portal in a random (seeded)
 # direction, so the group forms up off-screen. If the room's too small to get a
