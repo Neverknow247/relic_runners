@@ -76,3 +76,8 @@ func _show_day_clock(world) -> void:
 		_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.75))
 		var portal_note := "portals open" if day >= map.extract_from_day else "portals open on day %d" % map.extract_from_day
 		_label.text = "DAY %d  -  dusk in %s  -  %s" % [day, t, portal_note]
+	var lp = world.get_local_player()
+	if lp != null and "hunger" in lp:
+		var h := roundi(lp.hunger)
+		_label.text += "
+Hunger %d%s" % [h, "   STARVING" if lp.hunger < lp.STARVING else ""]

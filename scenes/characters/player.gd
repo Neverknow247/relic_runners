@@ -240,6 +240,28 @@ var _flicker_tween: Tween
 const SHOVE_COOLDOWN := 3.0
 const SHOVE_RANGE := 520.0
 var _shove_cooldown_timer := 0.0
+
+# --- Hunger (survival maps only) ---------------------------------------------
+# Drains from full to empty over HUNGER_EMPTY_SECONDS while you're on a survival
+# map. Below STARVING you move slower; at 0 you lose health until you eat. Eat
+# food items (fish for now: ItemData food_amount). Refilled when you set out.
+const HUNGER_MAX := 100.0
+const HUNGER_EMPTY_SECONDS := 1500.0
+const STARVING := 25.0
+const STARVING_SPEED_MULT := 0.75
+const STARVE_DAMAGE_PER_SEC := 10.0
+var hunger := HUNGER_MAX
+
+func _tick_hunger(delta: float) -> void:
+	var world = get_tree().get_first_node_in_group("world")
+	var active: bool = world != null and world.has_method("survival_active") and world.survival_active()
+	if !active:
+		max_velocity = default_max_velocity
+		return
+	hunger = maxf(hunger - HUNGER_MAX / HUNGER_EMPTY_SECONDS * delta, 0.0)
+	max_velocity = default_max_velocity * (STARVING_SPEED_MULT if hunger < STARVING else 1.0)
+	if hunger <= 0.0:
+		take_damage(STARVE_DAMAGE_PER_SEC * delta)
 const ControlsOverlay := preload("res://ui/controls_overlay.gd")
 const RaidTimerUI := preload("res://ui/raid_timer_ui.gd")
 const MapBoardUI := preload("res://ui/map_board_ui.gd")
@@ -415,6 +437,7 @@ func hide_kit_prompt() -> void:
 
 # Applied at the moment of travel (world.gd's leaving-hub edge), not on click.
 func apply_pending_kit() -> void:
+	hunger = HUNGER_MAX
 	if pending_kit == "starter":
 		apply_starter_kit()
 	elif pending_kit == "custom":
@@ -958,6 +981,8 @@ func _apply_item_effect(item: Item, potency := 1.0) -> void:
 	# the held weapon (or both weapons if mana_both_weapons). Lets new consumables
 	# work by just declaring those fields in ItemData, no new cases here.
 	var def := ItemData.get_def(item.type)
+	if def.has("food_amount"):
+		hunger = clampf(hunger + def["food_amount"] * potency, 0.0, HUNGER_MAX)
 	if def.has("heal_amount"):
 		health = clamp(health + def["heal_amount"] * potency, 0.0, max_health)
 	if def.has("mana_restore"):
@@ -2308,6 +2333,7 @@ func _physics_process(delta):
 		_roll_cooldown_timer = maxf(_roll_cooldown_timer - delta, 0.0)
 		_tick_spell_cooldowns(delta)
 		_shove_cooldown_timer = maxf(_shove_cooldown_timer - delta, 0.0)
+		_tick_hunger(delta)
 		_iframe_timer = maxf(_iframe_timer - delta, 0.0)
 		# Any open menu (inventory OR the esc/pause menu) arms attack-suppression so the
 		# click that operates/closes it can't leak into a shot the frame it clears —

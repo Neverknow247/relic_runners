@@ -170,10 +170,12 @@ const ITEMS := {
 	# and ends; mana_eel doubles as a mana consumable, and river_pearl is a pure
 	# trinket. Rarity climbs with the catch (and the reel minigame's difficulty).
 	"minnow": {
+		"usable": true, "food_amount": 12.0,
 		"display_name": "Minnow", "stackable": true, "max_stack": 20,
 		"footprint": Vector2i(1, 1), "color": Color(0.6, 0.7, 0.75), "icon_label": "fi",
 	},
 	"river_bass": {
+		"usable": true, "food_amount": 25.0,
 		"display_name": "River Bass", "stackable": true, "max_stack": 20,
 		"footprint": Vector2i(1, 1), "color": Color(0.45, 0.6, 0.55), "icon_label": "fi",
 	},
@@ -182,6 +184,7 @@ const ITEMS := {
 		"footprint": Vector2i(1, 1), "color": Color(0.4, 0.32, 0.25), "icon_label": "bo",
 	},
 	"silverscale": {
+		"usable": true, "food_amount": 35.0,
 		"display_name": "Silverscale", "stackable": true, "max_stack": 20,
 		"footprint": Vector2i(1, 1), "color": Color(0.75, 0.8, 0.85), "icon_label": "fi",
 		"rarity": "uncommon",
