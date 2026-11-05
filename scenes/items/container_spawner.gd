@@ -26,7 +26,10 @@ func _ready() -> void:
 
 func _try_spawn(point: Marker2D) -> void:
 	var rng := RandomNumberGenerator.new()
-	rng.seed = Stats.expedition_seed ^ String(point.name).hash()
+	# Salt with the room scene too: every level names its markers container_1..N,
+	# so seeding by marker name alone gave identical rolls in every room/map.
+	var room_salt: String = owner.scene_file_path if owner != null else ""
+	rng.seed = Stats.expedition_seed ^ (room_salt + "/" + String(point.name)).hash()
 	if rng.randf() >= spawn_chance:
 		return
 	var ctype := _pick_type(rng)

@@ -344,8 +344,17 @@ const ITEMS := {
 	},
 }
 
+static var _warned_unknown_types := {}
+
 static func get_def(item_type: String) -> Dictionary:
-	return ITEMS.get(item_type, ITEMS["scrap"])
+	if !ITEMS.has(item_type):
+		# Still falls back to scrap so nothing crashes, but say so once: a typo in
+		# a loot table or recipe used to turn silently into scrap.
+		if !_warned_unknown_types.has(item_type):
+			_warned_unknown_types[item_type] = true
+			push_warning("ItemData: unknown item type '%s' (treated as scrap)" % item_type)
+		return ITEMS["scrap"]
+	return ITEMS[item_type]
 
 static func get_footprint(item_type: String) -> Vector2i:
 	return get_def(item_type)["footprint"]
@@ -1066,7 +1075,7 @@ static func tooltip_text(item) -> String:
 		# Numeric stats rolled by rarity (greyed out when the piece is broken, matching
 		# how _gear_stat_sum() stops applying them at 0 durability).
 		var scol := "8a8a90" if broken else "d9d98a"
-		for stat in ["attack", "defense", "health", "crit_rate", "crit_damage"]:
+		for stat in ["attack", "defense", "health", "mana", "crit_rate", "crit_damage"]:
 			if item.stats.has(stat):
 				var suffix := "%" if stat_is_percent(stat) else ""
 				out += "\n[font_size=30][color=#%s]+%d%s %s[/color][/font_size]" % [scol, roundi(item.stats[stat]), suffix, STAT_DISPLAY.get(stat, stat)]
