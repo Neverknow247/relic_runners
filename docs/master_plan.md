@@ -401,3 +401,32 @@ E3 and S3 defs + scenes; more guardians; enemy art polish (glow/outline shaders 
 **Defer (after Phase 6):** procedural generation (the hand-authored village + dungeon with per-`MapDef` profiles give 4 distinct maps from 2 scenes); E3/S3; more than one guardian; Linux/macOS export; a shared/networked stash; quests/contracts; multiple hub NPCs (one vendor board is enough).
 
 **Rules of thumb for the solo dev:** no phase longer than ~8 sessions without a playtest; nothing enters `enemy.gd`/`player.gd` directly after Phase 2 (components and Resources only); every new per-run save key goes in `save_data.run`; every per-map number goes in a `MapDef`; every enemy number goes in an `EnemyDef`; commit after every session.
+
+---
+
+## Progress log
+
+*Every item below passed the headless parse check; none has been live-playtested yet.*
+
+**Phase 0 — Safety: done** (ca6d00d … 56255f8). 0.7 (server-validated location changes) and the plaintext lobby password are deferred to Phase 2.
+
+**Phase 1 — Make it fun: done** (668e3c6 … c82d213)
+- Dodge roll (Space) with i-frames + post-hit i-frames.
+- Juice: hit flash, enemy knockback, death shatter, impact puffs, trauma screen shake (respects the Screen Shake setting), aim look-ahead.
+- Enemy bullets drawn as dark-rimmed diamonds; player shots as streaks.
+- Telegraphs: wind-up before every burst (body swell; sniper laser + locked aim + stands still), recover window after, enemies only fire from inside your screen.
+- Numbers pass (see §3 table; bullet speeds kept ≥ walk speed per designer).
+- Stratagems: per-form cooldowns, 4–15× damage, no basic fire while a spell mode is held, code tap/armed/fizzle feedback, burst clears enemy bullets, rain is a 1 s call-down.
+- Weapon basics: wand stream / orb heavy / tome 3-spread.
+- Melee shove (F), procedural placeholder SFX (`tools/gen_sfx.py`), Play Solo, controls card (F1), EFFECTIVE element-advantage numbers.
+- Skipped: charged basic (fights hold-to-autofire; needs a design call).
+
+**Phase 2 — Foundation: partly done**
+- Done: hygiene pass, `MapDef` registry (`scenes/maps/`) read by the enemy + container spawners, save hardening (atomic writes, backup ring, numeric versions), firing-lane perf, portal-wave name clash + late-joiner catch-up.
+- Deferred until Phase 1 is playtested (refactoring untested behaviour compounds risk): RoomNet, EnemyDef/FSM split, player.gd split, LOS time-slicing, ON_CHANGE sync.
+
+**Pulled forward from Phases 3–4**
+- Attack tokens (E1 2 / E2 3 per player).
+- Hexagon lobber (E2 only).
+- Raid clock (E1 25 min, E2 30 min; death at 0).
+- Map board on the expedition doors; E2 unlocks after one extraction from E1.
