@@ -135,6 +135,7 @@ const GROUP_SIZES := {
 	"triangle": [2, 3],
 	"circle": [3, 4],
 	"square": [1, 2],
+	"hexagon": [1, 2],
 }
 func _group_size_for(group_archetype: String, rng: RandomNumberGenerator) -> int:
 	var bounds: Array = GROUP_SIZES.get(group_archetype, [min_group_size, max_group_size])

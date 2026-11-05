@@ -29,6 +29,8 @@ func _draw() -> void:
 			_draw_ngon(3)
 		"pentagon":
 			_draw_ngon(5)
+		"hexagon":
+			_draw_ngon(6)
 		_:  # "square" (and any unknown archetype) — axis-aligned box
 			var rect := Rect2(-half_size, -half_size, half_size * 2.0, half_size * 2.0)
 			draw_rect(rect, fill_color, true)

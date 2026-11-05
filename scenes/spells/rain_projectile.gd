@@ -85,6 +85,10 @@ func _apply_tick() -> void:
 			continue
 		if not hitbox.can_hit(area):
 			continue
+		# An enemy's lobbed zone only hurts players, not the packmates it's
+		# standing among.
+		if not hitbox.from_player and not area.is_player:
+			continue
 		# Crit is resolved per tick at the defender's _on_hurtbox_hurt (it reads the
 		# attacker crit stats off the hitbox), so just pass the base tick damage.
 		area.take_hit(hitbox, tick_base)

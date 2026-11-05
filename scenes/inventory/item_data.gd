@@ -691,6 +691,24 @@ const LOOT_TABLES := {
 			{"src": "@crystal", "chance": 50},
 		],
 	},
+	"hexagon": {
+		"bronze": [
+			{"src": "scrap", "chance": 50},
+			{"src": "mana_potions", "chance": 18},
+			{"src": "@crystal", "chance": 15},
+		],
+		"silver": [
+			{"src": "scrap", "chance": 75},
+			{"src": "mana_potions", "chance": 22},
+			{"src": "potions", "chance": 14},
+			{"src": "@crystal", "chance": 28},
+		],
+		"gold": [
+			{"src": "gold", "chance": 100, "qty": [8, 18]},
+			{"src": "potions", "chance": 40},
+			{"src": "@crystal", "chance": 55},
+		],
+	},
 	"square": {
 		"bronze": [
 			{"src": "scrap", "chance": 55},

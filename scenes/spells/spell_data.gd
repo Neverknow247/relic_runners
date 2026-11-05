@@ -392,8 +392,10 @@ func build_spell_data(weapon: String, element: String, form: String, rarity: Str
 	var proj_lifetime: float
 	if is_enemy:
 		proj_speed = ENEMY_BASE_SPEED if form_moving else 0.0
-		proj_size = ENEMY_BASE_SIZE
-		proj_lifetime = ENEMY_BASE_LIFETIME if form_moving else BASE_LIFETIME
+		# Moving enemy shots stay flat-sized; a stationary zone (a lobbed rain) keeps
+		# its form's area and a short life, or it would be a tiny 2 s dot.
+		proj_size = ENEMY_BASE_SIZE if form_moving else BASE_SIZE * form_data.get("size", 1.0)
+		proj_lifetime = ENEMY_BASE_LIFETIME if form_moving else minf(BASE_LIFETIME * form_data.get("lifetime", 1.0), 3.0)
 	else:
 		proj_speed = BASE_SPEED * weapon_data["speed"] * element_data["speed"] * form_data["speed"]
 		proj_size = BASE_SIZE * weapon_data.get("size", 1.0) * form_data.get("size", 1.0)

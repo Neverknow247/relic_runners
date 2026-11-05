@@ -119,6 +119,19 @@ const ARCHETYPES := {
 		"windup_sec": 0.7, "aim_lock": true, "windup_root": true,
 		"body_size": 60.0,
 	},
+	"hexagon": {
+		# Lobber / area denial (new, E2+): calls a rain zone down on you (1 s target
+		# marker before it lands, see rain_projectile.gd), three in a scattered burst.
+		# Can't hit what it can't see; weak up close, so close the distance.
+		"move_speed": 550.0, "strafe_speed": 350.0,
+		"preferred_range": 1300.0, "cast_range": 2400.0,
+		"max_health": 500.0, "attack": 120.0, "attacks_per_sec": [2.5, 2.5],
+		"burst_count": 3, "burst_cooldown": [3.5, 4.5],
+		"pellets": 1, "spread_deg": 0.0, "bullet_speed": 1100.0, "aim_variance_deg": 0.0,
+		"attack_form": "rain", "lob_scatter": 260.0,
+		"windup_sec": 0.4,
+		"body_size": 62.0,
+	},
 }
 # Elites are a beefier, gold-tinted, bigger version of any archetype with better loot.
 const TIERS := {
@@ -1747,7 +1760,9 @@ func cast_sequence() -> void:
 	reset_casting()
 
 func cast_default() -> void:
-	fire_spell(attacker_weapon, attacker_element, "default")
+	# An archetype can swap its basic attack for another form (hexagon lobs rain).
+	var form: String = ARCHETYPES.get(archetype, {}).get("attack_form", "default")
+	fire_spell(attacker_weapon, attacker_element, form)
 
 # Applies the archetype's stat preset + the tier's multipliers/visual. Runs on every
 # peer in _ready (deterministic spawner pick → all peers agree), overriding the
@@ -1789,6 +1804,11 @@ func fire_spell(weapon: String, element: String, form: String) -> void:
 	if spell_data.get("targeted", false):
 		# Targeted forms (rain) land ON the target's spot, clamped to the form's
 		# range — no lead, spread, or fan. rain_projectile.gd LOS-clamps to a wall.
+		# Later shots in a lobber's burst scatter around the target, so a burst
+		# covers ground instead of stacking on one spot.
+		var scatter: float = ARCHETYPES.get(archetype, {}).get("lob_scatter", 0.0)
+		if scatter > 0.0 and _burst_shots > 0:
+			aim_point += Vector2.RIGHT.rotated(randf_range(0.0, TAU)) * randf_range(scatter * 0.4, scatter)
 		var to_target := aim_point - global_position
 		var spawn_dist := minf(to_target.length(), spell_data["spawn_offset"])
 		_broadcast_spawn_projectile(weapon, element, form, to_target.normalized(), attack, crit_rate, crit_damage, spawn_dist, PackedFloat32Array([0.0]))

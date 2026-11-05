@@ -12,10 +12,11 @@ zone = "dungeon"
 room = "main"
 spawn = "random_portal"
 roster = {
-"circle": 25,
-"pentagon": 30,
-"square": 20,
-"triangle": 25
+"circle": 22,
+"hexagon": 15,
+"pentagon": 25,
+"square": 18,
+"triangle": 20
 }
 silver_chance = 0.25
 gold_chance = 0.05
