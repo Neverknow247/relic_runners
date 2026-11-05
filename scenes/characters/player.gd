@@ -233,6 +233,14 @@ var _roll_direction := Vector2.ZERO
 var _iframe_timer := 0.0
 var _flicker_tween: Tween
 
+# --- Melee shove (F) -----------------------------------------------------------
+# Close-range push: knocks enemies in front of you back and staggers them (cancels a
+# wind-up in progress), the up-close answer to a rusher or a point-blank volley.
+# The hit test runs on the server (enemy AI is server-owned); this side is cosmetic.
+const SHOVE_COOLDOWN := 3.0
+const SHOVE_RANGE := 520.0
+var _shove_cooldown_timer := 0.0
+
 var default_max_velocity = 1000
 var default_acceleration = 6000
 var friction = 6000
@@ -2282,6 +2290,7 @@ func _physics_process(delta):
 		attack_timer = max(attack_timer - delta, 0.0)
 		_roll_cooldown_timer = maxf(_roll_cooldown_timer - delta, 0.0)
 		_tick_spell_cooldowns(delta)
+		_shove_cooldown_timer = maxf(_shove_cooldown_timer - delta, 0.0)
 		_iframe_timer = maxf(_iframe_timer - delta, 0.0)
 		# Any open menu (inventory OR the esc/pause menu) arms attack-suppression so the
 		# click that operates/closes it can't leak into a shot the frame it clears —
@@ -2301,6 +2310,8 @@ func _physics_process(delta):
 			_check_revive(delta)
 			if state != roll_state and _can_start_roll():
 				_start_roll()
+			if Input.is_action_just_pressed("shove") and _shove_cooldown_timer <= 0.0 and state != roll_state:
+				_shove()
 			state.call(delta)
 	# Position/anim/rotation now replicate via the MultiplayerSynchronizer only
 	# (net_position, published in _process) — the old per-frame server_send_player_state
@@ -2428,6 +2439,17 @@ func _start_roll() -> void:
 	update_legs_rotation(_roll_direction)
 	_play_roll_visual()
 	state = roll_state
+
+func _shove() -> void:
+	_shove_cooldown_timer = SHOVE_COOLDOWN
+	var dir := aim_direction.normalized() if aim_direction != Vector2.ZERO else Vector2.RIGHT
+	Fx.puff(get_tree(), global_position + dir * SHOVE_RANGE * 0.45, Color(1, 1, 1), 2.2)
+	player_camera.add_trauma(0.15)
+	if _is_in_hub():
+		return
+	var world = get_tree().get_first_node_in_group("world")
+	if world != null and world.has_method("request_shove"):
+		world.request_shove(global_position, dir)
 
 func roll_state(delta):
 	_roll_timer -= delta

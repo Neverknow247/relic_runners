@@ -585,6 +585,17 @@ var _spawn_frame := 0
 var _knockback := Vector2.ZERO
 const KNOCKBACK_SPEED := 1400.0
 const KNOCKBACK_DECAY := 9000.0
+const SHOVE_SPEED := 4200.0
+const SHOVE_STAGGER := 0.8
+
+# Server: a player's melee shove. Big knockback plus a stagger that cancels any
+# wind-up in progress and delays the next attack.
+func apply_shove(dir: Vector2) -> void:
+	if !is_multiplayer_authority() or is_dead:
+		return
+	_knockback += dir.normalized() * SHOVE_SPEED
+	_cancel_windup()
+	cast_timer = maxf(cast_timer, SHOVE_STAGGER)
 
 func _ready() -> void:
 	_spawn_frame = Engine.get_process_frames()

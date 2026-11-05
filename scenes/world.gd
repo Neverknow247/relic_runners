@@ -868,6 +868,35 @@ func broadcast_item_claimed(pickup_id: String, item_instance_id: String, claimer
 	if claimer_id == multiplayer.get_unique_id() and players.has_node(str(claimer_id)):
 		players.get_node(str(claimer_id)).receive_claimed_item(item_dict, destination)
 
+# Melee shove (player.gd _shove): resolved on the server, which owns enemy AI.
+const SHOVE_RANGE := 520.0
+const SHOVE_CONE_DOT := 0.2
+func request_shove(origin: Vector2, dir: Vector2) -> void:
+	if multiplayer.multiplayer_peer == null:
+		return
+	if multiplayer.is_server():
+		_resolve_shove(origin, dir)
+	else:
+		server_request_shove.rpc(origin, dir)
+
+@rpc("any_peer", "call_remote", "reliable")
+func server_request_shove(origin: Vector2, dir: Vector2) -> void:
+	if !multiplayer.is_server():
+		return
+	_resolve_shove(origin, dir)
+
+func _resolve_shove(origin: Vector2, dir: Vector2) -> void:
+	var d := dir.normalized()
+	for e in get_tree().get_nodes_in_group("enemies"):
+		if !is_instance_valid(e) or e.is_dead or !e.has_method("apply_shove"):
+			continue
+		var to_e: Vector2 = e.global_position - origin
+		if to_e.length() > SHOVE_RANGE:
+			continue
+		if to_e.length() > 1.0 and to_e.normalized().dot(d) < SHOVE_CONE_DOT:
+			continue
+		e.apply_shove(to_e.normalized() if to_e.length() > 1.0 else d)
+
 func request_drop_item(world_pos: Vector2, item_dict: Dictionary) -> void:
 	if multiplayer.multiplayer_peer == null:
 		return
