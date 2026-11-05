@@ -26,6 +26,12 @@ const WALL_CONTAINER := "wall_tiles"
 @export_tool_button("Bake Nav From Floor") var _bake_action: Callable = _bake_from_floor
 ## Clears every nav tile from this layer (start over before a hand-repaint).
 @export_tool_button("Clear Nav") var _clear_action: Callable = _clear_nav
+## STEP 2, after painting/trimming: merges the painted nav tiles into ONE baked
+## navmesh (child "nav_mesh" NavigationRegion2D, saved as <scene>_navmesh.tres)
+## and turns this layer's per-cell navigation off. Per-cell nav made every enemy
+## path query search thousands of regions; the merged mesh is ~20x smaller.
+## Re-press after any repaint. The painted tiles stay as the source.
+@export_tool_button("Build Nav Mesh From Painted Tiles") var _build_mesh_action: Callable = _build_nav_mesh
 
 func _bake_from_floor() -> void:
 	if not Engine.is_editor_hint():
@@ -63,6 +69,30 @@ func _bake_from_floor() -> void:
 	for cell: Vector2i in walkable.keys():
 		set_cell(cell, NAV_SOURCE_ID, NAV_ATLAS)
 	print("nav_baker: baked ", walkable.size(), " walkable cells — now trim by hand and save.")
+
+func _build_nav_mesh() -> void:
+	if not Engine.is_editor_hint():
+		return
+	var poly := NavMeshBuilder.build(self)
+	if poly == null:
+		push_warning("nav_baker: no painted nav tiles; nothing built")
+		return
+	var scene_path: String = owner.scene_file_path if owner != null else ""
+	if scene_path == "":
+		push_warning("nav_baker: save the scene first")
+		return
+	var res_path := scene_path.get_basename() + "_navmesh.tres"
+	ResourceSaver.save(poly, res_path)
+	poly = load(res_path)
+	var region: NavigationRegion2D = get_node_or_null("nav_mesh")
+	if region == null:
+		region = NavigationRegion2D.new()
+		region.name = "nav_mesh"
+		add_child(region)
+		region.owner = owner
+	region.navigation_polygon = poly
+	navigation_enabled = false
+	print("nav_baker: built %s (%d polygons from %d cells); save the scene." % [res_path, poly.get_polygon_count(), get_used_cells().size()])
 
 func _clear_nav() -> void:
 	if not Engine.is_editor_hint():
