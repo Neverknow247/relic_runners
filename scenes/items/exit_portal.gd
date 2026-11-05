@@ -99,6 +99,7 @@ func _process(delta: float) -> void:
 			var world = get_tree().get_first_node_in_group("world")
 			if world:
 				_record_extraction()
+				world.mark_run_extracted()
 				world.request_location_changes("hub", "main", "default")
 		_:
 			pass  # CHARGING, DISABLED, or SPAWN_POINT — interact does nothing

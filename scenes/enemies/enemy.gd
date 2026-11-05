@@ -2094,6 +2094,7 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 		var aggro_world = _get_world()
 		if aggro_world != null and aggro_world.players != null and aggro_world.players.has_node(str(hitbox.caster_id)):
 			_aggro[hitbox.caster_id] = _aggro.get(hitbox.caster_id, 0.0) + final_damage
+			_last_attacker_peer = hitbox.caster_id
 	_emit_damage_number(final_damage, is_crit, advantage)
 	# Small shove away from the hit (direct hits only; DoT ticks would jitter).
 	if hitbox != null and is_instance_valid(hitbox) and hitbox.auto_hit:
@@ -2157,6 +2158,9 @@ func take_damage(amount: float) -> void:
 	if health <= 0.0:
 		die()
 
+# Peer id of the player who last damaged us (server), credited with the kill.
+var _last_attacker_peer := 0
+
 func die() -> void:
 	# Rolled/broadcast here rather than in the is_dead setter below (despite
 	# the TODO comment sitting right there) — that setter body runs once
@@ -2174,4 +2178,5 @@ func die() -> void:
 		# (crystal_<element>), which fits the elemental theme.
 		var context := {"element": attacker_element}
 		world.spawn_loot(global_position, ItemData.get_loot_table(archetype, tier), context)
+		world.credit_kill(_last_attacker_peer)
 	is_dead = true

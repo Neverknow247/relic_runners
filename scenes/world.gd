@@ -179,6 +179,28 @@ var _pre_run_loadout: Dictionary = {}
 func clear_pre_run_loadout() -> void:
 	_pre_run_loadout.clear()
 
+# --- Per-run tracking for the post-run summary (local to each peer) ----------
+var _run_start_msec := 0
+var _run_kills := 0
+var _run_extracted := false
+var _run_map_name := ""
+
+func mark_run_extracted() -> void:
+	_run_extracted = true
+
+# Server: an enemy died; tell the player who landed the last hit.
+func credit_kill(peer_id: int) -> void:
+	if !multiplayer.is_server() or peer_id <= 0:
+		return
+	if peer_id == multiplayer.get_unique_id():
+		_run_kills += 1
+	elif player_locations.has(peer_id):
+		client_credit_kill.rpc_id(peer_id)
+
+@rpc("authority", "call_remote", "reliable")
+func client_credit_kill() -> void:
+	_run_kills += 1
+
 # --- Raid clock (extraction maps) --------------------------------------------
 # MapDef.duration_sec. The server tells every peer the remaining time at launch;
 # each counts down on its own clock (the HUD reads raid_seconds_left). When the
@@ -453,6 +475,11 @@ func client_change_location(zone: String, room: String, spawn_point:= "default")
 	my_room = room
 	load_location_locally(zone, room, old_zone, old_room)
 	if leaving_hub:
+		_run_start_msec = Time.get_ticks_msec()
+		_run_kills = 0
+		_run_extracted = false
+		var run_map := Stats.current_map()
+		_run_map_name = run_map.display_name if run_map != null else zone.capitalize()
 		# Apply the kit this player picked at the door — deferred until now (the
 		# actual moment of travel) so a cancelled start never reshuffled anyone.
 		# Must run BEFORE the disk wipe below: apply_starter_kit() banks into the
@@ -499,6 +526,13 @@ func client_change_location(zone: String, room: String, spawn_point:= "default")
 	if arriving_in_hub:
 		_pre_run_loadout.clear()
 		Stats.current_map_id = ""
+		if _run_start_msec > 0:
+			var lp_summary = get_local_player()
+			var carried := 0
+			if lp_summary != null and _run_extracted:
+				carried = lp_summary.inventory.placements.size()
+			RunSummaryUI.show_summary(self, _run_extracted, _run_map_name, (Time.get_ticks_msec() - _run_start_msec) / 1000.0, _run_kills, carried)
+			_run_start_msec = 0
 		var local_player = get_local_player()
 		if local_player != null:
 			# Covers returning through an exit portal, not just dying (death
