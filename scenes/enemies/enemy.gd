@@ -990,8 +990,14 @@ func _ally_in_firing_lane(aim_point: Vector2) -> bool:
 	# An ally clips the shot if its body center is within its radius + the bullet's
 	# half-width of the line.
 	var clearance := BODY_RADIUS + ENEMY_LANE_CLEARANCE
-	for other in get_tree().get_nodes_in_group("enemies"):
-		if other == self or not is_instance_valid(other):
+	# Only enemies in OUR room can be in our lane: room spawns and portal waves are
+	# both children of the room's `enemies` node, so scan siblings instead of the
+	# global group (which also held every enemy in every held room, per shot).
+	var parent_node := get_parent()
+	if parent_node == null:
+		return false
+	for other in parent_node.get_children():
+		if other == self or not (other is Enemy) or other.is_dead:
 			continue
 		var to_other: Vector2 = other.global_position - origin
 		var along := to_other.dot(lane_dir)
