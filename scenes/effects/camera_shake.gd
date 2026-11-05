@@ -19,6 +19,9 @@ var _look := Vector2.ZERO
 var _noise_t := 0.0
 
 func add_trauma(amount: float) -> void:
+	# Respects the Screen Shake setting (Utils.screen_shake).
+	if !Utils.screen_shake:
+		return
 	trauma = clampf(trauma + amount, 0.0, 1.0)
 
 func _process(delta: float) -> void:

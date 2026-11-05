@@ -48,6 +48,10 @@ var new_save_data = {
 	},
 	"weapons" : [],
 	"quick_slots" : [],
+	# Hub-side storage (player.gd reads these with .get fallbacks; listed here so
+	# the defaults are explicit and update_data back-fills them on old saves).
+	"overflow" : {},
+	"materials" : {},
 }
 
 var save_data = return_new_save_data()

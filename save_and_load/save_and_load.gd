@@ -4,7 +4,11 @@ var stats = Stats
 var utils = Utils
 
 var dev_mode = stats.dev_mode
-var backup_num = 10
+# Rotating backup slot (1..BACKUP_SLOTS) the NEXT backup write goes to. Set in _ready
+# to the slot after the newest existing backup, so a fresh launch doesn't keep
+# overwriting the same slot (it used to restart at 10 every launch).
+const BACKUP_SLOTS := 10
+var backup_num = 1
 
 var default_save_path
 var backup_save_path
@@ -32,6 +36,55 @@ func _ready():
 	SAVE_SETTINGS_PATH = logged_settings_path
 	SAVE_DATA_PATH = default_save_path
 	BACKUP_SAVE_DATA_PATH = backup_save_path
+	backup_num = _next_backup_slot()
+
+func _backup_path(slot: int) -> String:
+	return BACKUP_SAVE_DATA_PATH + str(slot) + ".dat"
+
+func _next_backup_slot() -> int:
+	var newest_slot := 0
+	var newest_time := -1
+	for slot in range(1, BACKUP_SLOTS + 1):
+		if FileAccess.file_exists(_backup_path(slot)):
+			var t := FileAccess.get_modified_time(_backup_path(slot))
+			if t > newest_time:
+				newest_time = t
+				newest_slot = slot
+	return (newest_slot % BACKUP_SLOTS) + 1
+
+# Numeric version compare for "0.000.036"-style strings: -1 / 0 / 1. String compare
+# broke as soon as a part outgrew its zero padding ("0.10" < "0.9" as text).
+static func compare_versions(a: String, b: String) -> int:
+	var pa := a.split(".")
+	var pb := b.split(".")
+	for i in maxi(pa.size(), pb.size()):
+		var x := int(pa[i]) if i < pa.size() else 0
+		var y := int(pb[i]) if i < pb.size() else 0
+		if x != y:
+			return -1 if x < y else 1
+	return 0
+
+# Write to a temp file, then swap it in, so a crash or power loss mid-write leaves
+# the previous good file instead of a truncated one.
+func _write_var_atomic(path: String, data) -> bool:
+	var tmp := path + ".tmp"
+	var file := FileAccess.open(tmp, FileAccess.WRITE)
+	if file == null:
+		push_error("SaveAndLoad: can't write %s (%s)" % [tmp, FileAccess.get_open_error()])
+		return false
+	file.store_var(data)
+	file.close()
+	# Try a straight replace first; if the platform refuses to rename over an
+	# existing file, remove it and retry (a crash in that tiny gap leaves the .tmp,
+	# which load_data_from_file recovers).
+	var err := DirAccess.rename_absolute(tmp, path)
+	if err != OK and FileAccess.file_exists(path):
+		DirAccess.remove_absolute(path)
+		err = DirAccess.rename_absolute(tmp, path)
+	if err != OK:
+		push_error("SaveAndLoad: can't move %s into place (%s)" % [tmp, err])
+		return false
+	return true
 
 func save_all():
 	update_save_data()
@@ -41,28 +94,27 @@ func update_save_data():
 	await SaveAndLoad.save_data_to_file(stats.save_data)
 	await SaveAndLoad.save_data_to_backup(stats.save_data)
 
-func load_data_from_file():
+func load_data_from_file() -> Variant:
+	# A save interrupted mid-swap leaves only the .tmp: recover it.
+	if not FileAccess.file_exists(SAVE_DATA_PATH) and FileAccess.file_exists(SAVE_DATA_PATH + ".tmp"):
+		DirAccess.rename_absolute(SAVE_DATA_PATH + ".tmp", SAVE_DATA_PATH)
 	if not FileAccess.file_exists(SAVE_DATA_PATH):
 		return default_save_data
 	var file = FileAccess.open(SAVE_DATA_PATH, FileAccess.READ)
-	var save_data = file.get_var()
-	if !save_data:
-		push_error("corrupted")
-		save_data = check_backups(save_data)
+	var save_data = file.get_var() if file != null else null
+	if file != null:
 		file.close()
-		return save_data
-	if str(save_data.version) <= str(default_save_data.version):
-		save_data = check_old_data(save_data)
-		file.close()
-		return save_data
-	elif str(save_data.version) > str(default_save_data.version):
-		get_tree().change_scene_to_file("res://scenes/menus/new_version_screen.tscn")
-		file.close()
-		return false
+	if !(save_data is Dictionary) or !save_data.has("version"):
+		push_error("SaveAndLoad: save file corrupted; restoring the newest backup")
+		return check_backups(save_data)
+	if compare_versions(str(save_data.version), str(default_save_data.version)) <= 0:
+		return check_old_data(save_data)
+	get_tree().change_scene_to_file("res://scenes/menus/new_version_screen.tscn")
+	return false
 
 func check_backups(save_data):
 	var versions = []
-	for i in backup_num:
+	for i in BACKUP_SLOTS:
 		if FileAccess.file_exists(BACKUP_SAVE_DATA_PATH+str(i+1)+".dat"):
 			var file = FileAccess.open(BACKUP_SAVE_DATA_PATH+str(i+1)+".dat", FileAccess.READ)
 			var data = file.get_var()
@@ -91,28 +143,24 @@ func update_data(save_data,default_data):
 	for data in default_data:
 		if !data in save_data:
 				save_data[data] = default_data[data]
-		if typeof(save_data[data]) == 27:
+		if typeof(save_data[data]) == TYPE_DICTIONARY and typeof(default_data[data]) == TYPE_DICTIONARY:
 			update_data(save_data[data],default_data[data])
 	return save_data
 
 func save_data_to_file(save_data):
-	var file = FileAccess.open(SAVE_DATA_PATH, FileAccess.WRITE)
-	file.store_var(save_data)
-	file.close()
+	_write_var_atomic(SAVE_DATA_PATH, save_data)
 
 func save_data_to_backup(save_data):
-	if backup_num >=11:
+	if backup_num > BACKUP_SLOTS or backup_num < 1:
 		backup_num = 1
-	var file = FileAccess.open(BACKUP_SAVE_DATA_PATH+str(backup_num)+".dat", FileAccess.WRITE)
-	file.store_var(save_data)
-	file.close()
-	backup_num+=1
+	_write_var_atomic(_backup_path(backup_num), save_data)
+	backup_num += 1
 
 func load_data():
 	var save_data = load_data_from_file()
 	if save_data:
 		for stat in save_data:
-			if typeof(save_data[stat]) == 27:
+			if typeof(save_data[stat]) == TYPE_DICTIONARY:
 				stats["save_data"][stat] = await load_dictionary(save_data[stat])
 			else:
 				stats["save_data"][stat] = save_data[stat]
@@ -123,7 +171,7 @@ func load_data():
 func load_dictionary(save_data):
 	var stats_save = {}
 	for sub_stat in save_data:
-		if typeof(save_data[sub_stat]) == 27:
+		if typeof(save_data[sub_stat]) == TYPE_DICTIONARY:
 			stats_save[sub_stat] = await load_dictionary(save_data[sub_stat])
 		else:
 			stats_save[sub_stat] = save_data[sub_stat]
