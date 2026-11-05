@@ -1561,6 +1561,31 @@ func _show_windup(duration: float, lock_point: Vector2, laser: bool) -> void:
 		lt.parallel().tween_property(_laser, "width", 4.0, duration)
 		lt.tween_callback(_laser.queue_free)
 
+# RECOVER: after a burst, show the cooldown as a visible vulnerable window (dimmed,
+# slightly shrunk) on every peer in the room, so "it just fired, punish it" reads.
+func _emit_recover(duration: float) -> void:
+	var targets := _room_rpc_targets()
+	if targets.is_empty():
+		_show_recover.rpc(duration)
+		return
+	var server_id := multiplayer.get_unique_id()
+	for pid in targets:
+		if pid == server_id:
+			_show_recover(duration)
+		else:
+			_show_recover.rpc_id(pid, duration)
+
+@rpc("authority", "call_local", "unreliable")
+func _show_recover(duration: float) -> void:
+	if body == null or duration <= 0.0:
+		return
+	var t := body.create_tween()
+	t.tween_property(body, "self_modulate", Color(0.55, 0.55, 0.6), 0.12)
+	t.parallel().tween_property(body, "scale", Vector2.ONE * 0.9, 0.12)
+	t.tween_interval(maxf(duration - 0.35, 0.0))
+	t.tween_property(body, "self_modulate", Color.WHITE, 0.2)
+	t.parallel().tween_property(body, "scale", Vector2.ONE, 0.2)
+
 func reset_casting() -> void:
 	_cancel_windup()
 	spell_input_sequence.clear()
@@ -1751,6 +1776,7 @@ func fire_spell(weapon: String, element: String, form: String) -> void:
 		if _burst_shots >= burst_count:
 			_burst_shots = 0
 			cast_timer = randf_range(burst_cooldown_range[0], burst_cooldown_range[1])
+			_emit_recover(cast_timer)
 	# Burst finished: the next one needs a fresh wind-up (and a fresh aim lock).
 	if _burst_shots == 0:
 		_windup_ready = false
