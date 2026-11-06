@@ -94,7 +94,6 @@ collision_mask = 4
 shape = SubResource("CircleShape2D_detection")
 
 [node name="nav_agent" type="NavigationAgent2D" parent="." unique_id=546381800]
-path_desired_distance = 192.0
+path_desired_distance = 48.0
 target_desired_distance = 64.0
-path_postprocessing = 1
 radius = 128.0

@@ -14,7 +14,9 @@ class_name NavMeshBuilder
 # walls. Coordinates are in the nav layer's LOCAL space; put the resulting
 # NavigationRegion2D as a child of the layer so it shares its transform.
 
-const DEFAULT_AGENT_RADIUS := 40.0
+# 80 = enemy body radius (48) + 32 margin, so a path hugging the mesh edge
+# still clears wall corners. 40 let bodies clip corners and jam in doorways.
+const DEFAULT_AGENT_RADIUS := 80.0
 
 static func build(layer: TileMapLayer, agent_radius := DEFAULT_AGENT_RADIUS) -> NavigationPolygon:
 	var cells := layer.get_used_cells()
