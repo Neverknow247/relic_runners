@@ -33,6 +33,9 @@ var _quench := 0
 # spell_data["_fx"] is a Callable set by the caster (player.gd); this script never
 # names the router (CastFx), which keeps it out of the preload cycle.
 var _has_fx := false
+# Pierce-N (Piercing / Heavy / riposte / light zones): survive this many more hurtbox
+# hits; pierce_falloff scales the damage after each pass.
+var _pierce_left := 0
 
 func _fx(event: String, arg = null) -> void:
 	if !_has_fx:
@@ -174,8 +177,11 @@ func setup_spell(_direction: Vector2, _spell_data: Dictionary, caster_id: int = 
 	hitbox.enemy_zone = spell_data.get("from_enemy", false) and spell_data.get("speed", 0.0) <= 0.0
 	var dm: float = spell_data.get("damage_mult", 1.0)
 	hitbox.attack_ref = spell_data.get("attack_ref", damage / maxf(dm, 0.01))
-	hitbox.is_spell = spell_data.get("form", "default") != "default"
+	hitbox.is_spell = spell_data.get("form", "default") != "default" and !spell_data.get("as_basic", false)
 	hitbox.cast = spell_data.get("cast", {})
+	hitbox.form = spell_data.get("form", "default")
+	hitbox.knockback_mult = float(spell_data.get("knockback_mult", 1.0))
+	_pierce_left = int(spell_data.get("pierce_count", 0))
 	_quench = int(spell_data.get("quench", 0))
 	var cb = spell_data.get("_fx")
 	_has_fx = cb is Callable and cb.is_valid()
@@ -194,6 +200,8 @@ func setup_spell(_direction: Vector2, _spell_data: Dictionary, caster_id: int = 
 # sound, positioned where it was fired.
 func _play_spawn_sound() -> void:
 	var form: String = spell_data.get("form", "default")
+	if spell_data.get("silent", false):
+		return
 	if _enemy_shot:
 		Sounds.play_sfx("enemy_shoot", global_position, -6.0)
 	elif form != "default":
@@ -213,6 +221,9 @@ func _on_hitbox_area_entered(area: Area2D) -> void:
 	if area is Hurtbox and area.is_player:
 		var owner_node = area.get_parent()
 		if owner_node != null and owner_node.has_method("is_invulnerable") and owner_node.is_invulnerable():
+			# Rolled through an enemy bullet: a graze (Duelist / Rollcaster).
+			if _enemy_shot and owner_node.has_method("notify_graze"):
+				owner_node.notify_graze(self)
 			return
 	# Only where THIS overlap delivers the damage (auto_hit). Forms that drive their
 	# own damage (cone/beam/rain/wave ticks) fire "hit" from their own loops.
@@ -221,6 +232,10 @@ func _on_hitbox_area_entered(area: Area2D) -> void:
 	# Piercing forms (AoE zones, wedges, beams) pass through hurtboxes instead
 	# of being consumed by the first one they touch.
 	if pierce:
+		return
+	if area is Hurtbox and _pierce_left > 0:
+		_pierce_left -= 1
+		hitbox.damage *= float(spell_data.get("pierce_falloff", 1.0))
 		return
 	Fx.puff(get_tree(), global_position, _tint, scale.x)
 	Sounds.play_sfx("hit", global_position, -3.0)

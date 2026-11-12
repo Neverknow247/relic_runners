@@ -788,6 +788,45 @@ func fx_chain(base_damage: float, count: int, frac: float, radius: float, peer: 
 	if points.size() > 1:
 		_emit_arc(points)
 
+func fx_dazzle(sec: float) -> void:
+	if _fx_ok():
+		status.add_timed("dazzled", sec)
+
+func fx_mark(mark_id: String, sec: float) -> void:
+	if _fx_ok() and sec > 0.0:
+		status.add_timed(mark_id, sec, 0.0)
+
+# Taunts: we shoot at the flare / decoy / flared packmate instead of the player.
+var _taunt_point := Vector2.ZERO
+var _taunt_node: Node2D = null
+var _taunt_until := 0
+func fx_taunt(point: Vector2, sec: float) -> void:
+	if !_fx_ok():
+		return
+	_taunt_point = point
+	_taunt_node = null
+	_taunt_until = Time.get_ticks_msec() + int(sec * 1000.0)
+	status.add_timed("taunted", sec, 0.0)
+
+func fx_taunt_node(node: Node2D, sec: float) -> void:
+	fx_taunt(node.global_position, sec)
+	_taunt_node = node
+
+func _taunt_aim() -> Variant:
+	if Time.get_ticks_msec() >= _taunt_until:
+		return null
+	if _taunt_node != null and is_instance_valid(_taunt_node) and !_taunt_node.is_dead:
+		return _taunt_node.global_position
+	return _taunt_point
+
+func fx_ring_visual(radius: float, color: Color) -> void:
+	if _fx_ok():
+		_room_call(&"_show_ring", [global_position, radius, color])
+
+@rpc("authority", "call_local", "unreliable")
+func _show_ring(pos: Vector2, radius: float, color: Color) -> void:
+	CombatFx.ring(get_tree(), pos, radius, color, 0.4, 12.0)
+
 func fx_arc_visual(points: PackedVector2Array) -> void:
 	if _fx_ok():
 		_emit_arc(points)
@@ -1638,6 +1677,9 @@ func _los_stagger() -> int:
 func get_visible_point(target: Hurtbox, check_fov := true) -> Variant:
 	if target == null or !is_instance_valid(target):
 		return null
+	for z in get_tree().get_nodes_in_group("shadow_zone"):
+		if is_instance_valid(z) and z.inside(target.global_position):
+			return null
 	var key := "%d:%s" % [target.get_instance_id(), check_fov]
 	var frame := Engine.get_physics_frames()
 	var cached = _los_cache.get(key)
@@ -2363,6 +2405,10 @@ func fire_spell(weapon: String, element: String, form: String) -> void:
 	# Aim at the actual point of them we can see (may be an edge peeking past a
 	# corner) rather than their dead center, which could still be behind cover.
 	var aim_point := _aim_lock_point if _aim_locked else current_visible_point
+	var taunt = _taunt_aim()
+	if taunt != null:
+		aim_point = taunt
+	var dazzle_mult := 4.0 if status != null and status.has("dazzled") else 1.0
 	# Damage = this enemy's Attack (per pellet); the attacker's crit stats travel
 	# to the defender (crit resolved at hit time). Nothing rolled here.
 	if spell_data.get("targeted", false):
@@ -2400,7 +2446,7 @@ func fire_spell(weapon: String, element: String, form: String) -> void:
 		# Small random wobble on the whole shot; the fan (pellets/spread) provides the
 		# real spread for the shotgun/spread archetypes. spawn_projectile builds the
 		# fan from this one aimed direction so it matches on every peer.
-		var direction := global_position.direction_to(aim_point).rotated(randf_range(-aim_variance, aim_variance))
+		var direction := global_position.direction_to(aim_point).rotated(randf_range(-aim_variance, aim_variance) * dazzle_mult)
 		# The pellet fan is the archetype's BASIC attack (pentagon 5 / triangle 3;
 		# circle & square fire a single shot). Guarded on "default" so a re-enabled
 		# spell cast would still fire its own single-projectile pattern. The per-pellet
@@ -2530,9 +2576,12 @@ func _outgoing_mult() -> float:
 	return status.outgoing_mult() if status else 1.0
 
 # What the killer's mods get told about this kill (world.credit_kill -> on_kill).
+var _last_hit := {}
+
 func _kill_info() -> Dictionary:
 	return {"pos": global_position, "element": attacker_element, "archetype": archetype,
-		"status_mask": status_mask, "tier": tier}
+		"status_mask": status_mask, "tier": tier, "spell": _last_hit.get("spell", false),
+		"form": _last_hit.get("form", "default"), "seed": _last_hit.get("seed", -1)}
 
 # Combat.apply_on_hit -> here, for a player's hit on us.
 func receive_element_hit(element: String, units: float, is_spell: bool, hitbox, pre_damage: float) -> void:
@@ -2650,6 +2699,20 @@ func _on_death_statuses() -> void:
 		if best != null:
 			best.status.receive_burn(b["stacks"] * 0.5, b["attack"], b["peer"])
 			_emit_arc(PackedVector2Array([global_position, best.global_position]), 1)
+	# Catalyst (killer's trait): our element statuses spread to neighbours within 300.
+	if _last_hit.get("tr", []).has("catalyst"):
+		var peer := _last_attacker_peer
+		for e in get_tree().get_nodes_in_group("enemies"):
+			if e == self or !is_instance_valid(e) or e.is_dead or e.status == null:
+				continue
+			if e.global_position.distance_to(global_position) > 300.0:
+				continue
+			if !b.is_empty():
+				e.status.receive_burn(b["stacks"], b["attack"], b["peer"])
+			for sid in ["chill", "soak", "seed"]:
+				if status.has(sid):
+					e.status.apply(sid, 3.0, {"peer": peer, "spell": false})
+			_emit_arc(PackedVector2Array([global_position, e.global_position]), 1)
 	if status.has("seed"):
 		var bd: Dictionary = StatusEffects.DEFS["bloom"]
 		var mult: float = bd["overgrown_mult"] if status.has("overgrown") else 1.0
@@ -2740,7 +2803,8 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 		var away: Vector2 = global_position - hitbox.global_position
 		if away.length_squared() > 0.0001:
 			var gale: float = StatusEffects.DEFS["gale"]["basic_knockback_mult"] if hit_element == "wind" and player_hit else 1.0
-			_knockback += away.normalized() * KNOCKBACK_SPEED * (1.5 if is_crit else 1.0) * gale
+			var kb_mult: float = hitbox.knockback_mult if "knockback_mult" in hitbox else 1.0
+			_knockback += away.normalized() * KNOCKBACK_SPEED * (1.5 if is_crit else 1.0) * gale * kb_mult
 	# Getting hit is an instant, unmissable cue of where the attack came
 	# from — snap facing straight there instead of easing over with
 	# turn_speed like normal tracking does.
@@ -2770,6 +2834,8 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 	# Element side effects (statuses, chain, sunder) BEFORE the damage lands, so a
 	# killing hit's seed/burn still counts in die().
 	if player_hit:
+		_last_hit = {"spell": hitbox.is_spell, "form": hitbox.form,
+			"seed": hitbox.cast.get("seed", -1), "tr": hitbox.cast.get("tr", [])}
 		Combat.apply_on_hit(self, hitbox, damage, advantage)
 	take_damage(final_damage)
 

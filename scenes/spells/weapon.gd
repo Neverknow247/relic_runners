@@ -29,6 +29,12 @@ var attack: float
 # defender's hit handler. See ItemData.WEAPON_CRIT_BY_RARITY.
 var crit_rate: float = 0.0
 var crit_damage: float = 0.0
+# Flair (combat_redesign_plan §7): one rolled subclass (WeaponSubclasses) + traits
+# by rarity (WeaponTraits). relic_id = future named uniques (WeaponRelics), "" = none.
+var subclass: String = ""
+var traits: Array = []
+var relic_id: String = ""
+const SAVE_VERSION := 2
 
 func _init(_type: String = "tome", _rarity: String = "common") -> void:
 	type = _type
@@ -66,6 +72,31 @@ func _init(_type: String = "tome", _rarity: String = "common") -> void:
 			# rare (and higher, for now) roll both.
 			crit_rate = randi_range(int(crit_band[0]), int(crit_band[1]))
 			crit_damage = randi_range(int(crit_band[0]), int(crit_band[1]))
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	roll_flair(rng)
+
+# Rolls subclass + traits (fishing rod: neither).
+func roll_flair(rng: RandomNumberGenerator) -> void:
+	if type == "fishing_rod":
+		subclass = ""
+		traits = []
+		return
+	subclass = WeaponSubclasses.roll(type, rng)
+	traits = WeaponTraits.roll(rarity, capable_forms(), subclass, rng)
+
+# The mod ids this weapon casts with: subclass + traits (+ a relic's extras).
+# A broken weapon (0 durability) loses its flair along with its element.
+func mod_ids() -> Array:
+	if durability <= 0.0 or type == "fishing_rod":
+		return []
+	var out: Array = []
+	if subclass != "":
+		out.append(subclass)
+	out.append_array(traits)
+	if relic_id != "":
+		out.append_array(WeaponRelics.get_relic(relic_id).get("mods", []))
+	return out
 
 # Total mana capacity: the weapon's own pool plus the wielder's gear "mana" bonus.
 func effective_max_mana() -> float:
@@ -116,6 +147,10 @@ func to_dict() -> Dictionary:
 		"attack": attack,
 		"crit_rate": crit_rate,
 		"crit_damage": crit_damage,
+		"subclass": subclass,
+		"traits": traits,
+		"relic_id": relic_id,
+		"v": SAVE_VERSION,
 	}
 
 static func from_dict(data: Dictionary) -> Weapon:
@@ -130,4 +165,18 @@ static func from_dict(data: Dictionary) -> Weapon:
 	weapon.attack = data.get("attack", weapon.attack)
 	weapon.crit_rate = data.get("crit_rate", weapon.crit_rate)
 	weapon.crit_damage = data.get("crit_damage", weapon.crit_damage)
+	# Migration: a pre-flair save (or an unknown subclass id) rolls deterministically
+	# from instance_id, so the weapon is stable across loads even before re-saving.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(weapon.instance_id)
+	var sub_id: String = data.get("subclass", "")
+	var rolled_sub := WeaponSubclasses.roll(weapon.type, rng) if weapon.type != "fishing_rod" else ""
+	weapon.subclass = sub_id if WeaponSubclasses.is_known(sub_id) else rolled_sub
+	if data.has("traits"):
+		weapon.traits = (data["traits"] as Array).filter(func(t): return WeaponTraits.is_known(String(t)))
+	elif weapon.type == "fishing_rod":
+		weapon.traits = []
+	else:
+		weapon.traits = WeaponTraits.roll(weapon.rarity, weapon.capable_forms(), weapon.subclass, rng)
+	weapon.relic_id = data.get("relic_id", "")
 	return weapon

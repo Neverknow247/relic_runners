@@ -21,7 +21,7 @@ const BIT := {
 	# Player buffs (songs etc.)
 	"haste": 256, "mend": 512, "pierce_basic": 1024, "quickstep": 2048,
 	# Enemy debuffs from subclasses / songs
-	"dirge": 4096, "dazzled": 8192, "effigy": 16384,
+	"dirge": 4096, "dazzled": 8192, "effigy": 16384, "marked": 32768, "rooted": 65536, "taunted": 131072,
 }
 
 const DEFS := {

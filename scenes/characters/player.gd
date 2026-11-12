@@ -118,6 +118,16 @@ var _timed_push_left := 0.0
 # Per-source healing cap (bloom/grove/lifelink/mending): [window_start_msec, healed]
 var _heal_window := {}
 const HEAL_CAP_PER_MIN := 150.0
+# Weapon mods (subclass + traits, combat_redesign_plan §6.3): per-weapon caster
+# state lives here (WeaponMod.st), drawn by mod_canvas on our own screen.
+var mod_state := {}
+# Basic-attack fields a mod may rewrite, sent with the cast (cast["b"]).
+const BASIC_SYNC_KEYS := ["damage_mult", "size", "speed", "lifetime", "pierce_count", "pierce_falloff",
+	"knockback_mult", "as_basic", "no_element_fx", "explosion_mult", "silent", "pierce", "auto_hit",
+	"stop_on_wall"]
+var mod_canvas: Node2D = null
+var _mend_accum := 0.0
+var _fermata_ready_msec := 0
 const BLESSED_BAND_BARRIER := 50.0
 # ALIVE -> DOWNED (prone, 60s countdown, frozen) -> DYING (brief "dead" anim
 # pause) -> back to ALIVE once _finish_death() resets everything and sends
@@ -520,6 +530,7 @@ func apply_starter_kit() -> void:
 	weapon.attack = float(ItemData.WEAPON_ATTACK_BY_RARITY["common"][0])
 	weapon.crit_rate = 0.0
 	weapon.crit_damage = 0.0
+	weapon.traits = []
 	weapon_slots[active_slot] = weapon
 
 	# 5. Persist the whole reshuffle.
@@ -2504,6 +2515,7 @@ func _physics_process(delta):
 		if status:
 			status.max_health_ref = max_health
 			status.tick(delta)
+		_tick_mods(delta)
 		# Any open menu (inventory OR the esc/pause menu) arms attack-suppression so the
 		# click that operates/closes it can't leak into a shot the frame it clears —
 		# attack_check() then ignores the still-held button until it's released.
@@ -2596,7 +2608,15 @@ func _code_feedback(armed: bool) -> void:
 
 func move_state(delta):
 	if Input.is_action_pressed("spell_mode_1"):
-		apply_friction(delta)
+		# Walking Cast (trait): drift at 40% while punching in a code.
+		if _has_mod("walking_cast"):
+			var wc_axis := snap_to_8_directions(input_axis())
+			if wc_axis != Vector2.ZERO:
+				velocity = velocity.move_toward(wc_axis.normalized() * max_velocity * 0.4, acceleration * delta)
+			else:
+				apply_friction(delta)
+		else:
+			apply_friction(delta)
 		check_spell_mode_1_input()
 		update_animations(Vector2.ZERO)
 		attack_check()
@@ -2654,6 +2674,147 @@ func _setup_status() -> void:
 	status_visuals = StatusVisuals.new()
 	status_visuals.mask = status_mask
 	add_child(status_visuals)
+	mod_canvas = ModCanvas.new()
+	mod_canvas.player = self
+	add_child(mod_canvas)
+
+class ModCanvas extends Node2D:
+	var player = null
+	func _ready() -> void:
+		z_index = 20
+	func _process(_delta: float) -> void:
+		if player != null and player.is_multiplayer_authority():
+			queue_redraw()
+	func _draw() -> void:
+		if player == null or !player.is_multiplayer_authority():
+			return
+		var w = player.get_equipped_weapon()
+		for mod in WeaponMods.for_weapon(w):
+			mod.draw(player, w, self)
+
+# --- Mod / subclass support -----------------------------------------------------
+func _mods() -> Array:
+	return WeaponMods.for_weapon(get_equipped_weapon())
+
+func _has_mod(mod_id: String) -> bool:
+	var w := get_equipped_weapon()
+	return w != null and w.mod_ids().has(mod_id)
+
+# Where we're aiming in the world (mouse, or a point along the stick aim).
+func aim_point() -> Vector2:
+	if using_controller_aim:
+		return global_position + aim_direction * 900.0
+	return get_global_mouse_position()
+
+# Raw movement input (Songweaver notes).
+func input_axis() -> Vector2:
+	return Vector2(Input.get_axis("left", "right"), Input.get_axis("up", "down"))
+
+# A form's spell_data for the equipped weapon (Overflow's mini shapes).
+func build_form_data(form: String) -> Dictionary:
+	var w := get_equipped_weapon()
+	if w == null or !SpellData.FORMS.has(form):
+		return {}
+	return all_spell_data.build_spell_data(w.type, w.element, form, w.rarity)
+
+# Derived casts (echo, idol, ripple, motes...): no mana, no cooldown, tagged so
+# hooks don't recurse; one RPC like any cast. overrides: tag, dm, sz, lt, spd, x, off, lat.
+func spawn_derived_cast(origin: Vector2, dir: Vector2, form: String, overrides: Dictionary = {}) -> void:
+	var w := get_equipped_weapon()
+	var world = get_tree().get_first_node_in_group("world")
+	if w == null or world == null or world.shutting_down or !world.can_send_rpc():
+		return
+	if dir == Vector2.ZERO:
+		dir = aim_direction if aim_direction != Vector2.ZERO else Vector2.RIGHT
+	var sd: Dictionary = all_spell_data.build_spell_data(w.type, w.element, form, w.rarity)
+	var cast := {"seed": randi(), "tag": overrides.get("tag", "derived")}
+	if w.subclass != "":
+		cast["sub"] = w.subclass
+	if !w.traits.is_empty():
+		cast["tr"] = w.traits.duplicate()
+	for k in ["dm", "sz", "lt", "spd", "x", "off", "lat"]:
+		if overrides.has(k):
+			cast[k] = overrides[k]
+	_spawn_cast(world, origin, dir.normalized(), sd, get_attack(), get_crit_rate(), get_crit_damage(), cast)
+
+# Server-side taunt request (Three-Faced decoy).
+func request_taunt(pos: Vector2, sec: float, radius: float) -> void:
+	if multiplayer.is_server():
+		server_taunt(pos, sec, radius)
+	else:
+		server_taunt.rpc_id(1, pos, sec, radius)
+
+@rpc("any_peer", "call_local", "reliable")
+func server_taunt(pos: Vector2, sec: float, radius: float) -> void:
+	if !multiplayer.is_server():
+		return
+	for e in get_tree().get_nodes_in_group("enemies"):
+		if is_instance_valid(e) and !e.is_dead and e.global_position.distance_to(pos) <= radius:
+			e.fx_taunt(pos, sec)
+
+# Songweaver: the singer tells every peer; each LOCAL player in the same room and
+# within 900 applies the song on its own authority; the server applies Dirge.
+func broadcast_song(song: String, tier: int) -> void:
+	var world = get_tree().get_first_node_in_group("world")
+	if world == null:
+		return
+	receive_song.rpc(song, tier, global_position, String(world.my_zone), String(world.my_room))
+
+@rpc("any_peer", "call_local", "reliable")
+func receive_song(song: String, tier: int, singer_pos: Vector2, zone: String, room: String) -> void:
+	var world = get_tree().get_first_node_in_group("world")
+	if world == null:
+		return
+	var t := clampi(tier, 1, 2) - 1
+	if multiplayer.is_server() and song == "dirge":
+		for e in get_tree().get_nodes_in_group("enemies"):
+			if is_instance_valid(e) and !e.is_dead and e.status != null and e.global_position.distance_to(singer_pos) <= 700.0:
+				e.status.add_timed("dirge", [5.0, 7.0][t], [0.2, 0.3][t])
+	if String(world.my_zone) != zone or String(world.my_room) != room:
+		return
+	var me = world.players.get_node_or_null(str(multiplayer.get_unique_id())) if world.players != null else null
+	if me != null and me.global_position.distance_to(singer_pos) <= 900.0:
+		me.apply_song(song, t)
+
+func apply_song(song: String, t: int) -> void:
+	if !is_multiplayer_authority() or status == null:
+		return
+	match song:
+		"anthem":
+			status.add_timed("haste", [8.0, 12.0][t], [0.2, 0.3][t])
+		"mending":
+			status.add_timed("mend", [6.0, 8.0][t], [3.0, 5.0][t])
+		"staccato":
+			status.add_timed("pierce_basic", [8.0, 12.0][t])
+		"quickstep":
+			status.add_timed("quickstep", [8.0, 12.0][t], [0.4, 0.6][t])
+		"fermata":
+			var now := Time.get_ticks_msec()
+			var w := get_equipped_weapon()
+			if now >= _fermata_ready_msec and w != null:
+				_fermata_ready_msec = now + 30000
+				w.restore_mana([40.0, 60.0][t])
+				refresh_mana_ui()
+	Fx.flash(sprite, true, 2.0, 0.25)
+
+# A roll through an enemy bullet (projectile.gd tells us; once per bullet).
+func notify_graze(bullet) -> void:
+	if !is_multiplayer_authority() or bullet == null or bullet.get_meta("grazed", false):
+		return
+	bullet.set_meta("grazed", true)
+	var w := get_equipped_weapon()
+	for mod in WeaponMods.for_weapon(w):
+		mod.on_graze(self, w, bullet)
+
+func _tick_mods(delta: float) -> void:
+	var w := get_equipped_weapon()
+	for mod in WeaponMods.for_weapon(w):
+		mod.tick(self, w, delta)
+	if status != null and status.has("mend"):
+		_mend_accum += status.amount("mend") * delta
+		if _mend_accum >= 3.0:
+			heal_capped(_mend_accum, "mending")
+			_mend_accum = 0.0
 
 func _status_tick_damage(amount: float) -> void:
 	if !is_multiplayer_authority() or _is_in_hub():
@@ -2788,7 +2949,8 @@ func _start_roll() -> void:
 		dir = aim_direction if aim_direction != Vector2.ZERO else Vector2.RIGHT
 	_roll_direction = dir.normalized()
 	_roll_timer = ROLL_DURATION
-	_roll_cooldown_timer = ROLL_DURATION + ROLL_COOLDOWN
+	var quick: float = status.amount("quickstep") if status != null and status.has("quickstep") else 0.0
+	_roll_cooldown_timer = ROLL_DURATION + ROLL_COOLDOWN * (1.0 - quick)
 	_iframe_timer = maxf(_iframe_timer, ROLL_IFRAMES)
 	if status:
 		status.remove("burn")
@@ -2797,6 +2959,9 @@ func _start_roll() -> void:
 	_play_roll_visual()
 	Sounds.play_sfx("roll", global_position)
 	state = roll_state
+	var rw := get_equipped_weapon()
+	for mod in WeaponMods.for_weapon(rw):
+		mod.on_roll(self, rw, "start")
 
 # The raid clock ran out while we're still on the expedition: no revive, straight
 # into the normal death flow (death bag, back to the hub). See world.client_raid_expired.
@@ -2829,6 +2994,9 @@ func roll_state(delta):
 		velocity = _roll_direction * ROLL_EXIT_SPEED
 		play_body_anim("idle")
 		state = move_state
+		var rw := get_equipped_weapon()
+		for mod in WeaponMods.for_weapon(rw):
+			mod.on_roll(self, rw, "end")
 
 # Squash-and-stretch along the roll plus a quick spin of the body, local only
 # (remote peers just see the fast movement through position sync).
@@ -2911,6 +3079,22 @@ func check_spell_mode_2_input():
 		record_attack_direction(3)
 
 func get_default_spell_data():
+	return _apply_basic_mods(_get_default_spell_data_raw())
+
+func get_spell_data():
+	return _apply_basic_mods(_get_spell_data_raw())
+
+# Basic-attack rewrites from the weapon's mods (shape traits, Overture, Overflow...).
+# Pure: called whenever the basic is previewed; mods consume state in on_basic_fire.
+func _apply_basic_mods(sd: Dictionary) -> Dictionary:
+	if sd.get("form", "default") != "default":
+		return sd
+	var w := get_equipped_weapon()
+	for mod in WeaponMods.for_weapon(w):
+		mod.modify_basic(self, w, sd)
+	return sd
+
+func _get_default_spell_data_raw():
 	var equipped := get_equipped_weapon()
 	if equipped.durability <= 0.0:
 		return all_spell_data.build_spell_data("default", "default", "default")
@@ -2921,7 +3105,7 @@ func get_default_spell_data():
 		equipped.rarity
 	)
 
-func get_spell_data():
+func _get_spell_data_raw():
 	var equipped := get_equipped_weapon()
 	# A weapon at 0 durability can't cast sequence spells at all (regardless
 	# of mana), and whatever it does still cast gets none of its normal
@@ -3027,6 +3211,8 @@ func cast_spell(spell_data: Dictionary, reset_sequence: bool = true):
 			return
 		_beam_active_until = now + spell_data.get("lifetime", 0.0)
 	var direction = get_facing_direction()
+	if spell_data.has("_aim_override"):
+		direction = spell_data["_aim_override"]
 	var spawn_position: Vector2
 	if spell_data.get("targeted", false):
 		# Targeted forms (rain) drop at the mouse, clamped to the form's max range
@@ -3057,7 +3243,7 @@ func cast_spell(spell_data: Dictionary, reset_sequence: bool = true):
 		# applied via effective_mana_cost, matching the pre-check).
 		equipped.use_mana(effective_mana_cost(spell_data))
 		persist_weapon_slots()
-		var form_cd: float = SpellData.FORMS.get(spell_data.get("form", ""), {}).get("stratagem_cooldown", 0.0)
+		var form_cd: float = 0.0 if spell_data.get("as_basic", false) else SpellData.FORMS.get(spell_data.get("form", ""), {}).get("stratagem_cooldown", 0.0)
 		if form_cd > 0.0:
 			spell_cooldowns[spell_data["form"]] = form_cd
 	refresh_mana_ui()
@@ -3084,6 +3270,35 @@ func cast_spell(spell_data: Dictionary, reset_sequence: bool = true):
 		for i in pellets:
 			offsets.append((float(i) / float(pellets - 1) - 0.5) * spread)
 		cast["off"] = offsets
+	var is_basic_cast: bool = spell_data.get("form", "default") == "default" or spell_data.get("as_basic", false)
+	if equipped != null and equipped.durability > 0.0:
+		if equipped.subclass != "":
+			cast["sub"] = equipped.subclass
+		if !equipped.traits.is_empty():
+			cast["tr"] = equipped.traits.duplicate()
+	if is_basic_cast:
+		# Lamplighter light (anyone standing in it) / Staccato song: basics pierce.
+		for z in get_tree().get_nodes_in_group("light_zone"):
+			if is_instance_valid(z) and z.inside(global_position):
+				spell_data["pierce_count"] = 99
+				break
+		if status != null and status.has("pierce_basic"):
+			spell_data["pierce_count"] = int(spell_data.get("pierce_count", 0)) + 1
+	spell_data["_spawn_pos"] = spawn_position
+	spell_data["_dir"] = direction
+	for mod in WeaponMods.for_weapon(equipped):
+		if is_basic_cast:
+			mod.on_basic_fire(self, equipped, spell_data, cast)
+		else:
+			mod.on_spell_cast(self, equipped, spell_data, cast)
+	if spell_data.get("_suppress", false):
+		return
+	if is_basic_cast:
+		var b := {}
+		for k in BASIC_SYNC_KEYS:
+			if spell_data.has(k):
+				b[k] = spell_data[k]
+		cast["b"] = b
 	_spawn_cast(world, spawn_position, direction, spell_data, atk, cr, cd, cast)
 	if reset_sequence:
 		spell_input_sequence.clear()
@@ -3161,21 +3376,39 @@ func spawn_spell_local(
 	spell_data["attacker_crit_rate"] = crit_rate
 	spell_data["attacker_crit_damage"] = crit_damage
 	spell_data["cast"] = cast
+	# Derived-cast multipliers (echo / idol / ripple...).
+	spell_data["damage"] = spell_data["damage"] * float(cast.get("dm", 1.0))
+	spell_data["size"] = spell_data["size"] * float(cast.get("sz", 1.0))
+	spell_data["lifetime"] = spell_data["lifetime"] * float(cast.get("lt", 1.0))
+	spell_data["speed"] = spell_data["speed"] * float(cast.get("spd", 1.0))
+	# The caster's final basic numbers (shape traits, Overture, Riposte, Overflow...)
+	# ride the cast as "b", so every peer's copy matches what the caster previewed.
+	var b: Dictionary = cast.get("b", {})
+	if !b.is_empty():
+		for k in b:
+			spell_data[k] = b[k]
+		spell_data["damage"] = attack * spell_data.get("damage_mult", 1.0) * float(cast.get("dm", 1.0))
+		if b.has("speed"):
+			spell_data["speed"] = float(b["speed"]) * float(cast.get("spd", 1.0))
 	# Element x form expressions + weapon mods ride the projectile events (CastFx).
 	spell_data["bespoke"] = ElementForms.bespoke_for(element, form)
 	if form != "default" or cast.has("sub") or cast.has("tr"):
 		spell_data["_fx"] = CastFx.callable()
 	# One projectile per pellet offset ("off" absent = a single shot straight ahead).
 	var offsets: PackedFloat32Array = cast.get("off", PackedFloat32Array([0.0]))
+	var lats: PackedFloat32Array = cast.get("lat", PackedFloat32Array([0.0]))
+	var perp := direction.normalized().orthogonal()
 	for off in offsets:
-		var projectile = spell_data["scene"].instantiate()
-		get_tree().current_scene.add_child(projectile)
-		projectile.global_position = origin_position
-		projectile.setup_spell(direction.normalized().rotated(off), spell_data.duplicate(), caster_id, false)
+		for lat in lats:
+			var projectile = spell_data["scene"].instantiate()
+			get_tree().current_scene.add_child(projectile)
+			projectile.global_position = origin_position + perp * lat
+			projectile.setup_spell(direction.normalized().rotated(off), spell_data.duplicate(), caster_id, false)
 
 # world.client_credit_kill -> the killer's weapon mods (on_kill).
 func on_kill_credited(info: Dictionary) -> void:
 	var w := get_equipped_weapon()
+	info["mana_cost"] = SpellData.FORMS.get(info.get("form", "default"), {}).get("mana_cost", 0.0)
 	for mod in WeaponMods.for_weapon(w):
 		mod.on_kill(self, w, info)
 

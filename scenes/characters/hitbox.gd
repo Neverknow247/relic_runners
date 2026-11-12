@@ -31,6 +31,9 @@ var enemy_zone := false
 var attack_ref: float = 0.0
 var is_spell := false
 var cast: Dictionary = {}
+var form: String = "default"
+# Knockback scale for the hit (shape traits: Heavy hits hard, Torrent barely).
+var knockback_mult := 1.0
 
 # The single source of truth for "should this hitbox damage that hurtbox?" — used
 # by every damage path (this Area2D auto-hit, plus the DoT ticks in beam/rain/cone

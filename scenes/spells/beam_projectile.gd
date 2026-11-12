@@ -17,6 +17,8 @@ const BEAM_WIDTH := 96.0
 const CUTOFF_MASK := 1 | 32
 
 var _tick_timer := 0.05
+# Prism Beam (trait) drops the enemy-body layer so the beam isn't cut by enemies.
+var cutoff_mask := CUTOFF_MASK
 var _caster: Node2D = null
 @onready var _shape: CollisionShape2D = $hitbox/collision_shape_2d
 @onready var _visual: Polygon2D = $beam_visual
@@ -60,7 +62,7 @@ func _update_length() -> void:
 	var space := get_world_2d().direct_space_state
 	var forward := Vector2.RIGHT.rotated(rotation)
 	var query := PhysicsRayQueryParameters2D.create(global_position, global_position + forward * MAX_LENGTH)
-	query.collision_mask = CUTOFF_MASK
+	query.collision_mask = cutoff_mask
 	query.collide_with_areas = false
 	query.collide_with_bodies = true
 	if _caster != null and is_instance_valid(_caster):

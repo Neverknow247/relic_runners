@@ -59,6 +59,11 @@ func refresh() -> void:
 		_add_header(element_section, "No weapon in either slot")
 		return
 	title_label.text = "Weapon Workbench — %s" % weapon.type.capitalize()
+	if weapon.subclass != "":
+		var flair := WeaponSubclasses.display(weapon.subclass)
+		if !weapon.traits.is_empty():
+			flair += "  ·  " + ", ".join(weapon.traits.map(func(t): return WeaponTraits.display(t)))
+		_add_header(element_section, flair)
 	_build_element_section(weapon)
 	_build_forms_section(weapon)
 

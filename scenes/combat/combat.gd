@@ -45,6 +45,9 @@ static func apply_on_hit(defender: Node, hitbox, pre_mitigation_damage: float, a
 		return
 	var units := hit_units(hitbox, pre_mitigation_damage, advantage)
 	var spell: bool = hitbox.is_spell if "is_spell" in hitbox else false
+	# Attuned (trait): basics build their element 50% faster.
+	if !spell and "cast" in hitbox and hitbox.cast.get("tr", []).has("attuned"):
+		units *= 1.5
 	defender.receive_element_hit(element, units, spell, hitbox, pre_mitigation_damage)
 	# Mods' on_hit_resolved (subclasses / traits) on the defender's authority.
 	var cast: Dictionary = hitbox.cast if "cast" in hitbox else {}

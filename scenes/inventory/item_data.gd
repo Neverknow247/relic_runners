@@ -1222,6 +1222,12 @@ static func tooltip_text(item) -> String:
 		if not w.forms.is_empty():
 			var forms_str := " | ".join(w.forms.map(func(f): return String(f).capitalize()))
 			out += "\n[font_size=38][color=#%s]%s[/color][/font_size]" % [ecol, forms_str]
+		# Flair: subclass (gold) + its description, then one bullet per trait.
+		if w.subclass != "":
+			out += "\n[font_size=36][color=#e6c15a]%s[/color][/font_size]" % WeaponSubclasses.display(w.subclass)
+			out += "\n[font_size=24][i][color=#b8a77a]%s[/color][/i][/font_size]" % WeaponSubclasses.desc(w.subclass)
+		for t in w.traits:
+			out += "\n[font_size=30][color=#7ad0c0]• %s: %s[/color][/font_size]" % [WeaponTraits.display(t), WeaponTraits.desc(t)]
 		# Combat stats (itemization pass): Attack is the base; crit stats show only if
 		# the weapon rolled them (uncommon = one, rare = both).
 		out += "\n[font_size=36][color=#ffd27a]Attack %d[/color][/font_size]" % roundi(w.attack)

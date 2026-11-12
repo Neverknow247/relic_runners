@@ -22,6 +22,8 @@ static func dispatch(event: String, proj, arg = null) -> void:
 		match event:
 			"spawn":
 				mod.on_projectile_spawn(proj, cast)
+			"tick":
+				mod.on_projectile_tick(proj, float(arg) if arg != null else 0.0, cast)
 			"hit":
 				mod.on_projectile_hit(proj, arg, cast)
 			"wall":

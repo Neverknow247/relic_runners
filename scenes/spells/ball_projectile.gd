@@ -23,7 +23,11 @@ func _on_hitbox_area_entered(area: Area2D) -> void:
 	_expire()
 
 func _on_hitbox_body_entered(_body: Node2D) -> void:
-	# A fireball bursts on the wall it hits rather than silently vanishing.
+	# A fireball bursts on the wall it hits rather than silently vanishing
+	# (unless a mod — Trickshot / Eclipse — keeps it flying).
+	_fx("wall")
+	if !stop_on_wall or is_queued_for_deletion():
+		return
 	_expire()
 
 # Every termination path (impact, wall, lifetime, max distance) funnels here so

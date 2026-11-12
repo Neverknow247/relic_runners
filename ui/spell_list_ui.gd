@@ -46,6 +46,8 @@ func refresh() -> void:
 	var current_sequence: Array = player.spell_input_sequence
 
 	title_label.text = "%s / %s" % [weapon_id.capitalize(), element.capitalize()]
+	if equipped.subclass != "" and equipped.durability > 0.0:
+		title_label.text += "  ·  " + WeaponSubclasses.display(equipped.subclass)
 	title_label.add_theme_font_size_override("font_size", 64)
 
 	var recipes: Array = player.all_spell_recipes.get_available_recipes(element, forms)
