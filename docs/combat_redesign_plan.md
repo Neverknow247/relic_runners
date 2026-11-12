@@ -601,5 +601,6 @@ Deviations from the plan text:
 - Forks, shards, echoes and undertow are **local copies** on every peer (no RPC); things that change the caster or need the cursor (idol repeats, motes, ripples, sweeps, Janus) go through `spawn_derived_cast`.
 - Catalyst is resolved in `enemy.gd` on death, Attuned in `Combat.apply_on_hit`, Walking Cast in `player.gd` `move_state` (no mod script).
 - Annotator / Dissonant marks show the shared "marked" overlay bit.
+- Trickshot cones reflect a half-size wedge (double-strength element) off a wall within reach; Pagewarden pages are a `PageOrbit` node on the caster on every peer (visible to all, each peer blocks its own bullet copies).
 
 Headless probes (`delete_before_export/`): `probe_spells`, `wave_probe`, `status_probe`, `fx_probe` (`ELEM=fire` limits it), `flair_probe`, `caster_probe`.
