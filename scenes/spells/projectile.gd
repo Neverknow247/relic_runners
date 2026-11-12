@@ -26,6 +26,10 @@ var spell_data: Dictionary = {}
 # travel, and the beam overrides _physics_process so it isn't touched.
 var max_distance := 0.0
 var _spawn_position := Vector2.ZERO
+# Water basic (Quench): this many enemy bullets it can cancel on contact; the
+# shot is consumed by the cancel. Each peer runs its own copy (like burst's clear).
+var _quench := 0
+const QUENCH_RADIUS := 72.0
 
 func setup(_direction: Vector2, _projectile_type:= "basic"):
 	direction = _direction.normalized()
@@ -69,11 +73,34 @@ func _draw_streak(half_len: float, r: float, color: Color) -> void:
 
 func _physics_process(delta: float) -> void:
 	position += direction * speed * delta
+	if _quench > 0 and !_enemy_shot:
+		_try_quench()
 	# Fizzle once we've travelled the cap's worth of distance. Cheap distance_to
 	# only matters for speed > 0 forms; stationary zones sit at _spawn_position so
 	# this never trips for them.
 	if max_distance > 0.0 and global_position.distance_to(_spawn_position) >= max_distance:
 		_expire()
+
+func _try_quench() -> void:
+	for b in get_tree().get_nodes_in_group("enemy_bullets"):
+		if is_instance_valid(b) and b != self and b.global_position.distance_to(global_position) <= QUENCH_RADIUS:
+			Fx.puff(get_tree(), b.global_position, Color(0.4, 0.65, 1.0), 0.7)
+			b.queue_free()
+			_quench -= 1
+			if _quench <= 0:
+				Fx.puff(get_tree(), global_position, _tint, 0.6)
+				queue_free()
+			return
+
+# Shared bullet erase (water forms): frees enemy bullets within `radius` of `center`.
+func erase_enemy_bullets(center: Vector2, radius: float) -> int:
+	var n := 0
+	for b in get_tree().get_nodes_in_group("enemy_bullets"):
+		if is_instance_valid(b) and b.global_position.distance_to(center) <= radius:
+			Fx.puff(get_tree(), b.global_position, Color(0.4, 0.65, 1.0), 0.6)
+			b.queue_free()
+			n += 1
+	return n
 
 # The projectile has reached the end of its life (travelled its max distance or
 # its lifetime timer ran out). Base behavior is to just disappear; subclasses
@@ -131,6 +158,11 @@ func setup_spell(_direction: Vector2, _spell_data: Dictionary, caster_id: int = 
 	hitbox.is_crit = crit
 	hitbox.from_player = not spell_data.get("from_enemy", false)
 	hitbox.enemy_zone = spell_data.get("from_enemy", false) and spell_data.get("speed", 0.0) <= 0.0
+	var dm: float = spell_data.get("damage_mult", 1.0)
+	hitbox.attack_ref = spell_data.get("attack_ref", damage / maxf(dm, 0.01))
+	hitbox.is_spell = spell_data.get("form", "default") != "default"
+	hitbox.cast = spell_data.get("cast", {})
+	_quench = int(spell_data.get("quench", 0))
 	# Free after the form's ACTUAL lifetime. Started here (not in _ready) because
 	# lifetime is only known once setup_spell runs — the stationary pierce forms
 	# (burst/cone/beam/rain) rely on this timer for their whole duration since

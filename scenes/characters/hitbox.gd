@@ -25,6 +25,12 @@ var from_player := true
 # hurt players, never the pack they're cast in. Enemy bullets still can (the AI
 # avoids firing through allies instead).
 var enemy_zone := false
+# Status buildup inputs (combat_redesign_plan §4.2): the caster's Attack (units =
+# damage / attack_ref), whether this is a stratagem (spell-strength effects), and
+# the per-cast payload (subclass/traits/seed) for mod hooks.
+var attack_ref: float = 0.0
+var is_spell := false
+var cast: Dictionary = {}
 
 # The single source of truth for "should this hitbox damage that hurtbox?" — used
 # by every damage path (this Area2D auto-hit, plus the DoT ticks in beam/rain/cone

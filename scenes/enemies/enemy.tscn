@@ -26,6 +26,9 @@ properties/5/replication_mode = 1
 properties/6/path = NodePath(".:shield_up")
 properties/6/spawn = true
 properties/6/replication_mode = 1
+properties/7/path = NodePath(".:status_mask")
+properties/7/spawn = true
+properties/7/replication_mode = 2
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
 radius = 48.0

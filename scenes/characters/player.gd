@@ -103,6 +103,21 @@ var barrier := 0.0:
 		if health_ui:
 			health_ui.update_health(health, max_health, barrier)
 var max_barrier := 0.0
+# Status effects (softened rules for players; buffs from songs). Own-peer authority;
+# status_mask syncs for overlays on other screens.
+var status: StatusHolder = null
+var status_visuals: StatusVisuals = null
+@export var status_mask := 0:
+	set(value):
+		status_mask = value
+		if status_visuals:
+			status_visuals.mask = value
+# Timed external shove (earth/wind hits from enemies): velocity + seconds left.
+var _timed_push := Vector2.ZERO
+var _timed_push_left := 0.0
+# Per-source healing cap (bloom/grove/lifelink/mending): [window_start_msec, healed]
+var _heal_window := {}
+const HEAL_CAP_PER_MIN := 150.0
 const BLESSED_BAND_BARRIER := 50.0
 # ALIVE -> DOWNED (prone, 60s countdown, frozen) -> DYING (brief "dead" anim
 # pause) -> back to ALIVE once _finish_death() resets everything and sends
@@ -2007,6 +2022,7 @@ func _ready() -> void:
 	hurtbox.owner_id = name.to_int()
 	hurtbox.is_player = true
 	hurtbox.hurt.connect(_on_hurtbox_hurt)
+	_setup_status()
 	if is_multiplayer_authority():
 		player_camera.make_current()
 		# First-run controls card (F1 brings it back).
@@ -2130,28 +2146,26 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 	# Resolve the hit from stats HERE (defender authority): base = attacker Attack
 	# (hitbox.damage), crit rolled from the attacker's crit stats + a +50/+50 bonus if
 	# their element beats ours, then our Defense reduces it (Diablo-style DR).
-	var final_damage: float = damage
-	var is_crit := false
-	var advantage := false
-	if hitbox != null and "attacker_element" in hitbox:
-		advantage = SpellData.has_advantage(hitbox.attacker_element, network_element)
-		var crit_rate: float = hitbox.attacker_crit_rate + (50.0 if advantage else 0.0)
-		var crit_damage: float = hitbox.attacker_crit_damage + (50.0 if advantage else 0.0)
-		is_crit = randf() * 100.0 < crit_rate
-		if is_crit:
-			final_damage *= 1.0 + crit_damage / 100.0
+	var res := Combat.resolve_hit(hitbox, damage, network_element, get_defense())
+	var final_damage: float = res["damage"]
+	var is_crit: bool = res["is_crit"]
+	var advantage: bool = res["advantage"]
 	# Cloak/robe armor trait: 5% less damage (stacks with Defense).
 	if has_gear_attribute("cloak_armor"):
 		final_damage *= 0.95
-	# Defense stat: diminishing-returns damage reduction.
-	final_damage *= 1.0 - SpellData.damage_reduction(get_defense())
 	_broadcast_damage_number.rpc(final_damage, is_crit, advantage)
+	if !_is_in_hub():
+		Combat.apply_on_hit(self, hitbox, damage, advantage)
 	take_damage(final_damage)
+	for mod in WeaponMods.for_weapon(get_equipped_weapon()):
+		mod.on_hurt(self, get_equipped_weapon(), final_damage)
 	if final_damage >= HURT_IFRAMES_THRESHOLD and !_is_in_hub():
 		_iframe_timer = maxf(_iframe_timer, HURT_IFRAMES)
 		_start_hurt_flicker(HURT_IFRAMES)
 	# Getting hit wears down equipped gear; a piece that breaks loses its trait.
-	_drain_gear_durability()
+	# DoT ticks (rain/beam zones: no auto_hit) don't drain it (combat plan A17).
+	if hitbox == null or !is_instance_valid(hitbox) or hitbox.auto_hit:
+		_drain_gear_durability()
 
 # Shows the authoritative damage number on every peer (call_local so our own
 # screen shows it too) — the one place the number is spawned now, so all peers
@@ -2271,6 +2285,8 @@ func request_revive(health_fraction: float) -> void:
 	downed_ui.visible = false
 	give_up_hold_timer = 0.0
 	death_state = DeathState.ALIVE
+	if status:
+		status.clear_all()
 	hurtbox.is_invincible = false
 	# Fraction of our OWN max health, so gear-boosted health scales the revive.
 	health = clampf(max_health * health_fraction, 0.0, max_health)
@@ -2278,6 +2294,8 @@ func request_revive(health_fraction: float) -> void:
 	play_body_anim("idle")
 
 func die() -> void:
+	if status:
+		status.clear_all()
 	death_state = DeathState.DOWNED
 	downed_timer = DOWNED_DURATION
 	# If we were mid-revive over an ally when we went down, drop that prompt —
@@ -2483,6 +2501,9 @@ func _physics_process(delta):
 		_shove_cooldown_timer = maxf(_shove_cooldown_timer - delta, 0.0)
 		_tick_hunger(delta)
 		_iframe_timer = maxf(_iframe_timer - delta, 0.0)
+		if status:
+			status.max_health_ref = max_health
+			status.tick(delta)
 		# Any open menu (inventory OR the esc/pause menu) arms attack-suppression so the
 		# click that operates/closes it can't leak into a shot the frame it clears —
 		# attack_check() then ignores the still-held button until it's released.
@@ -2507,6 +2528,10 @@ func _physics_process(delta):
 			if _push_velocity != Vector2.ZERO:
 				move_and_collide(_push_velocity * delta)
 				_push_velocity = Vector2.ZERO
+			if _timed_push_left > 0.0:
+				_timed_push_left -= delta
+				if state != roll_state:
+					move_and_collide(_timed_push * delta)
 	# Position/anim/rotation now replicate via the MultiplayerSynchronizer only
 	# (net_position, published in _process) — the old per-frame server_send_player_state
 	# RPC that ran alongside it (and fought it, unbuffered) has been removed.
@@ -2618,6 +2643,126 @@ func is_moving(_input_axis):
 func is_invulnerable() -> bool:
 	return _iframe_timer > 0.0
 
+func _setup_status() -> void:
+	status = StatusHolder.new()
+	status.name = "status"
+	status.is_player = true
+	status.max_health_ref = max_health
+	add_child(status)
+	status.changed.connect(func(m): status_mask = m)
+	status.dot_tick.connect(func(amount, _id, _peer): _status_tick_damage(amount))
+	status_visuals = StatusVisuals.new()
+	status_visuals.mask = status_mask
+	add_child(status_visuals)
+
+func _status_tick_damage(amount: float) -> void:
+	if !is_multiplayer_authority() or _is_in_hub():
+		return
+	take_damage(amount)
+	_broadcast_status_number.rpc(amount)
+
+@rpc("authority", "call_local", "unreliable")
+func _broadcast_status_number(amount: float) -> void:
+	_spawn_damage_number(amount, Color(1.0, 0.55, 0.2), false, false)
+
+func apply_timed_push(v: Vector2, sec: float) -> void:
+	if !is_multiplayer_authority() or is_invulnerable() or state == roll_state:
+		return
+	_timed_push = v
+	_timed_push_left = sec
+
+# Heals (authority), with every "bonus" heal source sharing one 150 HP / 60 s cap.
+func heal(amount: float) -> void:
+	if !is_multiplayer_authority() or death_state != DeathState.ALIVE:
+		return
+	health = minf(health + amount, max_health)
+
+func heal_capped(amount: float, _source: String = "") -> float:
+	if !is_multiplayer_authority() or death_state != DeathState.ALIVE or health >= max_health:
+		return 0.0
+	var now := Time.get_ticks_msec()
+	var w: Array = _heal_window.get("all", [now, 0.0])
+	if now - int(w[0]) > 60000:
+		w = [now, 0.0]
+	var allowed := minf(amount, HEAL_CAP_PER_MIN - float(w[1]))
+	if allowed <= 0.0:
+		return 0.0
+	allowed = minf(allowed, max_health - health)
+	w[1] = float(w[1]) + allowed
+	_heal_window["all"] = w
+	heal(allowed)
+	if allowed >= 1.0:
+		_broadcast_heal_number.rpc(allowed)
+	return allowed
+
+@rpc("authority", "call_local", "unreliable")
+func _broadcast_heal_number(amount: float) -> void:
+	_spawn_damage_number(amount, Color(0.4, 1.0, 0.45), false, false)
+
+# Softened element effects of an ENEMY hit on us (combat_redesign_plan §4.4 last
+# column). Never hard CC: slows cap at 25%, pushes never during a roll.
+func receive_element_hit(element: String, _units: float, _is_spell: bool, hitbox, pre_damage: float) -> void:
+	if status == null or hitbox == null or hitbox.from_player:
+		return
+	var D := StatusEffects.DEFS
+	match element:
+		"fire":
+			status.apply("burn", 1.0, {})
+		"ice":
+			status.apply("chill", 1.0, {})
+		"water":
+			status.apply("soak", 1.0, {})
+		"earth", "wind":
+			var away: Vector2 = global_position - hitbox.global_position
+			if away.length_squared() > 0.01:
+				var dist: float = D["p_sunder"]["push"] if element == "earth" else D["p_gale"]["push"]
+				apply_timed_push(away.normalized() * dist / 0.2, 0.2)
+		"nature":
+			var heal_amt: float = pre_damage * D["p_seed"]["lifesteal"]
+			for e in get_tree().get_nodes_in_group("enemies"):
+				if is_instance_valid(e) and e.name.hash() == hitbox.caster_id:
+					if multiplayer.is_server():
+						e.request_lifesteal(heal_amt)
+					else:
+						e.request_lifesteal.rpc_id(1, heal_amt)
+					break
+		"lightning":
+			_spark_to_ally(pre_damage * D["p_chain"]["frac"])
+
+# Enemy lightning: after a short spark tell, the hit arcs to the nearest OTHER
+# player within 400 (that player's own peer applies the damage).
+func _spark_to_ally(amount: float) -> void:
+	var D: Dictionary = StatusEffects.DEFS["p_chain"]
+	var world = get_tree().get_first_node_in_group("world")
+	if world == null or world.players == null:
+		return
+	var best = null
+	var best_d: float = D["radius"]
+	for p in world.players.get_children():
+		if p == self or !p.has_method("receive_chain_arc"):
+			continue
+		var d: float = p.global_position.distance_to(global_position)
+		if d <= best_d:
+			best_d = d
+			best = p
+	if best == null:
+		return
+	Fx.flash(sprite, true, 2.0, 0.3)
+	var target = best
+	get_tree().create_timer(D["delay"]).timeout.connect(func():
+		if is_instance_valid(target) and is_instance_valid(self):
+			CombatFx.arc(get_tree(), PackedVector2Array([global_position, target.global_position]))
+			target.receive_chain_arc.rpc_id(target.name.to_int(), amount, global_position))
+
+@rpc("any_peer", "call_local", "reliable")
+func receive_chain_arc(amount: float, from_pos: Vector2) -> void:
+	if !is_multiplayer_authority() or death_state != DeathState.ALIVE or is_invulnerable():
+		return
+	CombatFx.arc(get_tree(), PackedVector2Array([from_pos, global_position]))
+	var dmg := amount * (1.0 - SpellData.damage_reduction(get_defense()))
+	_broadcast_damage_number.rpc(dmg, false, false)
+	take_damage(dmg)
+
 # External push (u/s) set each frame by something shoving us (an enemy's wave,
 # wave_projectile.gd); applied once after our own movement, then cleared. Local
 # authority only — movement is client-authoritative.
@@ -2645,6 +2790,8 @@ func _start_roll() -> void:
 	_roll_timer = ROLL_DURATION
 	_roll_cooldown_timer = ROLL_DURATION + ROLL_COOLDOWN
 	_iframe_timer = maxf(_iframe_timer, ROLL_IFRAMES)
+	if status:
+		status.remove("burn")
 	is_attacking = false
 	update_legs_rotation(_roll_direction)
 	_play_roll_visual()
@@ -2704,7 +2851,8 @@ func _start_hurt_flicker(duration: float) -> void:
 		_flicker_tween.tween_property(visual_root, "modulate:a", 1.0, 0.04)
 
 func apply_acceleration(delta, _input_axis):
-	velocity = velocity.move_toward(_input_axis.normalized()*max_velocity,acceleration*delta)
+	var status_mult: float = status.move_mult() if status else 1.0
+	velocity = velocity.move_toward(_input_axis.normalized()*max_velocity*status_mult,acceleration*delta)
 
 func apply_friction(delta):
 	velocity = velocity.move_toward(Vector2.ZERO, friction * delta)
@@ -2921,6 +3069,8 @@ func cast_spell(spell_data: Dictionary, reset_sequence: bool = true):
 	# here — it's resolved at the DEFENDER's hit handler, which reads these crit stats
 	# off the hitbox and adds +50 each on element advantage.
 	var atk := get_attack()
+	if spell_data.get("form", "default") == "default" and status:
+		atk *= status.outgoing_mult()
 	var cr := get_crit_rate()
 	var cd := get_crit_damage()
 	# Per-cast payload carried to every peer (combat_redesign_plan §6.1). One RPC per
@@ -3004,6 +3154,10 @@ func spawn_spell_local(
 	# time (+50 each on element advantage). No crit baked here — same for single-hit
 	# and DoT (both resolve at the defender).
 	spell_data["damage"] = attack * spell_data.get("damage_mult", 1.0)
+	spell_data["attack_ref"] = attack
+	# Water basic (Quench): cancels one enemy bullet it touches.
+	if element == "water" and form == "default":
+		spell_data["quench"] = 1
 	spell_data["attacker_crit_rate"] = crit_rate
 	spell_data["attacker_crit_damage"] = crit_damage
 	spell_data["cast"] = cast
@@ -3014,6 +3168,12 @@ func spawn_spell_local(
 		get_tree().current_scene.add_child(projectile)
 		projectile.global_position = origin_position
 		projectile.setup_spell(direction.normalized().rotated(off), spell_data.duplicate(), caster_id, false)
+
+# world.client_credit_kill -> the killer's weapon mods (on_kill).
+func on_kill_credited(info: Dictionary) -> void:
+	var w := get_equipped_weapon()
+	for mod in WeaponMods.for_weapon(w):
+		mod.on_kill(self, w, info)
 
 func refresh_spell_ui() -> void:
 	if !is_multiplayer_authority():

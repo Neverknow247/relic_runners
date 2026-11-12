@@ -168,6 +168,19 @@ var shield_up := false:
 			body.shield_up = value
 			body.queue_redraw()
 var _bullet_speed_mult := 1.0
+# Status effects (combat_redesign_plan §4): server-authoritative holder; the mask is
+# synced so every peer (late joiners too) draws the overlays.
+var status: StatusHolder = null
+var status_visuals: StatusVisuals = null
+@export var status_mask := 0:
+	set(value):
+		status_mask = value
+		if status_visuals:
+			status_visuals.mask = value
+var _was_disabled := false
+var _sunder_units := 0.0
+var _dot_number_accum := 0.0
+var _dot_number_next := 0.0
 var _shield_hp := 0.0
 var _warder_timer := 0.0
 var _warder_charge := 0.0
@@ -653,6 +666,17 @@ var _carry_source: Node = null
 # Wave instance ids that already slammed us into a wall (one slam per wave).
 var _wall_slam_ids := {}
 
+# move_and_slide with the status slow (chill/dirge) applied for this frame only, so
+# the eased velocity isn't compounded down frame after frame.
+func _slide() -> void:
+	var m: float = status.move_mult() if status else 1.0
+	if m >= 0.999:
+		move_and_slide()
+		return
+	velocity *= m
+	move_and_slide()
+	velocity /= maxf(m, 0.05)
+
 func apply_carry(v: Vector2, source: Node) -> void:
 	if !is_multiplayer_authority() or is_dead:
 		return
@@ -693,6 +717,17 @@ func apply_shove(dir: Vector2) -> void:
 
 func _ready() -> void:
 	_spawn_frame = Engine.get_process_frames()
+	status = StatusHolder.new()
+	status.name = "status"
+	add_child(status)
+	status.changed.connect(func(m): status_mask = m)
+	status.dot_tick.connect(_on_status_dot)
+	status_visuals = StatusVisuals.new()
+	status_visuals.mask = status_mask
+	if visual_root:
+		visual_root.add_child(status_visuals)
+	else:
+		add_child(status_visuals)
 	hurtbox.hurt.connect(_on_hurtbox_hurt)
 	detection_area.area_entered.connect(_on_detection_area_entered)
 	detection_area.area_exited.connect(_on_detection_area_exited)
@@ -839,12 +874,23 @@ func _physics_process(delta: float) -> void:
 	if _knockback.length_squared() > 1.0:
 		move_and_collide(_knockback * delta)
 		_knockback = _knockback.move_toward(Vector2.ZERO, KNOCKBACK_DECAY * delta)
+	if status:
+		status.tick(delta)
 	if _consume_carry(delta):
 		# Riding a wave: no AI movement this frame (casting isn't cancelled; the
 		# cooldown keeps ticking).
 		velocity = Vector2.ZERO
 		cast_timer = max(cast_timer - delta, 0.0)
 		return
+	if status and status.is_disabled():
+		# Frozen / staggered: drop the attack in progress once, then stand still.
+		if !_was_disabled:
+			reset_casting()
+			_was_disabled = true
+		velocity = Vector2.ZERO
+		move_and_slide()
+		return
+	_was_disabled = false
 	if NavigationServer2D.map_get_regions(nav_agent.get_navigation_map()).is_empty():
 		# The nav map hasn't finished its first sync yet (region registration
 		# happens a frame or so after scene load) — every NavigationServer2D
@@ -895,7 +941,7 @@ func _physics_process(delta: float) -> void:
 		else:
 			update_idle(delta)
 		reset_casting()
-		move_and_slide()
+		_slide()
 		if facing_indicator:
 			facing_indicator.position = facing_direction * FACING_INDICATOR_DISTANCE
 		return
@@ -992,7 +1038,7 @@ func _physics_process(delta: float) -> void:
 			idle_state = IdleState.WANDER
 			wander_target_valid = false
 		reset_casting()
-	move_and_slide()
+	_slide()
 	if facing_indicator:
 		facing_indicator.position = facing_direction * FACING_INDICATOR_DISTANCE
 
@@ -1937,6 +1983,7 @@ func update_casting(delta: float, distance: float) -> void:
 	# Telegraph: before the FIRST shot of a burst, wind up (visible to the room).
 	if windup_sec > 0.0 and _burst_shots == 0 and not _windup_ready:
 		if _windup_left <= 0.0:
+			_sunder_units = 0.0
 			_special_armed = _roll_special()
 			var a_s: Dictionary = ARCHETYPES.get(archetype, {})
 			_windup_left = float(a_s.get("special_windup", windup_sec)) if _special_armed else windup_sec
@@ -2075,6 +2122,8 @@ func _apply_archetype() -> void:
 	_burst_shots = 0
 	aim_variance = deg_to_rad(a.get("aim_variance_deg", 5.0))
 	attack = a["attack"] * t["attack_mult"]
+	if status:
+		status.tier = tier
 	max_health = a["max_health"] * t["health_mult"]
 	health = max_health
 	_roll_affixes()
@@ -2106,17 +2155,22 @@ func _roll_affixes() -> void:
 	shield_up = _shield_hp > 0.0
 
 # Server, from _on_hurtbox_hurt: armor and shield between a hit and our health.
-func _apply_affix_defense(dmg: float, advantage: bool) -> float:
-	if affixes.has("armored"):
+func _apply_affix_defense(dmg: float, advantage: bool, element: String = "") -> float:
+	# Earth (Sunder) ignores `armored` and cracks shields 3x as fast; a broken-armor
+	# status (earth spells) strips `armored` for a while.
+	var earth := element == "earth"
+	var armor_broken := status != null and status.has("armor_broken")
+	if affixes.has("armored") and !earth and !armor_broken:
 		dmg *= ARMORED_MULT
 	if _shield_hp > 0.0:
 		if advantage:
 			# The right element shatters the shield outright; the hit passes through.
 			_shield_hp = 0.0
 		else:
-			var absorbed := minf(_shield_hp, dmg)
-			_shield_hp -= absorbed
-			dmg -= absorbed
+			var mult: float = StatusEffects.DEFS["sunder"]["shield_mult"] if earth else 1.0
+			var shield_dmg := minf(_shield_hp, dmg * mult)
+			_shield_hp -= shield_dmg
+			dmg -= shield_dmg / mult
 		if _shield_hp <= 0.0:
 			_emit_shield_break()
 	return dmg
@@ -2198,7 +2252,7 @@ func fire_spell(weapon: String, element: String, form: String) -> void:
 			aim_point += Vector2.RIGHT.rotated(randf_range(0.0, TAU)) * randf_range(scatter * 0.4, scatter)
 		var to_target := aim_point - global_position
 		var spawn_dist := minf(to_target.length(), spell_data["spawn_offset"])
-		_broadcast_spawn_projectile(weapon, element, form, to_target.normalized(), attack, crit_rate, crit_damage, spawn_dist, PackedFloat32Array([0.0]))
+		_broadcast_spawn_projectile(weapon, element, form, to_target.normalized(), attack * _outgoing_mult(), crit_rate, crit_damage, spawn_dist, PackedFloat32Array([0.0]))
 	else:
 		var a: Dictionary = ARCHETYPES.get(archetype, ARCHETYPES["pentagon"])
 		# Each archetype sets its shot speed ABSOLUTELY (bullet_speed); convert to a
@@ -2232,7 +2286,8 @@ func fire_spell(weapon: String, element: String, form: String) -> void:
 		var offsets := PackedFloat32Array([0.0])
 		if form == "default":
 			offsets = _pellet_offsets_for(a)
-		_broadcast_spawn_projectile(weapon, element, form, direction, attack, crit_rate, crit_damage, -1.0, offsets, speed_mult)
+		var soak_speed: float = status.bullet_speed_mult() if status else 1.0
+		_broadcast_spawn_projectile(weapon, element, form, direction, attack * _outgoing_mult(), crit_rate, crit_damage, -1.0, offsets, speed_mult * soak_speed)
 	# Cadence is rolled fresh each shot from the archetype's attacks_per_sec [min,max]
 	# range (volleys/sec) so the barrage isn't perfectly metronomic. Enemy AI timing is
 	# authority-only, so this randf is server-side and never desyncs.
@@ -2332,6 +2387,7 @@ func spawn_projectile(weapon: String, element: String, form: String, direction: 
 		# Damage = the enemy's Attack (per pellet); attacker crit stats ride on the
 		# hitbox so the defender resolves crit at hit time (single-hit and DoT alike).
 		spell_data["damage"] = attack
+		spell_data["attack_ref"] = attack
 		spell_data["attacker_crit_rate"] = crit_rate
 		spell_data["attacker_crit_damage"] = crit_damage
 		# Sniper etc. fire faster shots — scale only the velocity, not max_distance,
@@ -2344,6 +2400,180 @@ func spawn_projectile(weapon: String, element: String, form: String, direction: 
 		get_tree().current_scene.add_child(projectile)
 		projectile.global_position = global_position + dir * dist
 		projectile.setup_spell(dir, spell_data, name.hash(), false)
+
+# --- Status effects (server) -------------------------------------------------------
+
+func _outgoing_mult() -> float:
+	return status.outgoing_mult() if status else 1.0
+
+# What the killer's mods get told about this kill (world.credit_kill -> on_kill).
+func _kill_info() -> Dictionary:
+	return {"pos": global_position, "element": attacker_element, "archetype": archetype,
+		"status_mask": status_mask, "tier": tier}
+
+# Combat.apply_on_hit -> here, for a player's hit on us.
+func receive_element_hit(element: String, units: float, is_spell: bool, hitbox, pre_damage: float) -> void:
+	if is_dead or status == null:
+		return
+	var peer: int = hitbox.caster_id if hitbox != null else 0
+	var src := {"peer": peer, "attack": hitbox.attack_ref if hitbox != null else 0.0, "spell": is_spell}
+	if element == "lightning":
+		_chain_arcs(pre_damage, is_spell, peer)
+		return
+	# Elite shields block statuses (earth still cracks them 3x in affix defense).
+	if shield_up:
+		return
+	var sid: String = StatusEffects.ELEMENT_STATUS.get(element, "")
+	if sid == "sunder":
+		_apply_sunder(units, is_spell)
+	elif sid != "":
+		status.apply(sid, units, src)
+
+func _winding_up() -> bool:
+	return _windup_left > 0.0 or _warder_charge > 0.0
+
+func _apply_sunder(units: float, is_spell: bool) -> void:
+	var D: Dictionary = StatusEffects.DEFS["sunder"]
+	var winding := _winding_up()
+	if is_spell:
+		if tier == "gold" and !winding:
+			return
+		if status.stagger(D["stagger_sec"], winding) or winding:
+			_interrupt_attack()
+		return
+	if !winding:
+		return
+	_sunder_units += units
+	if _sunder_units >= float(D["threshold"].get(tier, 2.0)):
+		_sunder_units = 0.0
+		status.stagger(D["stagger_sec"], true)
+		_interrupt_attack()
+
+# What apply_shove does: drop the wind-up/warder charge and delay the next attack.
+func _interrupt_attack() -> void:
+	_cancel_windup()
+	_warder_charge = 0.0
+	cast_timer = maxf(cast_timer, 1.0)
+	Fx.shake_at(get_tree(), global_position, 0.15)
+
+func _chain_arcs(pre_damage: float, is_spell: bool, peer: int) -> void:
+	var D: Dictionary = StatusEffects.DEFS["chain"]
+	var count: int = D["spell_arcs"] if is_spell else D["basic_arcs"]
+	var radius: float = D["spell_radius"] if is_spell else D["basic_radius"]
+	var frac: float = D["spell_frac"] if is_spell else D["basic_frac"]
+	var candidates := []
+	for e in get_tree().get_nodes_in_group("enemies"):
+		if e == self or !is_instance_valid(e) or e.is_dead:
+			continue
+		var d: float = e.global_position.distance_to(global_position)
+		if d <= radius:
+			candidates.append([d, e])
+	if candidates.is_empty():
+		return
+	candidates.sort_custom(func(a, b): return a[0] < b[0])
+	var points := PackedVector2Array([global_position])
+	for i in mini(count, candidates.size()):
+		var e = candidates[i][1]
+		points.append(e.global_position)
+		e.take_secondary_hit(pre_damage * frac, "lightning", peer)
+		if i < count - 1:
+			points.append(global_position)
+	_emit_arc(points)
+
+# Arc / bloom / DoT damage: Defense + affix defense apply, no crit, no on-hit
+# effects (so nothing loops), aggro + kill credit to src_peer.
+func take_secondary_hit(amount: float, element: String, src_peer: int, small_number: bool = false) -> void:
+	if !is_multiplayer_authority() or is_dead:
+		return
+	var dmg := amount * (1.0 - SpellData.damage_reduction(defense))
+	dmg = _apply_affix_defense(dmg, false, element)
+	if dmg <= 0.0:
+		return
+	if src_peer > 0:
+		var w = _get_world()
+		if w != null and w.players != null and w.players.has_node(str(src_peer)):
+			_aggro[src_peer] = _aggro.get(src_peer, 0.0) + dmg
+			_last_attacker_peer = src_peer
+	if small_number:
+		# At most ~2 DoT numbers a second per target: accumulate, flush on a timer.
+		_dot_number_accum += dmg
+		var now := Time.get_ticks_msec() / 1000.0
+		if now >= _dot_number_next:
+			_dot_number_next = now + 0.5
+			_emit_status_number(_dot_number_accum, element)
+			_dot_number_accum = 0.0
+	else:
+		_emit_status_number(dmg, element)
+	take_damage(dmg)
+
+func _on_status_dot(amount: float, id: String, src_peer: int) -> void:
+	take_secondary_hit(amount, "fire" if id == "burn" else id, src_peer, true)
+
+# Burn jumps to the nearest neighbour at half stacks; a seeded death blooms.
+func _on_death_statuses() -> void:
+	if status == null:
+		return
+	var b := status.burn_state()
+	if !b.is_empty():
+		var best = null
+		var best_d: float = StatusEffects.DEFS["burn"]["jump_radius"]
+		for e in get_tree().get_nodes_in_group("enemies"):
+			if e == self or !is_instance_valid(e) or e.is_dead or e.status == null:
+				continue
+			var d: float = e.global_position.distance_to(global_position)
+			if d <= best_d:
+				best_d = d
+				best = e
+		if best != null:
+			best.status.receive_burn(b["stacks"] * 0.5, b["attack"], b["peer"])
+			_emit_arc(PackedVector2Array([global_position, best.global_position]), 1)
+	if status.has("seed"):
+		var bd: Dictionary = StatusEffects.DEFS["bloom"]
+		var mult: float = bd["overgrown_mult"] if status.has("overgrown") else 1.0
+		_emit_bloom(global_position, bd["heal"] * mult, bd["radius"] * (1.4 if mult > 1.0 else 1.0))
+
+# Room-scoped visuals ------------------------------------------------------------
+func _room_call(method: StringName, args: Array) -> void:
+	var targets := _room_rpc_targets()
+	if targets.is_empty():
+		callv("rpc", [method] + args)
+		return
+	var server_id := multiplayer.get_unique_id()
+	for pid in targets:
+		if pid == server_id:
+			callv(method, args)
+		else:
+			callv("rpc_id", [pid, method] + args)
+
+# kind 0 = lightning arc, 1 = burn jump
+func _emit_arc(points: PackedVector2Array, kind: int = 0) -> void:
+	_room_call(&"_show_arc", [points, kind])
+
+@rpc("authority", "call_local", "unreliable")
+func _show_arc(points: PackedVector2Array, kind: int) -> void:
+	CombatFx.arc(get_tree(), points, Color(1.0, 0.5, 0.15) if kind == 1 else Color(1.0, 0.95, 0.4))
+
+func _emit_bloom(pos: Vector2, heal: float, radius: float) -> void:
+	_room_call(&"_show_bloom", [pos, heal, radius])
+
+@rpc("authority", "call_local", "reliable")
+func _show_bloom(pos: Vector2, heal: float, radius: float) -> void:
+	Bloom.spawn(get_tree(), pos, heal, radius)
+
+func _emit_status_number(amount: float, element: String) -> void:
+	_room_call(&"_broadcast_status_number", [amount, element])
+
+@rpc("authority", "call_local", "unreliable")
+func _broadcast_status_number(amount: float, element: String) -> void:
+	var col: Color = SpellData.ELEMENTS.get(element, SpellData.ELEMENTS["default"])["color"]
+	_spawn_damage_number(amount, col, false, false)
+
+# Softened nature (enemy-side): a player we hit tells the server to heal us.
+@rpc("any_peer", "call_local", "reliable")
+func request_lifesteal(amount: float) -> void:
+	if !is_multiplayer_authority() or is_dead:
+		return
+	health = minf(health + clampf(amount, 0.0, max_health * StatusEffects.DEFS["p_seed"]["lifesteal_cap_frac"]), max_health)
 
 func _on_detection_area_entered(area: Area2D) -> void:
 	if area is Hurtbox:
@@ -2363,18 +2593,15 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 	# Resolve the hit from stats (server authority): base = attacker Attack
 	# (hitbox.damage), crit from the attacker's crit stats + a +50/+50 bonus if their
 	# element beats ours, then our Defense reduces it (Diablo-style DR).
-	var final_damage: float = damage
-	var is_crit := false
-	var advantage := false
-	if hitbox != null and "attacker_element" in hitbox:
-		advantage = SpellData.has_advantage(hitbox.attacker_element, attacker_element)
-		var atk_crit_rate: float = hitbox.attacker_crit_rate + (50.0 if advantage else 0.0)
-		var atk_crit_damage: float = hitbox.attacker_crit_damage + (50.0 if advantage else 0.0)
-		is_crit = randf() * 100.0 < atk_crit_rate
-		if is_crit:
-			final_damage *= 1.0 + atk_crit_damage / 100.0
-	final_damage *= 1.0 - SpellData.damage_reduction(defense)
-	final_damage = _apply_affix_defense(final_damage, advantage)
+	if is_dead:
+		return
+	var res := Combat.resolve_hit(hitbox, damage, attacker_element, defense)
+	var final_damage: float = res["damage"]
+	var is_crit: bool = res["is_crit"]
+	var advantage: bool = res["advantage"]
+	var hit_element: String = hitbox.attacker_element if hitbox != null and "attacker_element" in hitbox else ""
+	var player_hit: bool = hitbox != null and "from_player" in hitbox and hitbox.from_player
+	final_damage = _apply_affix_defense(final_damage, advantage, hit_element)
 	# Aggro: credit this damage to the attacking PLAYER. hitbox.caster_id is the
 	# player's peer id directly (enemy casts use name.hash(), so guard on it being a
 	# real player node). Whoever out-damages the current target pulls aggro — see
@@ -2389,7 +2616,8 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 	if hitbox != null and is_instance_valid(hitbox) and hitbox.auto_hit:
 		var away: Vector2 = global_position - hitbox.global_position
 		if away.length_squared() > 0.0001:
-			_knockback += away.normalized() * KNOCKBACK_SPEED * (1.5 if is_crit else 1.0)
+			var gale: float = StatusEffects.DEFS["gale"]["basic_knockback_mult"] if hit_element == "wind" and player_hit else 1.0
+			_knockback += away.normalized() * KNOCKBACK_SPEED * (1.5 if is_crit else 1.0) * gale
 	# Getting hit is an instant, unmissable cue of where the attack came
 	# from — snap facing straight there instead of easing over with
 	# turn_speed like normal tracking does.
@@ -2416,6 +2644,10 @@ func _on_hurtbox_hurt(hitbox, damage) -> void:
 			# from, same as what we just used to start our own investigation.
 			var alert_point = current_target.global_position if current_target != null else hitbox.global_position
 			alert_nearby_group(current_target, alert_point)
+	# Element side effects (statuses, chain, sunder) BEFORE the damage lands, so a
+	# killing hit's seed/burn still counts in die().
+	if player_hit:
+		Combat.apply_on_hit(self, hitbox, damage, advantage)
 	take_damage(final_damage)
 
 # Room-scoped like the projectile spawn above (same "don't spam other rooms'
@@ -2467,5 +2699,6 @@ func die() -> void:
 		# (crystal_<element>), which fits the elemental theme.
 		var context := {"element": attacker_element, "tier": tier}
 		world.spawn_loot(global_position, ItemData.get_loot_table(archetype, tier), context)
-		world.credit_kill(_last_attacker_peer)
+		world.credit_kill(_last_attacker_peer, _kill_info())
+	_on_death_statuses()
 	is_dead = true

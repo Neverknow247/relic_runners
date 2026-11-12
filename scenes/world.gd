@@ -189,17 +189,21 @@ func mark_run_extracted() -> void:
 	_run_extracted = true
 
 # Server: an enemy died; tell the player who landed the last hit.
-func credit_kill(peer_id: int) -> void:
+func credit_kill(peer_id: int, info: Dictionary = {}) -> void:
 	if !multiplayer.is_server() or peer_id <= 0:
 		return
 	if peer_id == multiplayer.get_unique_id():
-		_run_kills += 1
+		client_credit_kill(info)
 	elif player_locations.has(peer_id):
-		client_credit_kill.rpc_id(peer_id)
+		client_credit_kill.rpc_id(peer_id, info)
 
+# The killer's own peer: count it and tell the killer's weapon mods (on_kill).
 @rpc("authority", "call_remote", "reliable")
-func client_credit_kill() -> void:
+func client_credit_kill(info: Dictionary = {}) -> void:
 	_run_kills += 1
+	var me = players.get_node_or_null(str(multiplayer.get_unique_id())) if players != null else null
+	if me != null and me.has_method("on_kill_credited"):
+		me.on_kill_credited(info)
 
 # --- Raid clock (extraction maps) --------------------------------------------
 # MapDef.duration_sec. The server tells every peer the remaining time at launch;
@@ -602,6 +606,9 @@ func client_change_location(zone: String, room: String, spawn_point:= "default")
 	var old_room: String = my_room
 	my_zone = zone
 	my_room = room
+	var me_p = players.get_node_or_null(str(multiplayer.get_unique_id())) if players != null else null
+	if me_p != null and "status" in me_p and me_p.status != null:
+		me_p.status.clear_all()
 	load_location_locally(zone, room, old_zone, old_room)
 	if leaving_hub:
 		_run_start_msec = Time.get_ticks_msec()

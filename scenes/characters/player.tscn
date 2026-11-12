@@ -38,6 +38,9 @@ properties/8/replication_mode = 1
 properties/9/path = NodePath(".:network_element")
 properties/9/spawn = true
 properties/9/replication_mode = 1
+properties/10/path = NodePath(".:status_mask")
+properties/10/spawn = true
+properties/10/replication_mode = 2
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_dyp2m"]
 radius = 48.0
