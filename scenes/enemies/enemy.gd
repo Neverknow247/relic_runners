@@ -684,16 +684,137 @@ func apply_carry(v: Vector2, source: Node) -> void:
 	_carry_velocity = v * minf(resist, CARRY_TIER_FACTOR.get(tier, 1.0))
 	_carry_source = source
 
+var _pull_velocity := Vector2.ZERO
+var _skewer_vel := Vector2.ZERO
+var _skewer_left := 0.0
+var _skewer_slam := 0.0
+var _skewer_peer := 0
+
+func _carry_factor() -> float:
+	var resist: float = ARCHETYPES.get(archetype, {}).get("carry_resist", 1.0)
+	return minf(resist, CARRY_TIER_FACTOR.get(tier, 1.0))
+
+# --- fx_* : server-side hooks for element x form expressions (ElementForms),
+# GroundZone and weapon mods. All no-ops off the server / when dead.
+func _fx_ok() -> bool:
+	return is_multiplayer_authority() and !is_dead and status != null
+
+func fx_burn(stacks: float, attack_ref: float, peer: int) -> void:
+	if _fx_ok() and !shield_up:
+		status.add_burn(stacks, attack_ref, peer)
+
+func fx_chill(amount: float) -> void:
+	if _fx_ok() and !shield_up:
+		status.apply("chill", amount / StatusEffects.DEFS["chill"]["spell_per_unit"], {"spell": true})
+
+func fx_freeze(sec: float) -> void:
+	if _fx_ok() and !shield_up:
+		status.freeze(sec)
+
+func fx_stagger(sec: float) -> void:
+	if _fx_ok():
+		if status.stagger(sec, _winding_up()) or _winding_up():
+			_interrupt_attack()
+
+func fx_slow(frac: float, sec: float) -> void:
+	if _fx_ok():
+		status.add_timed("slowed", sec, frac)
+
+func fx_root(sec: float) -> void:
+	if _fx_ok():
+		status.add_timed("rooted", sec)
+
+func fx_armor_break(sec: float) -> void:
+	if _fx_ok():
+		status.add_timed("armor_broken", sec)
+
+func fx_shield_crack(amount: float) -> void:
+	if !_fx_ok() or _shield_hp <= 0.0:
+		return
+	_shield_hp = maxf(_shield_hp - amount, 0.0)
+	if _shield_hp <= 0.0:
+		_emit_shield_break()
+
+func fx_push(v: Vector2) -> void:
+	if _fx_ok():
+		_knockback += v * _carry_factor()
+
+# Pull toward `point` at `speed` u/s this frame (never past the point).
+func fx_pull(point: Vector2, speed: float) -> void:
+	if !_fx_ok():
+		return
+	var to := point - global_position
+	var d := to.length()
+	if d < 24.0:
+		return
+	var dt := get_physics_process_delta_time()
+	_pull_velocity = to / d * minf(speed * _carry_factor(), d / maxf(dt, 0.001))
+
+# Wind bolt: carried along `v` for `sec`, slammed for `slam` if it meets a wall.
+func fx_skewer(v: Vector2, sec: float, slam: float, peer: int) -> void:
+	if !_fx_ok():
+		return
+	_skewer_vel = v * _carry_factor()
+	_skewer_left = sec
+	_skewer_slam = slam
+	_skewer_peer = peer
+
+# Arcs from us: `sequential` hops target -> next target; otherwise a fan from us.
+func fx_chain(base_damage: float, count: int, frac: float, radius: float, peer: int, sequential: bool) -> void:
+	if !_fx_ok():
+		return
+	var from: Node2D = self
+	var hit := {self: true}
+	var points := PackedVector2Array([global_position])
+	for i in count:
+		var best = null
+		var best_d := radius
+		for e in get_tree().get_nodes_in_group("enemies"):
+			if hit.has(e) or !is_instance_valid(e) or e.is_dead:
+				continue
+			var d: float = e.global_position.distance_to(from.global_position)
+			if d <= best_d:
+				best_d = d
+				best = e
+		if best == null:
+			break
+		hit[best] = true
+		points.append(best.global_position)
+		best.take_secondary_hit(base_damage * frac, "lightning", peer)
+		if sequential:
+			from = best
+		else:
+			points.append(global_position)
+	if points.size() > 1:
+		_emit_arc(points)
+
+func fx_arc_visual(points: PackedVector2Array) -> void:
+	if _fx_ok():
+		_emit_arc(points)
+
 func apply_carry_release(v: Vector2) -> void:
 	if !is_multiplayer_authority() or is_dead:
 		return
 	var resist: float = ARCHETYPES.get(archetype, {}).get("carry_resist", 1.0)
 	_knockback += v * minf(resist, CARRY_TIER_FACTOR.get(tier, 1.0))
 
-# Returns true when a wave moved us this frame (the AI skips its own movement).
+# Returns true when a wave / skewer / pull moved us this frame (AI skips its move).
 func _consume_carry(delta: float) -> bool:
+	var moved := false
+	if _pull_velocity != Vector2.ZERO:
+		move_and_collide(_pull_velocity * delta)
+		_pull_velocity = Vector2.ZERO
+		moved = true
+	if _skewer_left > 0.0:
+		_skewer_left -= delta
+		var scol := move_and_collide(_skewer_vel * delta)
+		if scol != null:
+			_skewer_left = 0.0
+			take_secondary_hit(_skewer_slam, "wind", _skewer_peer)
+			Fx.shake_at(get_tree(), global_position, 0.25)
+		return true
 	if _carry_velocity == Vector2.ZERO:
-		return false
+		return moved
 	var col := move_and_collide(_carry_velocity * delta)
 	var src := _carry_source
 	_carry_velocity = Vector2.ZERO
@@ -705,6 +826,8 @@ func _consume_carry(delta: float) -> bool:
 			# Through the normal hit path: Defense, crit, damage number, kill credit.
 			hurtbox.take_hit(src.hitbox, src.slam_damage())
 			Fx.shake_at(get_tree(), global_position, 0.25)
+			if src.spell_data.get("slam_stagger", false) and status:
+				status.stagger(1.0, true)
 	return true
 
 func apply_shove(dir: Vector2) -> void:

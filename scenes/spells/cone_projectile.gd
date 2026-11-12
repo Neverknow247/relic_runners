@@ -28,6 +28,7 @@ func _physics_process(delta: float) -> void:
 			continue
 		_hit_ids[area.owner_id] = true
 		area.take_hit(hitbox, hitbox.damage)
+		_fx("hit", area)
 
 # True if a wall sits on the line from the cone's origin (the caster) to the
 # target, so the target is behind cover and shouldn't be hit.

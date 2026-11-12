@@ -76,6 +76,10 @@ func move_mult() -> float:
 	m = 1.0 - max_slow * clampf(_chill / 100.0, 0.0, 1.0)
 	if _timed.has("dirge"):
 		m *= 1.0 - float(_values.get("dirge", 0.2))
+	if _timed.has("slowed"):
+		m *= 1.0 - float(_values.get("slowed", 0.3))
+	if _timed.has("rooted"):
+		m = 0.0
 	return maxf(m, 0.0)
 
 func is_disabled() -> bool:
@@ -170,7 +174,7 @@ func stagger(sec: float, force: bool = false) -> bool:
 
 func add_timed(id: String, sec: float, value: float = 1.0) -> void:
 	_timed[id] = maxf(float(_timed.get(id, 0.0)), sec)
-	_values[id] = value
+	_values[id] = maxf(float(_values.get(id, value)), value) if _timed.has(id) else value
 	_refresh_mask()
 
 func remove(id: String) -> void:
@@ -200,6 +204,16 @@ func burn_state() -> Dictionary:
 	if _burn_left <= 0.0:
 		return {}
 	return {"stacks": _burn_stacks, "attack": _burn_attack, "peer": _burn_peer}
+
+# Spell-strength burn stacks added directly (fire rain/beam/cone), capped at the spell cap.
+func add_burn(stacks: float, attack: float, peer: int) -> void:
+	if is_player or stacks <= 0.0:
+		return
+	_burn_stacks = minf(_burn_stacks + stacks, D["burn"]["spell_cap"])
+	_burn_left = D["burn"]["duration"]
+	_burn_attack = maxf(_burn_attack, attack)
+	_burn_peer = peer
+	_refresh_mask()
 
 func receive_burn(stacks: float, attack: float, peer: int) -> void:
 	if is_player or stacks <= 0.0:

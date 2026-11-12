@@ -32,13 +32,15 @@ func _expire() -> void:
 	if _exploded:
 		return
 	_exploded = true
+	_fx("expire", global_position)
 	# Deferred: _expire can fire from area/body_entered (a physics query flush),
 	# and adding the explosion's monitoring Area2D can't happen mid-flush. Harmless
 	# from the lifetime-timer / max-distance paths too.
 	_explode.call_deferred()
 
 func _explode() -> void:
-	if spell_data.is_empty():
+	if spell_data.is_empty() or spell_data.get("bespoke", "") == "tornado":
+		# Tornado (wind ball): the vortex replaces the explosion (ElementForms).
 		queue_free()
 		return
 	var explosion = ExplosionScene.instantiate()
@@ -54,5 +56,7 @@ func _explode() -> void:
 	exp_data["pierce"] = true
 	exp_data["stop_on_wall"] = false
 	exp_data["auto_hit"] = true
+	exp_data["_explosion"] = true
+	exp_data["size"] = EXPLOSION_SIZE * float(spell_data.get("explosion_mult", 1.0))
 	explosion.setup_spell(direction, exp_data, hitbox.caster_id, hitbox.is_crit)
 	queue_free()

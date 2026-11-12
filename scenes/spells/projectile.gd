@@ -29,6 +29,17 @@ var _spawn_position := Vector2.ZERO
 # Water basic (Quench): this many enemy bullets it can cancel on contact; the
 # shot is consumed by the cancel. Each peer runs its own copy (like burst's clear).
 var _quench := 0
+# Event hook for element x form expressions and weapon mods (combat plan §6.2).
+# spell_data["_fx"] is a Callable set by the caster (player.gd); this script never
+# names the router (CastFx), which keeps it out of the preload cycle.
+var _has_fx := false
+
+func _fx(event: String, arg = null) -> void:
+	if !_has_fx:
+		return
+	var cb = spell_data.get("_fx")
+	if cb is Callable and cb.is_valid():
+		cb.call(event, self, arg)
 const QUENCH_RADIUS := 72.0
 
 func setup(_direction: Vector2, _projectile_type:= "basic"):
@@ -75,6 +86,8 @@ func _physics_process(delta: float) -> void:
 	position += direction * speed * delta
 	if _quench > 0 and !_enemy_shot:
 		_try_quench()
+	if _has_fx:
+		_fx("tick", delta)
 	# Fizzle once we've travelled the cap's worth of distance. Cheap distance_to
 	# only matters for speed > 0 forms; stationary zones sit at _spawn_position so
 	# this never trips for them.
@@ -106,6 +119,7 @@ func erase_enemy_bullets(center: Vector2, radius: float) -> int:
 # its lifetime timer ran out). Base behavior is to just disappear; subclasses
 # override to do something first (ball_projectile.gd detonates its explosion).
 func _expire() -> void:
+	_fx("expire", global_position)
 	queue_free()
 
 # The node that cast this projectile — a player (under world.players, keyed by
@@ -163,6 +177,11 @@ func setup_spell(_direction: Vector2, _spell_data: Dictionary, caster_id: int = 
 	hitbox.is_spell = spell_data.get("form", "default") != "default"
 	hitbox.cast = spell_data.get("cast", {})
 	_quench = int(spell_data.get("quench", 0))
+	var cb = spell_data.get("_fx")
+	_has_fx = cb is Callable and cb.is_valid()
+	if _has_fx:
+		# Deferred so subclass setup (rain's wall clamp, wave sizing) is done first.
+		_fx.call_deferred("spawn")
 	# Free after the form's ACTUAL lifetime. Started here (not in _ready) because
 	# lifetime is only known once setup_spell runs — the stationary pierce forms
 	# (burst/cone/beam/rain) rely on this timer for their whole duration since
@@ -195,6 +214,10 @@ func _on_hitbox_area_entered(area: Area2D) -> void:
 		var owner_node = area.get_parent()
 		if owner_node != null and owner_node.has_method("is_invulnerable") and owner_node.is_invulnerable():
 			return
+	# Only where THIS overlap delivers the damage (auto_hit). Forms that drive their
+	# own damage (cone/beam/rain/wave ticks) fire "hit" from their own loops.
+	if area is Hurtbox and hitbox.auto_hit:
+		_fx("hit", area)
 	# Piercing forms (AoE zones, wedges, beams) pass through hurtboxes instead
 	# of being consumed by the first one they touch.
 	if pierce:
@@ -205,9 +228,14 @@ func _on_hitbox_area_entered(area: Area2D) -> void:
 	if !_enemy_shot and spell_data.get("form", "default") != "default":
 		Fx.shatter(get_tree(), global_position, _tint, 0.9)
 		Fx.shake_at(get_tree(), global_position, 0.3)
+	_fx("expire", global_position)
 	queue_free()
 
 func _on_hitbox_body_entered(_body: Node2D) -> void:
 	if stop_on_wall:
+		_fx("wall")
+		if !stop_on_wall or is_queued_for_deletion():
+			return   # a mod (ricochet) kept us alive / already handled it
 		Fx.puff(get_tree(), global_position, _tint, scale.x * 0.7)
+		_fx("expire", global_position)
 		queue_free()

@@ -38,6 +38,7 @@ func _draw() -> void:
 
 func _land() -> void:
 	queue_redraw()
+	_fx("land")
 	Fx.shatter(get_tree(), global_position, _tint, clampf(scale.x / 4.0, 1.0, 2.2))
 	Fx.shake_at(get_tree(), global_position, 0.5)
 	Sounds.play_sfx("explosion", global_position)
@@ -76,6 +77,9 @@ func _physics_process(delta: float) -> void:
 		_apply_tick()
 
 func _apply_tick() -> void:
+	# Thunderstorm / Boulderfall replace the ground ticks with seeded strikes.
+	if spell_data.get("bespoke", "") in ["thunderstorm", "boulderfall"]:
+		return
 	# Full damage / number-of-ticks, so the lifetime's worth of ticks sums to the
 	# computed damage. Crit rolled per tick (dot forms don't bake crit at spawn).
 	# Ticks only run after the call-down, so spread over the active time.
@@ -92,3 +96,4 @@ func _apply_tick() -> void:
 		# Crit is resolved per tick at the defender's _on_hurtbox_hurt (it reads the
 		# attacker crit stats off the hitbox), so just pass the base tick damage.
 		area.take_hit(hitbox, tick_base)
+		_fx("hit", area)

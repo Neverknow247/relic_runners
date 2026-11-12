@@ -49,6 +49,7 @@ func _physics_process(delta: float) -> void:
 		if _caster.has_method("get_networked_aim"):
 			rotation = _caster.get_networked_aim().angle()
 	_update_length()
+	_fx("tick", delta)
 	_tick_timer -= delta
 	if _tick_timer <= 0.0:
 		_tick_timer = TICK_INTERVAL
@@ -90,3 +91,4 @@ func _apply_tick() -> void:
 		# Crit is resolved per tick at the defender's _on_hurtbox_hurt (it reads the
 		# attacker crit stats off the hitbox), so just pass the base tick damage.
 		area.take_hit(hitbox, tick_base)
+		_fx("hit", area)

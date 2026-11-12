@@ -3161,6 +3161,10 @@ func spawn_spell_local(
 	spell_data["attacker_crit_rate"] = crit_rate
 	spell_data["attacker_crit_damage"] = crit_damage
 	spell_data["cast"] = cast
+	# Element x form expressions + weapon mods ride the projectile events (CastFx).
+	spell_data["bespoke"] = ElementForms.bespoke_for(element, form)
+	if form != "default" or cast.has("sub") or cast.has("tr"):
+		spell_data["_fx"] = CastFx.callable()
 	# One projectile per pellet offset ("off" absent = a single shot straight ahead).
 	var offsets: PackedFloat32Array = cast.get("off", PackedFloat32Array([0.0]))
 	for off in offsets:

@@ -9,7 +9,7 @@ func setup_spell(_direction: Vector2, _spell_data: Dictionary, caster_id: int = 
 	if _enemy_shot:
 		return
 	var radius := VISUAL_RADIUS * scale.x
-	for b in get_tree().get_nodes_in_group("enemy_bullets"):
+	for b in ([] if spell_data.get("no_clear", false) else get_tree().get_nodes_in_group("enemy_bullets")):
 		if is_instance_valid(b) and b.global_position.distance_to(global_position) <= radius:
 			Fx.puff(get_tree(), b.global_position, b._tint, 0.6)
 			b.queue_free()

@@ -32,6 +32,17 @@ var _carried := {}
 var _player_push_left := PLAYER_PUSH_MAX_SEC
 var _age := 0.0
 var _done := false
+# Tidal Wave widens it (ElementForms); drawing + hit shape follow this.
+var width_mult := 1.0
+
+func set_width_mult(m: float) -> void:
+	width_mult = m
+	var cs := get_node_or_null("hitbox/wave_shape") as CollisionShape2D
+	if cs != null and cs.shape is RectangleShape2D:
+		var r: RectangleShape2D = cs.shape.duplicate()
+		r.size.y = 640.0 * m
+		cs.shape = r
+	queue_redraw()
 
 func setup_spell(_direction: Vector2, _spell_data: Dictionary, caster_id: int = 0, crit: bool = false):
 	super.setup_spell(_direction, _spell_data, caster_id, crit)
@@ -65,6 +76,7 @@ func _physics_process(delta: float) -> void:
 		if not _hit_ids.has(area.owner_id):
 			_hit_ids[area.owner_id] = true
 			area.take_hit(hitbox, hitbox.damage)
+			_fx("hit", area)
 		if area.is_player:
 			_push_local_player(target, delta)
 		elif server and target != null and target.has_method("apply_carry") and spell_data.get("carry", false):
@@ -90,15 +102,17 @@ func _push_local_player(player: Node, delta: float) -> void:
 
 # Called by a carried enemy (server) when our push slams it into a wall.
 func slam_damage() -> float:
-	return hitbox.damage * WALL_SLAM_FRACTION
+	return hitbox.damage * float(spell_data.get("slam_frac", WALL_SLAM_FRACTION))
 
 func _expire() -> void:
 	if _done:
 		return
 	_done = true
+	_fx("expire", global_position)
+	var fling: float = RELEASE_FLING * float(spell_data.get("fling_mult", 1.0))
 	for e in _carried.values():
 		if is_instance_valid(e) and not e.is_dead:
-			e.apply_carry_release(direction * RELEASE_FLING)
+			e.apply_carry_release(direction * fling)
 	_carried.clear()
 	Fx.puff(get_tree(), global_position, _tint, 2.0)
 	queue_free()
@@ -134,7 +148,7 @@ func _draw() -> void:
 	var inner := PackedVector2Array()
 	for i in steps + 1:
 		var t := float(i) / steps
-		var y := lerpf(-HALF_WIDTH, HALF_WIDTH, t)
+		var y := lerpf(-HALF_WIDTH, HALF_WIDTH, t) * width_mult
 		# Bowed front: the middle leads, the ends trail.
 		var bow := (1.0 - pow(2.0 * t - 1.0, 2.0)) * 28.0
 		outer.append(Vector2(HALF_DEPTH + bow, y))
@@ -147,7 +161,7 @@ func _draw() -> void:
 	draw_polyline(outer, foam, 14.0)
 	# Trailing wake streaks.
 	for k in 5:
-		var y := lerpf(-HALF_WIDTH * 0.8, HALF_WIDTH * 0.8, k / 4.0)
+		var y := lerpf(-HALF_WIDTH * 0.8, HALF_WIDTH * 0.8, k / 4.0) * width_mult
 		var c := foam
 		c.a *= 0.4
 		draw_line(Vector2(-HALF_DEPTH - 20.0, y), Vector2(-HALF_DEPTH - 110.0, y), c, 8.0)
