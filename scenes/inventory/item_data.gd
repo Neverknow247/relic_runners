@@ -273,6 +273,14 @@ const ITEMS := {
 		"color": Color(0.4, 0.8, 0.5),
 		"icon_label": "c",
 	},
+	"form_stone_wave": {
+		"display_name": "Wave Gem",
+		"stackable": false,
+		"max_stack": 1,
+		"footprint": Vector2i(1, 1),
+		"color": Color(0.3, 0.75, 0.8),
+		"icon_label": "w",
+	},
 	# Gear: equippable, never stacks, and takes up real space in the grid
 	# when carried loose ("if it's held") rather than worn. equip_slot ties
 	# an item type to which EquipmentSlot will accept it. Only backpack_basic
@@ -414,7 +422,7 @@ const VENDOR_SELL := {
 	"crystal_fire": 12, "crystal_lightning": 12, "crystal_ice": 12, "crystal_wind": 12,
 	"crystal_nature": 12, "crystal_water": 12, "crystal_earth": 12,
 	"form_stone_ball": 18, "form_stone_bolt": 18, "form_stone_rain": 18,
-	"form_stone_beam": 18, "form_stone_burst": 18, "form_stone_cone": 18,
+	"form_stone_beam": 18, "form_stone_burst": 18, "form_stone_cone": 18, "form_stone_wave": 18,
 	"minnow": 2, "river_bass": 4, "silverscale": 8, "old_boot": 1, "mana_eel": 10,
 	"river_pearl": 25, "golden_koi": 40,
 	"health_potion": 10, "greater_health_potion": 25, "mana_crystal": 15, "refined_mana_crystal": 30,
@@ -500,7 +508,7 @@ static func stone_for_form(form: String) -> String:
 const MATERIAL_TYPES := [
 	"crystal_fire", "crystal_lightning", "crystal_ice", "crystal_wind", "crystal_nature", "crystal_water", "crystal_earth",
 	"form_stone_ball", "form_stone_bolt", "form_stone_rain",
-	"form_stone_beam", "form_stone_burst", "form_stone_cone",
+	"form_stone_beam", "form_stone_burst", "form_stone_cone", "form_stone_wave",
 ]
 
 static func is_material(item_type: String) -> bool:
@@ -563,6 +571,7 @@ const DESCRIPTIONS := {
 	"form_stone_beam": "A worn gem that channels magic into a continuous stream.",
 	"form_stone_burst": "Ancient runes force magic outward in every direction.",
 	"form_stone_cone": "Its widening glyphs spread magic into a broad arc.",
+	"form_stone_wave": "Tide-worn runes roll magic forward as a crashing wave.",
 	"tome": "A heavy spellbook.",
 	"orb": "A floating focus.",
 	"wand": "A quick casting rod.",
@@ -735,7 +744,7 @@ const LOOT_GROUPS := {
 	"field": ["herbs", "water_flask", "red_moss"],
 	"dusts": ["fire_dust", "lightning_dust", "ice_dust", "wind_dust", "nature_dust", "water_dust", "earth_dust"],
 	"crystals": ["crystal_fire", "crystal_lightning", "crystal_ice", "crystal_wind", "crystal_nature", "crystal_water", "crystal_earth"],
-	"form_stones": ["form_stone_ball", "form_stone_bolt", "form_stone_rain", "form_stone_beam", "form_stone_burst", "form_stone_cone"],
+	"form_stones": ["form_stone_ball", "form_stone_bolt", "form_stone_rain", "form_stone_beam", "form_stone_burst", "form_stone_cone", "form_stone_wave"],
 	"mana_mats": ["mana_dust", "pure_mana_shard"],
 	"potions": ["health_potion", "greater_health_potion"],
 	"mana_potions": ["mana_crystal", "refined_mana_crystal"],
@@ -978,7 +987,7 @@ const ENEMY_LOOT_POOLS := {
 			"belt_basic", "cloak_basic", "backpack_basic"],
 		"rare": ["greater_health_potion", "refined_mana_crystal", "blessed_band", "@weapon",
 			"form_stone_ball", "form_stone_bolt", "form_stone_rain",
-			"form_stone_beam", "form_stone_burst", "form_stone_cone"],
+			"form_stone_beam", "form_stone_burst", "form_stone_cone", "form_stone_wave"],
 		"epic": [],
 		"legendary": [],
 	},
@@ -1028,7 +1037,7 @@ const CONTAINERS := {
 		"common": ["cloth", "scrap", "gold", "health_potion"], "uncommon": ["mana_crystal"]}},
 	"weapon_rack": {"display_name": "Weapon Rack", "color": Color(0.4, 0.4, 0.45), "rolls_min": 1, "rolls_max": 2, "loot": {
 		"common": ["scrap"], "uncommon": ["form_stone_ball", "form_stone_bolt"],
-		"rare": ["tome", "wand", "staff", "orb", "lantern", "instrument", "totem", "form_stone_beam", "form_stone_burst", "form_stone_cone"]}},
+		"rare": ["tome", "wand", "staff", "orb", "lantern", "instrument", "totem", "form_stone_beam", "form_stone_burst", "form_stone_cone", "form_stone_wave"]}},
 	"mushroom_cluster": {"display_name": "Mushroom Cluster", "color": Color(0.6, 0.35, 0.4), "rolls_min": 1, "rolls_max": 2, "loot": {
 		"common": ["herbs", "red_moss"], "uncommon": ["red_moss"]}},
 	"berry_bush": {"display_name": "Berry Bush", "color": Color(0.35, 0.55, 0.3), "rolls_min": 1, "rolls_max": 2, "loot": {

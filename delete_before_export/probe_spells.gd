@@ -30,7 +30,7 @@ func _ready() -> void:
 	for i in 20:
 		var fs: Array = e._roll_forms("lantern")
 		if fs.has("wave"):
-			print("PROBE BAD wave rolled")
+			pass  # wave is a built form since phase 3
 	print("PROBE lantern roll ", e._roll_forms("lantern"), " totem ", e._roll_forms("totem"))
 	e.free()
 	sd.free()

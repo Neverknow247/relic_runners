@@ -1,0 +1,16 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" uid="uid://bg8kikir621sv" path="res://scenes/spells/projectile.tscn" id="1_base"]
+[ext_resource type="Script" path="res://scenes/spells/wave_projectile.gd" id="2_wave"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_wave"]
+size = Vector2(96, 640)
+
+[node name="wave_projectile" instance=ExtResource("1_base")]
+script = ExtResource("2_wave")
+
+[node name="collision_shape_2d" parent="hitbox"]
+disabled = true
+
+[node name="wave_shape" type="CollisionShape2D" parent="hitbox"]
+shape = SubResource("RectangleShape2D_wave")

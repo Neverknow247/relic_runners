@@ -89,6 +89,10 @@ const ARCHETYPES := {
 		"pellets": 5, "spread_deg": 36.0, "pellet_angles_deg": [-18.0, -8.0, 0.0, 8.0, 18.0],
 		"bullet_speed": 1050.0, "aim_variance_deg": 5.0,
 		"windup_sec": 0.5,
+		# Every 3rd burst is replaced by one telegraphed WAVE (ground ghost, aim
+		# locked at wind-up start); carry_resist: the bruiser slides out the back.
+		"special_form": "wave", "special_every": 3, "special_windup": 0.6,
+		"carry_resist": 0.5,
 		"body_size": 64.0,
 	},
 	"triangle": {
@@ -640,6 +644,45 @@ const SHOVE_STAGGER := 0.8
 
 # Server: a player's melee shove. Big knockback plus a stagger that cancels any
 # wind-up in progress and delays the next attack.
+# Wave carry (server): a wave sets this every frame it overlaps us; consumed (and
+# zeroed) in _physics_process. Heavier archetypes / higher tiers resist, so they
+# slide out the back of the wave instead of riding it.
+const CARRY_TIER_FACTOR := {"bronze": 1.0, "silver": 0.5, "gold": 0.25}
+var _carry_velocity := Vector2.ZERO
+var _carry_source: Node = null
+# Wave instance ids that already slammed us into a wall (one slam per wave).
+var _wall_slam_ids := {}
+
+func apply_carry(v: Vector2, source: Node) -> void:
+	if !is_multiplayer_authority() or is_dead:
+		return
+	var resist: float = ARCHETYPES.get(archetype, {}).get("carry_resist", 1.0)
+	_carry_velocity = v * minf(resist, CARRY_TIER_FACTOR.get(tier, 1.0))
+	_carry_source = source
+
+func apply_carry_release(v: Vector2) -> void:
+	if !is_multiplayer_authority() or is_dead:
+		return
+	var resist: float = ARCHETYPES.get(archetype, {}).get("carry_resist", 1.0)
+	_knockback += v * minf(resist, CARRY_TIER_FACTOR.get(tier, 1.0))
+
+# Returns true when a wave moved us this frame (the AI skips its own movement).
+func _consume_carry(delta: float) -> bool:
+	if _carry_velocity == Vector2.ZERO:
+		return false
+	var col := move_and_collide(_carry_velocity * delta)
+	var src := _carry_source
+	_carry_velocity = Vector2.ZERO
+	_carry_source = null
+	if col != null and src != null and is_instance_valid(src) and src.has_method("slam_damage"):
+		var sid := src.get_instance_id()
+		if !_wall_slam_ids.has(sid):
+			_wall_slam_ids[sid] = true
+			# Through the normal hit path: Defense, crit, damage number, kill credit.
+			hurtbox.take_hit(src.hitbox, src.slam_damage())
+			Fx.shake_at(get_tree(), global_position, 0.25)
+	return true
+
 func apply_shove(dir: Vector2) -> void:
 	if !is_multiplayer_authority() or is_dead:
 		return
@@ -796,6 +839,12 @@ func _physics_process(delta: float) -> void:
 	if _knockback.length_squared() > 1.0:
 		move_and_collide(_knockback * delta)
 		_knockback = _knockback.move_toward(Vector2.ZERO, KNOCKBACK_DECAY * delta)
+	if _consume_carry(delta):
+		# Riding a wave: no AI movement this frame (casting isn't cancelled; the
+		# cooldown keeps ticking).
+		velocity = Vector2.ZERO
+		cast_timer = max(cast_timer - delta, 0.0)
+		return
 	if NavigationServer2D.map_get_regions(nav_agent.get_navigation_map()).is_empty():
 		# The nav map hasn't finished its first sync yet (region registration
 		# happens a frame or so after scene load) — every NavigationServer2D
@@ -1623,6 +1672,10 @@ var _windup_tween: Tween = null
 # remain, then freezes on a led point. Server-side state:
 var _lock_before := 0.0
 var _windup_tracking := false
+# Archetype special (pentagon wave): every special_every-th burst is one special
+# cast instead. _special_armed is set at that burst's wind-up start.
+var _bursts_started := 0
+var _special_armed := false
 # Client-side: which player the laser is following (peer id), until the lock RPC.
 var _laser_target_id := 0
 
@@ -1740,6 +1793,10 @@ func _update_tracking_laser() -> void:
 	_laser.points = PackedVector2Array([global_position, global_position + dir * 3600.0])
 
 func _cancel_windup() -> void:
+	if _special_armed:
+		# Interrupted: the special comes back on the next burst instead.
+		_special_armed = false
+		_bursts_started -= 1
 	var was_active := _windup_left > 0.0 or _windup_ready
 	_windup_left = 0.0
 	_windup_ready = false
@@ -1748,22 +1805,22 @@ func _cancel_windup() -> void:
 	if was_active:
 		_emit_windup(0.0, Vector2.ZERO, false, 0)
 
-func _emit_windup(duration: float, lock_point: Vector2, laser: bool, target_id: int = 0) -> void:
+func _emit_windup(duration: float, lock_point: Vector2, laser: bool, target_id: int = 0, ghost_len: float = 0.0) -> void:
 	var targets := _room_rpc_targets()
 	if targets.is_empty():
-		_show_windup.rpc(duration, lock_point, laser, target_id)
+		_show_windup.rpc(duration, lock_point, laser, target_id, ghost_len)
 		return
 	var server_id := multiplayer.get_unique_id()
 	for pid in targets:
 		if pid == server_id:
-			_show_windup(duration, lock_point, laser, target_id)
+			_show_windup(duration, lock_point, laser, target_id, ghost_len)
 		else:
-			_show_windup.rpc_id(pid, duration, lock_point, laser, target_id)
+			_show_windup.rpc_id(pid, duration, lock_point, laser, target_id, ghost_len)
 
 # The tell, on every peer in the room: the body swells over the wind-up (and the
 # sniper draws a laser to its locked aim point). duration 0 = cancel.
 @rpc("authority", "call_local", "reliable")
-func _show_windup(duration: float, lock_point: Vector2, laser: bool, target_id: int) -> void:
+func _show_windup(duration: float, lock_point: Vector2, laser: bool, target_id: int, ghost_len: float = 0.0) -> void:
 	# target_id != 0: the laser follows that player until _lock_laser.
 	_laser_target_id = target_id
 	if _windup_tween != null and _windup_tween.is_valid():
@@ -1771,6 +1828,11 @@ func _show_windup(duration: float, lock_point: Vector2, laser: bool, target_id: 
 	if _laser != null and is_instance_valid(_laser):
 		_laser.queue_free()
 	_laser = null
+	if _ground_ghost != null and is_instance_valid(_ground_ghost):
+		_ground_ghost.queue_free()
+	_ground_ghost = null
+	if ghost_len > 0.0 and duration > 0.0:
+		_spawn_ground_ghost(duration, lock_point, ghost_len)
 	if body == null:
 		return
 	if duration <= 0.0:
@@ -1797,6 +1859,30 @@ func _show_windup(duration: float, lock_point: Vector2, laser: bool, target_id: 
 		lt.tween_property(_laser, "default_color", Color(1.0, 0.2, 0.2, 0.9), duration)
 		lt.parallel().tween_property(_laser, "width", 4.0, duration)
 		lt.tween_callback(_laser.queue_free)
+
+# Special-form tell: a ground rectangle the width of a wave (640) along the locked
+# aim, filling in over the wind-up, then lingering briefly as the wave rolls.
+const GROUND_GHOST_WIDTH := 640.0
+var _ground_ghost: Polygon2D = null
+func _spawn_ground_ghost(duration: float, lock_point: Vector2, length: float) -> void:
+	var dir := (lock_point - global_position).normalized()
+	if dir == Vector2.ZERO:
+		dir = facing_direction if facing_direction != Vector2.ZERO else Vector2.RIGHT
+	var g := Polygon2D.new()
+	g.top_level = true
+	g.z_index = 5
+	var hw := GROUND_GHOST_WIDTH * 0.5
+	g.polygon = PackedVector2Array([Vector2(0, -hw), Vector2(length, -hw), Vector2(length, hw), Vector2(0, hw)])
+	g.global_position = global_position
+	g.rotation = dir.angle()
+	var col: Color = SpellData.ELEMENTS.get(attacker_element, SpellData.ELEMENTS["default"])["color"]
+	g.color = Color(col.r, col.g, col.b, 0.05)
+	get_tree().current_scene.add_child(g)
+	_ground_ghost = g
+	var t := g.create_tween()
+	t.tween_property(g, "color:a", 0.32, duration)
+	t.tween_property(g, "color:a", 0.0, 0.5)
+	t.tween_callback(g.queue_free)
 
 # RECOVER: after a burst, show the cooldown as a visible vulnerable window (dimmed,
 # slightly shrunk) on every peer in the room, so "it just fired, punish it" reads.
@@ -1851,12 +1937,18 @@ func update_casting(delta: float, distance: float) -> void:
 	# Telegraph: before the FIRST shot of a burst, wind up (visible to the room).
 	if windup_sec > 0.0 and _burst_shots == 0 and not _windup_ready:
 		if _windup_left <= 0.0:
-			_windup_left = windup_sec
-			_aim_locked = _windup_aim_lock
+			_special_armed = _roll_special()
+			var a_s: Dictionary = ARCHETYPES.get(archetype, {})
+			_windup_left = float(a_s.get("special_windup", windup_sec)) if _special_armed else windup_sec
+			# A special locks its aim at wind-up start so its ground ghost is honest.
+			_aim_locked = _windup_aim_lock or _special_armed
 			_aim_lock_point = current_visible_point
-			_windup_tracking = _windup_aim_lock and _lock_before > 0.0
+			_windup_tracking = _windup_aim_lock and _lock_before > 0.0 and not _special_armed
 			var target_id := int(current_target.owner_id) if current_target != null and _windup_tracking else 0
-			_emit_windup(windup_sec, _aim_lock_point, _windup_aim_lock, target_id)
+			var ghost_len := 0.0
+			if _special_armed:
+				ghost_len = SpellData.get_effective_range(attacker_weapon, attacker_element, a_s["special_form"], true)
+			_emit_windup(_windup_left, _aim_lock_point, _windup_aim_lock and not _special_armed, target_id, ghost_len)
 		_windup_left -= delta
 		if _windup_tracking:
 			if _windup_left > _lock_before:
@@ -1942,9 +2034,23 @@ func cast_sequence() -> void:
 	reset_casting()
 
 func cast_default() -> void:
+	var a: Dictionary = ARCHETYPES.get(archetype, {})
+	if _special_armed:
+		# This whole burst is the one special cast: fire it and end the burst.
+		_special_armed = false
+		_burst_shots = maxi(burst_count - 1, 0)
+		fire_spell(attacker_weapon, attacker_element, a["special_form"])
+		return
 	# An archetype can swap its basic attack for another form (hexagon lobs rain).
-	var form: String = ARCHETYPES.get(archetype, {}).get("attack_form", "default")
+	var form: String = a.get("attack_form", "default")
 	fire_spell(attacker_weapon, attacker_element, form)
+
+func _roll_special() -> bool:
+	var a: Dictionary = ARCHETYPES.get(archetype, {})
+	if !a.has("special_form"):
+		return false
+	_bursts_started += 1
+	return _bursts_started % maxi(int(a.get("special_every", 3)), 1) == 0
 
 # Applies the archetype's stat preset + the tier's multipliers/visual. Runs on every
 # peer in _ready (deterministic spawner pick → all peers agree), overriding the
@@ -2101,7 +2207,8 @@ func fire_spell(weapon: String, element: String, form: String) -> void:
 		# Predictive leading: shift the aim to where the target will be by the time
 		# the shot reaches it (time ≈ distance / real shot speed). Cheap first-order
 		# lead. Skipped for speed-0 AoE forms (they don't travel).
-		var proj_speed: float = float(a.get("bullet_speed", base_speed)) * _bullet_speed_mult
+		var proj_speed: float = base_speed if spell_data.get("fixed_motion", false) \
+			else float(a.get("bullet_speed", base_speed)) * _bullet_speed_mult
 		var speed_mult: float = proj_speed / base_speed if base_speed > 0.0 else 1.0
 		if proj_speed > 0.0 and not _aim_locked:
 			# Bounded lead: cap the flight-time estimate, AND cap the resulting offset to

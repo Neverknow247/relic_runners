@@ -66,6 +66,9 @@ static func get_effective_range(weapon: String, element: String, form: String, i
 		return cr
 	if fd.get("targeted", false):
 		return fd.get("spawn_offset", ENGAGEMENT_RANGE)
+	# A form with its own fixed reach (wave) reaches exactly that, for everyone.
+	if fd.has("max_distance"):
+		return fd["max_distance"] + fd.get("spawn_offset", 128.0)
 	var form_speed: float = fd.get("speed", 1.0)
 	if form_speed <= 0.0:
 		return ENGAGEMENT_RANGE
@@ -285,6 +288,27 @@ const FORMS = {
 		# an enemy has to be near the target to catch them in it.
 		"close_range": 720.0,
 	},
+	# wave rolls forward along the ground as a 640-wide wall, hits each target
+	# once, stops at walls, and CARRIES enemies (wave_projectile.gd). Its motion is
+	# fixed for players and enemies alike (fixed_motion: enemies don't flatten it),
+	# with a short fixed reach (max_distance).
+	"wave": {
+		"scene": preload("res://scenes/spells/wave_projectile.tscn"),
+		"damage": 5.0,
+		"stratagem_cooldown": 18.0,
+		"mana_cost": 130.0,
+		"speed": 0.3,            # 1200 u/s: faster than every enemy's move_speed (500-900)
+		"lifetime": 0.75,        # x BASE_LIFETIME 2.0 = 1.5 s
+		"max_distance": 1800.0,
+		"size": 1.0,             # the scene owns its rectangle; never scaled
+		"attack_cooldown": 0.5,
+		"spawn_offset": 160.0,
+		"pierce": true,
+		"stop_on_wall": false,
+		"auto_hit": false,
+		"carry": true,
+		"fixed_motion": true,
+	},
 }
 
 # Elemental "paradox tournament" matchup: each element beats the elements +1, +2,
@@ -386,7 +410,7 @@ func build_spell_data(weapon: String, element: String, form: String, rarity: Str
 	var proj_speed: float
 	var proj_size: float
 	var proj_lifetime: float
-	if is_enemy:
+	if is_enemy and not form_data.get("fixed_motion", false):
 		proj_speed = ENEMY_BASE_SPEED if form_moving else 0.0
 		# Moving enemy shots stay flat-sized; a stationary zone (a lobbed rain) keeps
 		# its form's area and a short life, or it would be a tiny 2 s dot.
@@ -436,6 +460,10 @@ func build_spell_data(weapon: String, element: String, form: String, rarity: Str
 		# rolled per tick rather than baked in once at cast.
 		"targeted": form_data.get("targeted", false),
 		"dot": form_data.get("dot", false),
+		# carry = drags enemies along (wave). fixed_motion = enemy casts keep the
+		# form's own speed instead of the flat enemy bullet speed.
+		"carry": form_data.get("carry", false),
+		"fixed_motion": form_data.get("fixed_motion", false),
 		# Attacker's crit stats — set from the caster's Crit Rate / Crit Damage at
 		# spawn and stamped onto the Hitbox (setup_spell). The DEFENDER resolves crit
 		# from these (+50 each on element advantage) at hit time; DoT ticks read the

@@ -26,11 +26,22 @@ const FORM_SUFFIX := {
 	"beam": [2],
 	"burst": [3, 0],
 	"cone": [3, 1],
+	"wave": [1, 2],
 }
+# Reserved for the next 7 forms (keep the suffix set prefix-free; [0] and [2] are
+# leaves, so everything new starts with 1 or 3): [1,3] as a leaf, and [3,2] / [3,3]
+# as branches ([3,2,0..3], [3,3,0..3]) — 9 slots, longest full code 5 taps
+# (player.gd's record_attack_direction clears past 6).
 
 static var RECIPES: Array = []
 
 static func _static_init() -> void:
+	if OS.is_debug_build():
+		var suffixes: Array = FORM_SUFFIX.values()
+		for a in suffixes:
+			for b in suffixes:
+				if a != b and (b as Array).size() >= (a as Array).size() and (b as Array).slice(0, (a as Array).size()) == a:
+					push_error("SpellRecipes: FORM_SUFFIX %s is a prefix of %s" % [a, b])
 	for element in ELEMENT_PREFIX:
 		for form in FORM_SUFFIX:
 			RECIPES.append({

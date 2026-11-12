@@ -2504,6 +2504,9 @@ func _physics_process(delta):
 			if Input.is_action_just_pressed("shove") and _shove_cooldown_timer <= 0.0 and state != roll_state:
 				_shove()
 			state.call(delta)
+			if _push_velocity != Vector2.ZERO:
+				move_and_collide(_push_velocity * delta)
+				_push_velocity = Vector2.ZERO
 	# Position/anim/rotation now replicate via the MultiplayerSynchronizer only
 	# (net_position, published in _process) — the old per-frame server_send_player_state
 	# RPC that ran alongside it (and fought it, unbuffered) has been removed.
@@ -2614,6 +2617,14 @@ func is_moving(_input_axis):
 # instead of being eaten (see projectile._on_hitbox_area_entered).
 func is_invulnerable() -> bool:
 	return _iframe_timer > 0.0
+
+# External push (u/s) set each frame by something shoving us (an enemy's wave,
+# wave_projectile.gd); applied once after our own movement, then cleared. Local
+# authority only — movement is client-authoritative.
+var _push_velocity := Vector2.ZERO
+func apply_push(v: Vector2) -> void:
+	if is_multiplayer_authority() and !is_invulnerable():
+		_push_velocity = v
 
 func _can_start_roll() -> bool:
 	if !Input.is_action_just_pressed("jump"):
