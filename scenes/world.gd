@@ -1192,7 +1192,7 @@ func refresh_visibility_for_all():
 			client_refresh_players.rpc_id(viewer_id, known_ids, visible_ids, sync_ready_ids)
 
 @rpc("any_peer", "call_remote", "reliable")
-func server_request_spawn_spell(origin_position: Vector2, direction: Vector2, weapon: String, element: String, form: String, attack: float = 0.0, crit_rate: float = 0.0, crit_damage: float = 0.0, rarity: String = "common") -> void:
+func server_request_spawn_spell(origin_position: Vector2, direction: Vector2, weapon: String, element: String, form: String, attack: float = 0.0, crit_rate: float = 0.0, crit_damage: float = 0.0, rarity: String = "common", cast: Dictionary = {}) -> void:
 	if !multiplayer.is_server():
 		return
 	var caster_id := multiplayer.get_remote_sender_id()
@@ -1210,14 +1210,14 @@ func server_request_spawn_spell(origin_position: Vector2, direction: Vector2, we
 			# its own player isn't there (host in hub) — otherwise the caster's
 			# spell never exists on the authority and its enemies take no damage.
 			if can_see or server_has_players_room_loaded(caster_id):
-				client_spawn_spell(caster_id, origin_position, direction, weapon, element, form, attack, crit_rate, crit_damage, rarity)
+				client_spawn_spell(caster_id, origin_position, direction, weapon, element, form, attack, crit_rate, crit_damage, rarity, cast)
 		elif can_see:
-			client_spawn_spell.rpc_id(viewer_id, caster_id, origin_position, direction, weapon, element, form, attack, crit_rate, crit_damage, rarity)
+			client_spawn_spell.rpc_id(viewer_id, caster_id, origin_position, direction, weapon, element, form, attack, crit_rate, crit_damage, rarity, cast)
 
 @rpc("authority", "call_remote", "reliable")
-func client_spawn_spell(caster_id: int, origin_position: Vector2, direction: Vector2, weapon: String, element: String, form: String, attack: float = 0.0, crit_rate: float = 0.0, crit_damage: float = 0.0, rarity: String = "common") -> void:
+func client_spawn_spell(caster_id: int, origin_position: Vector2, direction: Vector2, weapon: String, element: String, form: String, attack: float = 0.0, crit_rate: float = 0.0, crit_damage: float = 0.0, rarity: String = "common", cast: Dictionary = {}) -> void:
 	if !players.has_node(str(caster_id)):
 		return
 	var caster = players.get_node(str(caster_id))
 	if caster.has_method("spawn_spell_local"):
-		caster.spawn_spell_local(origin_position, direction, weapon, element, form, -1, attack, crit_rate, crit_damage, rarity)
+		caster.spawn_spell_local(origin_position, direction, weapon, element, form, -1, attack, crit_rate, crit_damage, rarity, cast)

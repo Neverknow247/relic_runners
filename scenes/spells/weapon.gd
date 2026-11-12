@@ -87,7 +87,7 @@ func capable_forms() -> Array:
 	return SpellData.get_capable_forms(type)
 
 func can_hold_form(form: String) -> bool:
-	return capable_forms().has(form) and !forms.has(form)
+	return capable_forms().has(form) and !forms.has(form) and forms.size() < SpellData.MAX_ATTACHED_FORMS
 
 func attach_form(form: String) -> bool:
 	if !can_hold_form(form):

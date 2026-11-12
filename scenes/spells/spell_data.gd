@@ -1,25 +1,25 @@
 extends Node
 class_name SpellData
 
+# The 7-weapon roster (docs/master_plan.md §3, docs/combat_redesign_plan.md §2).
+# WEAPON_ORDER is the single source for "every weapon type". Weapons have NO stat
+# differences: a weapon differs only by which forms it can hold, its rolled subclass
+# and its rolled traits. `forms` is the CAPABILITY list (Fano plane: each form on
+# exactly 3 weapons, every weapon pair shares exactly one); at most
+# MAX_ATTACHED_FORMS are attached at once (grows to 6 capable when 7 more forms land).
+const WEAPON_ORDER := ["tome", "wand", "staff", "orb", "lantern", "instrument", "totem"]
+const MAX_ATTACHED_FORMS := 3
 const EQUIPPABLE_WEAPONS = {
-	"tome": {
-		"element": "fire",
-		"forms": ["ball", "rain", "beam"],
-	},
-	"orb": {
-		"element": "fire",
-		"forms": ["bolt", "rain", "burst"],
-	},
-	"wand": {
-		"element": "fire",
-		"forms": ["bolt", "ball", "cone"],
-	},
+	"tome": {"element": "fire", "forms": ["ball", "rain", "beam"]},
+	"wand": {"element": "fire", "forms": ["bolt", "ball", "cone"]},
+	"staff": {"element": "fire", "forms": ["bolt", "beam", "wave"]},
+	"orb": {"element": "fire", "forms": ["bolt", "rain", "burst"]},
+	"lantern": {"element": "fire", "forms": ["wave", "rain", "cone"]},
+	"instrument": {"element": "fire", "forms": ["cone", "beam", "burst"]},
+	"totem": {"element": "fire", "forms": ["ball", "wave", "burst"]},
 	# Not a spellcasting weapon — occupies a weapon slot but holds no forms and
 	# never casts (see fishing_rod in item_data.gd / attack_check() in player.gd).
-	"fishing_rod": {
-		"element": "default",
-		"forms": [],
-	},
+	"fishing_rod": {"element": "default", "forms": []},
 }
 
 # Weapons no longer ship with all their forms — they're born form-less (see
@@ -31,8 +31,12 @@ const EQUIPPABLE_WEAPONS = {
 # sequence spell to cast, not just the free default.
 const STARTER_FORMS := {
 	"tome": "ball",
-	"orb": "burst",
 	"wand": "bolt",
+	"staff": "bolt",
+	"orb": "burst",
+	"lantern": "cone",
+	"instrument": "cone",
+	"totem": "ball",
 }
 
 static func get_capable_forms(weapon_type: String) -> Array:
@@ -69,17 +73,15 @@ static func get_effective_range(weapon: String, element: String, form: String, i
 		# Enemy projectiles are FLAT — no weapon/element/form speed scaling (matches
 		# build_spell_data), so every enemy moving shot reaches the same distance.
 		return minf(ENEMY_BASE_SPEED * ENEMY_BASE_LIFETIME, ENEMY_PROJECTILE_MAX_RANGE) + fd.get("spawn_offset", 128.0)
-	var wd: Dictionary = WEAPONS.get(weapon, WEAPONS["default"])
 	var ed: Dictionary = ELEMENTS.get(element, ELEMENTS["default"])
-	var proj_speed: float = BASE_SPEED * wd["speed"] * ed["speed"] * form_speed
-	var lifetime: float = BASE_LIFETIME * wd.get("lifetime", 1.0) * fd.get("lifetime", 1.0)
+	var proj_speed: float = BASE_SPEED * ed["speed"] * form_speed
+	var lifetime: float = BASE_LIFETIME * fd.get("lifetime", 1.0)
 	return minf(proj_speed * lifetime, PROJECTILE_MAX_RANGE) + fd.get("spawn_offset", 128.0)
 
 # Crit is STAT-DRIVEN now (Crit Rate / Crit Damage stats) and resolved at the
 # DEFENDER's hit handler (_on_hurtbox_hurt), not at cast — so the element-advantage
 # +50 crit bonus can use the defender's element. The attacker's crit stats ride on
-# the Hitbox. WEAPONS' crit_chance entries below are now unused (left only so those
-# dicts don't churn).
+# the Hitbox.
 
 # Defense: Diablo-style diminishing-returns damage reduction, DR = Def/(Def+C)
 # hard-capped at DR_CAP. C is the tuning knob.
@@ -126,50 +128,9 @@ const ENEMY_COOLDOWN_MULT := 1.89   # multiplies the form cooldown; >1 = slower 
 const ENEMY_BASE_LIFETIME := 9.9
 const ENEMY_PROJECTILE_MAX_RANGE := PROJECTILE_MAX_RANGE * 2.475
 
-const WEAPONS = {
-	"default": {
-		"damage": 1.0,
-		"speed": 1.0,
-		"size": 1.0,
-		"lifetime": 1.0,
-		"crit_chance": 0.0,
-	},
-	# basic_* = how this weapon's free BASIC attack (form "default") plays, so weapon
-	# choice is the moment-to-moment build (spells are the stratagems). All three land
-	# near ~290 DPS at a 95 Attack roll, with very different feel:
-	#   basic_cooldown s/shot, basic_damage x Attack per pellet, basic_size x size,
-	#   basic_pellets + basic_spread_deg = an even fan (1 = single shot).
-	"tome": {
-		"damage": 1.15,
-		"speed": 0.85,
-		"size": 1.15,
-		"lifetime": 1.15,
-		"crit_chance": 5.0,
-		# 3-shot spread: forgiving, best up close.
-		"basic_cooldown": 0.5, "basic_damage": 0.5, "basic_size": 0.9,
-		"basic_pellets": 3, "basic_spread_deg": 14.0,
-	},
-	"orb": {
-		"damage": 1.0,
-		"speed": 1.0,
-		"size": 1.0,
-		"lifetime": 1.0,
-		"crit_chance": 5.0,
-		# Slow, heavy, fat shot: rewards landing each one.
-		"basic_cooldown": 0.55, "basic_damage": 1.75, "basic_size": 1.5,
-		"basic_pellets": 1, "basic_spread_deg": 0.0,
-	},
-	"wand": {
-		"damage": 0.85,
-		"speed": 1.15,
-		"size": 0.85,
-		"lifetime": 0.85,
-		"crit_chance": 5.0,
-		# Fast light stream: hold and hose.
-		"basic_cooldown": 0.18, "basic_damage": 0.55, "basic_size": 0.75,
-		"basic_pellets": 1, "basic_spread_deg": 0.0,
-	},
-}
+# (The per-weapon WEAPONS stat table is gone: weapons have no stat differences and
+# every weapon fires the same basic attack, FORMS["default"]. Basic-attack shape
+# variety comes from rolled traits — docs/combat_redesign_plan.md §7.)
 
 # Elements are now flat-EQUAL (uniform 1.0 damage/speed) — an element's only combat
 # effect is its color + the ELEMENT_BEATS matchup below. Forms and weapons carry all
@@ -331,17 +292,51 @@ const FORMS = {
 # each beats 3, loses to 3). Built once from ELEMENT_ORDER in _static_init so adding
 # or reordering elements needs no table edit. The old weapon-vs-weapon matchup was
 # removed — weapons no longer affect the damage multiplier at all, only their flat
-# stats (WEAPONS above).
+# stats.
 const BEATS_OFFSETS := [1, 2, 4]
 static var ELEMENT_BEATS: Dictionary = {}
 
 static func _static_init() -> void:
+	if OS.is_debug_build():
+		var problem := validate_roster()
+		if problem != "":
+			push_error("SpellData roster: " + problem)
 	var n := ELEMENT_ORDER.size()
 	for i in n:
 		var beats: Array = []
 		for off in BEATS_OFFSETS:
 			beats.append(ELEMENT_ORDER[(i + off) % n])
 		ELEMENT_BEATS[ELEMENT_ORDER[i]] = beats
+
+# Checks the weapon/form layout rules: every form is on exactly 3 weapons, every
+# weapon has the same number of capable forms, and every pair of weapons shares the
+# same number of forms (1 with 7 forms; 2 once there are 14). Returns "" when OK.
+static func validate_roster() -> String:
+	var counts := {}
+	var per_weapon := -1
+	for w in WEAPON_ORDER:
+		var forms: Array = EQUIPPABLE_WEAPONS[w]["forms"]
+		if per_weapon == -1:
+			per_weapon = forms.size()
+		elif forms.size() != per_weapon:
+			return "%s has %d forms, expected %d" % [w, forms.size(), per_weapon]
+		for f in forms:
+			counts[f] = counts.get(f, 0) + 1
+	for f in counts:
+		if counts[f] != 3:
+			return "form %s is on %d weapons, expected 3" % [f, counts[f]]
+	var shared := -1
+	for i in WEAPON_ORDER.size():
+		for j in range(i + 1, WEAPON_ORDER.size()):
+			var n := 0
+			for f in EQUIPPABLE_WEAPONS[WEAPON_ORDER[i]]["forms"]:
+				if EQUIPPABLE_WEAPONS[WEAPON_ORDER[j]]["forms"].has(f):
+					n += 1
+			if shared == -1:
+				shared = n
+			elif n != shared:
+				return "%s/%s share %d forms, others share %d" % [WEAPON_ORDER[i], WEAPON_ORDER[j], n, shared]
+	return ""
 
 # Diablo-style diminishing-returns damage reduction from a Defense stat.
 static func damage_reduction(defense: float) -> float:
@@ -379,9 +374,10 @@ static func get_damage_multiplier(
 	return 1.0 + get_type_modifier(ELEMENT_BEATS, attacker_element, defender_element)
 
 func build_spell_data(weapon: String, element: String, form: String, rarity: String = "common", is_enemy: bool = false) -> Dictionary:
-	var weapon_data = WEAPONS[weapon]
-	var element_data = ELEMENTS[element]
-	var form_data = FORMS[form]
+	# Unknown ids fall back instead of crashing a cast (weapon is carried only as an
+	# identity tag now — it scales nothing).
+	var element_data: Dictionary = ELEMENTS.get(element, ELEMENTS["default"])
+	var form_data: Dictionary = FORMS.get(form, FORMS["default"])
 	var cooldown_mult := ENEMY_COOLDOWN_MULT if is_enemy else 1.0
 	# Enemy projectiles are FLAT: one speed, one size, one lifetime for every enemy —
 	# no weapon/element/form scaling — so there's a single stat to balance. Stationary
@@ -397,20 +393,15 @@ func build_spell_data(weapon: String, element: String, form: String, rarity: Str
 		proj_size = ENEMY_BASE_SIZE if form_moving else BASE_SIZE * form_data.get("size", 1.0)
 		proj_lifetime = ENEMY_BASE_LIFETIME if form_moving else minf(BASE_LIFETIME * form_data.get("lifetime", 1.0), 3.0)
 	else:
-		proj_speed = BASE_SPEED * weapon_data["speed"] * element_data["speed"] * form_data["speed"]
-		proj_size = BASE_SIZE * weapon_data.get("size", 1.0) * form_data.get("size", 1.0)
-		proj_lifetime = BASE_LIFETIME * weapon_data.get("lifetime", 1.0) * form_data.get("lifetime", 1.0)
-	# The weapon's own basic-attack feel (see WEAPONS basic_*); players only.
+		proj_speed = BASE_SPEED * element_data["speed"] * form_data["speed"]
+		proj_size = BASE_SIZE * form_data.get("size", 1.0)
+		proj_lifetime = BASE_LIFETIME * form_data.get("lifetime", 1.0)
+	# Same for every weapon. pellets/spread stay in the dict so shape traits
+	# (Split, Twin...) can rewrite them later (combat_redesign_plan §7.5).
 	var damage_mult: float = form_data.get("damage", 1.0)
 	var attack_cooldown: float = form_data.get("attack_cooldown", 0.35) * cooldown_mult
 	var pellets := 1
 	var spread_deg := 0.0
-	if !is_enemy and form == "default":
-		damage_mult *= weapon_data.get("basic_damage", 1.0)
-		attack_cooldown = weapon_data.get("basic_cooldown", attack_cooldown)
-		proj_size *= weapon_data.get("basic_size", 1.0)
-		pellets = int(weapon_data.get("basic_pellets", 1))
-		spread_deg = float(weapon_data.get("basic_spread_deg", 0.0))
 	return {
 		"scene": form_data["scene"],
 		"weapon": weapon,

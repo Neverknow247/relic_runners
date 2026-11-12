@@ -148,11 +148,8 @@ func _play_spawn_sound() -> void:
 	elif form != "default":
 		Sounds.play_sfx("spell_cast", global_position)
 	else:
-		match spell_data.get("weapon", ""):
-			"wand": Sounds.play_sfx("shoot_wand", global_position, -4.0)
-			"orb": Sounds.play_sfx("shoot_orb", global_position)
-			"tome": Sounds.play_sfx("shoot_tome", global_position, -2.0)
-			_: Sounds.play_sfx("shoot_wand", global_position, -6.0)
+		# Every weapon fires the same basic, so one basic-shot sound for all.
+		Sounds.play_sfx("shoot_wand", global_position, -4.0)
 
 func _on_hitbox_area_entered(area: Area2D) -> void:
 	# Pass over anything this projectile can't damage — the caster's own hurtbox,

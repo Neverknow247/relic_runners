@@ -2912,12 +2912,18 @@ func cast_spell(spell_data: Dictionary, reset_sequence: bool = true):
 	var atk := get_attack()
 	var cr := get_crit_rate()
 	var cd := get_crit_damage()
-	# A weapon's basic attack can be a fan (tome); everything else is one shot.
+	# Per-cast payload carried to every peer (combat_redesign_plan §6.1). One RPC per
+	# volley: a multi-pellet shot (shape traits later) sends its angle offsets in
+	# "off" instead of one RPC per pellet. Subclass/trait keys get filled later.
 	var pellets: int = maxi(1, int(spell_data.get("pellets", 1)))
 	var spread := deg_to_rad(float(spell_data.get("spread_deg", 0.0)))
-	for i in pellets:
-		var frac := 0.0 if pellets <= 1 else float(i) / float(pellets - 1) - 0.5
-		_spawn_cast(world, spawn_position, direction.rotated(frac * spread), spell_data, atk, cr, cd)
+	var cast := {"seed": randi()}
+	if pellets > 1:
+		var offsets := PackedFloat32Array()
+		for i in pellets:
+			offsets.append((float(i) / float(pellets - 1) - 0.5) * spread)
+		cast["off"] = offsets
+	_spawn_cast(world, spawn_position, direction, spell_data, atk, cr, cd, cast)
 	if reset_sequence:
 		spell_input_sequence.clear()
 		refresh_spell_ui()
@@ -2925,7 +2931,7 @@ func cast_spell(spell_data: Dictionary, reset_sequence: bool = true):
 
 # One projectile of a cast: spawn our predicted copy locally, and ask the server to
 # spawn the authoritative one (and relay it to everyone else in the room).
-func _spawn_cast(world, spawn_position: Vector2, direction: Vector2, spell_data: Dictionary, atk: float, cr: float, cd: float) -> void:
+func _spawn_cast(world, spawn_position: Vector2, direction: Vector2, spell_data: Dictionary, atk: float, cr: float, cd: float, cast: Dictionary = {}) -> void:
 	# Client-side prediction: spawn OUR shot locally right now so it never waits on a
 	# server round-trip. The request below tells the server + other players to spawn
 	# their copies but skips echoing back to us (no duplicate). On a client this local
@@ -2938,7 +2944,8 @@ func _spawn_cast(world, spawn_position: Vector2, direction: Vector2, spell_data:
 		spell_data["form"],
 		name.to_int(),
 		atk, cr, cd,
-		spell_data.get("rarity", "common")
+		spell_data.get("rarity", "common"),
+		cast
 	)
 	if multiplayer.is_server():
 		world.server_request_spawn_spell(
@@ -2948,7 +2955,8 @@ func _spawn_cast(world, spawn_position: Vector2, direction: Vector2, spell_data:
 			spell_data["element"],
 			spell_data["form"],
 			atk, cr, cd,
-			spell_data.get("rarity", "common")
+			spell_data.get("rarity", "common"),
+			cast
 		)
 	else:
 		world.server_request_spawn_spell.rpc(
@@ -2958,7 +2966,8 @@ func _spawn_cast(world, spawn_position: Vector2, direction: Vector2, spell_data:
 			spell_data["element"],
 			spell_data["form"],
 			atk, cr, cd,
-			spell_data.get("rarity", "common")
+			spell_data.get("rarity", "common"),
+			cast
 		)
 
 #@rpc("any_peer", "call_local", "reliable")
@@ -2972,7 +2981,8 @@ func spawn_spell_local(
 	attack: float = 0.0,
 	crit_rate: float = 0.0,
 	crit_damage: float = 0.0,
-	rarity: String = "common"
+	rarity: String = "common",
+	cast: Dictionary = {}
 ) -> void:
 	if caster_id == -1:
 		caster_id = name.to_int()
@@ -2985,10 +2995,14 @@ func spawn_spell_local(
 	spell_data["damage"] = attack * spell_data.get("damage_mult", 1.0)
 	spell_data["attacker_crit_rate"] = crit_rate
 	spell_data["attacker_crit_damage"] = crit_damage
-	var projectile = spell_data["scene"].instantiate()
-	get_tree().current_scene.add_child(projectile)
-	projectile.global_position = origin_position
-	projectile.setup_spell(direction.normalized(), spell_data, caster_id, false)
+	spell_data["cast"] = cast
+	# One projectile per pellet offset ("off" absent = a single shot straight ahead).
+	var offsets: PackedFloat32Array = cast.get("off", PackedFloat32Array([0.0]))
+	for off in offsets:
+		var projectile = spell_data["scene"].instantiate()
+		get_tree().current_scene.add_child(projectile)
+		projectile.global_position = origin_position
+		projectile.setup_spell(direction.normalized().rotated(off), spell_data.duplicate(), caster_id, false)
 
 func refresh_spell_ui() -> void:
 	if !is_multiplayer_authority():
