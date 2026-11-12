@@ -133,6 +133,9 @@ func _build_forms_section(weapon: Weapon) -> void:
 		if attached:
 			btn.text = "Detach"
 			btn.pressed.connect(_on_detach_pressed.bind(form))
+		elif !SpellData.FORMS.has(form):
+			btn.text = "Coming soon"
+			btn.disabled = true
 		else:
 			var stone_count := _count_of(ItemData.stone_for_form(form))
 			var has_stone: bool = stone_count > 0

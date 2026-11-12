@@ -347,6 +347,43 @@ const ITEMS := {
 		"icon_label": "W",
 		"equip_slot": "weapon",
 	},
+	# Placeholder art (colour + letter) until weapon sprites exist.
+	"staff": {
+		"display_name": "Staff",
+		"stackable": false,
+		"max_stack": 1,
+		"footprint": Vector2i(1, 3),
+		"color": Color(0.45, 0.6, 0.35),
+		"icon_label": "St",
+		"equip_slot": "weapon",
+	},
+	"lantern": {
+		"display_name": "Lantern",
+		"stackable": false,
+		"max_stack": 1,
+		"footprint": Vector2i(1, 2),
+		"color": Color(0.95, 0.8, 0.35),
+		"icon_label": "La",
+		"equip_slot": "weapon",
+	},
+	"instrument": {
+		"display_name": "Instrument",
+		"stackable": false,
+		"max_stack": 1,
+		"footprint": Vector2i(2, 2),
+		"color": Color(0.75, 0.4, 0.6),
+		"icon_label": "In",
+		"equip_slot": "weapon",
+	},
+	"totem": {
+		"display_name": "Totem",
+		"stackable": false,
+		"max_stack": 1,
+		"footprint": Vector2i(1, 2),
+		"color": Color(0.55, 0.35, 0.3),
+		"icon_label": "To",
+		"equip_slot": "weapon",
+	},
 	# The Fishing Rod is a weapon-slot item (takes up a weapon slot) but casts
 	# nothing — equip it and interact with a fishing spot to fish. It's a real
 	# Weapon under the hood (so it occupies the slot / uses the same equip flow),
@@ -529,6 +566,10 @@ const DESCRIPTIONS := {
 	"tome": "A heavy spellbook.",
 	"orb": "A floating focus.",
 	"wand": "A quick casting rod.",
+	"staff": "A tall rune-carved staff.",
+	"lantern": "A lantern whose flame burns with mana.",
+	"instrument": "An enchanted instrument that sings spells.",
+	"totem": "A carved idol of an old spirit.",
 	"belt_basic": "Adds a quick slot. +1 trait",
 	"cloak_basic": "A basic wizard robe. +1 trait",
 	"backpack_basic": "4x5 personal storage. +1 trait.",
@@ -698,7 +739,7 @@ const LOOT_GROUPS := {
 	"mana_mats": ["mana_dust", "pure_mana_shard"],
 	"potions": ["health_potion", "greater_health_potion"],
 	"mana_potions": ["mana_crystal", "refined_mana_crystal"],
-	"weapons": ["tome", "orb", "wand"],
+	"weapons": SpellData.WEAPON_ORDER,
 	"gear": ["belt_basic", "cloak_basic", "backpack_basic"],
 }
 # Gear an "@gear" token can resolve to (rolled at the enemy's tier rarity).
@@ -962,7 +1003,7 @@ static func get_drop_qty(item_type: String) -> Array:
 # same tier structure as ENEMY_LOOT_POOLS (a roll picks a rarity, then a random
 # item of that tier; empty/missing tiers are skipped). These "loot" pools are
 # placeholders meant to be edited freely; "@weapon" is NOT valid here (no source
-# enemy) — list real weapon types (tome/orb/wand) for weapon drops instead.
+# enemy) — list real weapon types (see SpellData.WEAPON_ORDER) for weapon drops instead.
 const CONTAINERS := {
 	# New-format container base types (loot lives in LOOT_TABLES[type][tier]). Tier
 	# tints the crate (bronze/silver/gold); an "elemental" node's color is its element.
@@ -987,7 +1028,7 @@ const CONTAINERS := {
 		"common": ["cloth", "scrap", "gold", "health_potion"], "uncommon": ["mana_crystal"]}},
 	"weapon_rack": {"display_name": "Weapon Rack", "color": Color(0.4, 0.4, 0.45), "rolls_min": 1, "rolls_max": 2, "loot": {
 		"common": ["scrap"], "uncommon": ["form_stone_ball", "form_stone_bolt"],
-		"rare": ["tome", "orb", "wand", "form_stone_beam", "form_stone_burst", "form_stone_cone"]}},
+		"rare": ["tome", "wand", "staff", "orb", "lantern", "instrument", "totem", "form_stone_beam", "form_stone_burst", "form_stone_cone"]}},
 	"mushroom_cluster": {"display_name": "Mushroom Cluster", "color": Color(0.6, 0.35, 0.4), "rolls_min": 1, "rolls_max": 2, "loot": {
 		"common": ["herbs", "red_moss"], "uncommon": ["red_moss"]}},
 	"berry_bush": {"display_name": "Berry Bush", "color": Color(0.35, 0.55, 0.3), "rolls_min": 1, "rolls_max": 2, "loot": {

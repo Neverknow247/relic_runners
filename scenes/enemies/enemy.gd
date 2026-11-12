@@ -5,14 +5,18 @@ class_name Enemy
 # unlike players, no single peer owns an enemy, so nothing calls
 # set_multiplayer_authority() here.
 
-const WEAPON_TYPES := ["tome", "orb", "wand"]
+const WEAPON_TYPES := SpellData.WEAPON_ORDER
 # Enemies roll a random element from the full roster (single source: SpellData).
 const ELEMENT_TYPES := SpellData.ELEMENT_ORDER
 
 const WEAPON_LETTERS := {
 	"tome": "T",
-	"orb": "O",
 	"wand": "W",
+	"staff": "St",
+	"orb": "O",
+	"lantern": "La",
+	"instrument": "In",
+	"totem": "To",
 }
 
 var all_spell_data = SpellData.new()
@@ -724,7 +728,12 @@ func _ready() -> void:
 # random subset (not always the first N). Mirrors how a looted weapon carries
 # an arbitrary handful of Form Stones rather than the full set.
 func _roll_forms(weapon_type: String) -> Array:
-	var pool: Array = SpellData.get_capable_forms(weapon_type).duplicate()
+	# Only forms that are actually built (a capability like "wave" can exist
+	# before its FORMS entry / stone does; a dropped weapon must not carry it).
+	var pool: Array = SpellData.get_capable_forms(weapon_type).filter(
+		func(f): return SpellData.FORMS.has(f))
+	if pool.is_empty():
+		return []
 	pool.shuffle()
 	var count: int = clampi(randi_range(1, 3), 1, pool.size())
 	return pool.slice(0, count)

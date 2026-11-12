@@ -448,7 +448,7 @@ func apply_pending_kit() -> void:
 		apply_custom_kit()
 	pending_kit = ""
 
-const STARTER_KIT_WEAPONS := ["tome", "orb", "wand"]
+const STARTER_KIT_WEAPONS := SpellData.WEAPON_ORDER
 # The starter weapon's element is rolled from the full roster (single source).
 const STARTER_KIT_ELEMENTS := SpellData.ELEMENT_ORDER
 
