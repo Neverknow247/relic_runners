@@ -139,6 +139,26 @@ The designer is modelling spells on **Helldivers 2 stratagems**: the multi-tap c
 6. **The "blank"** becomes a consumable (a ward/rune you carry, crafted or looted) rather than a spell, so it doesn't compete with stratagem input.
 7. Kill feedback (shake, hitstop, shatter, sound) and readable, dodgeable enemy patterns (§3 telegraphs) make basic fighting satisfying on its own.
 
+### Weapon roster (designer decision, 2026-11-11)
+
+Seven weapons. Each can hold **3 forms**, and each form appears on **exactly 3 weapons** (7 x 3 = 21 slots). This is the capability list (`SpellData.EQUIPPABLE_WEAPONS[...]["forms"]`); actual forms are attached with Form Stones at the workbench.
+
+| Weapon | Forms | In code? |
+|---|---|---|
+| Tome | Ball, Rain, Beam | yes |
+| Wand | Bolt, Ball, Cone | yes |
+| Staff | Bolt, Beam, Wave | no |
+| Orb | Bolt, Beam, Burst | yes |
+| Lantern | Wave, Rain, Cone | no |
+| Instrument | Cone, Wave, Burst | no |
+| Totem | Ball, Burst, Rain | no |
+
+Form coverage: Ball (Tome, Wand, Totem), Rain (Tome, Lantern, Totem), Beam (Tome, Staff, Orb), Bolt (Wand, Staff, Orb), Cone (Wand, Lantern, Instrument), Wave (Staff, Lantern, Instrument), Burst (Orb, Instrument, Totem).
+
+- **Wave** is a new form; it does not exist in `SpellData.FORMS` yet (needs its projectile + Form Stone item).
+- Each weapon also needs its own **basic attack profile** (`basic_*` keys in the weapon stats table), so weapon choice is the moment-to-moment feel. Tome = 3-shot spread, Orb = heavy single shot, Wand = fast stream; Staff/Lantern/Instrument/Totem still need one.
+- **Later:** 7 more forms, following the same rule (3 per weapon, each on 3 weapons).
+
 ### Enemy role roster
 Keep the four shapes, give each a *movement* identity. Add two. All of this lives in `EnemyDef` Resources (§5), not in `enemy.gd` consts.
 
