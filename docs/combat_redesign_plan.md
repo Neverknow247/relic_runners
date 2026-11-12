@@ -579,3 +579,27 @@ Order by cost: Echo, Janus, Refractor, Annotator, Dissonant, Overflow, Flarekeep
 **Cut from this round:** element-reaction matrix (wet + lightning etc.); per-weapon audio; real weapon sprites; enemy subclasses or traits; enemies using table expressions; trait rerolling; Relic content (hook only); charged basic.
 
 **Defer:** the 14 remaining subclasses and 9 remaining traits (Phase 7); the next 7 forms (suffix slots and `MAX_ATTACHED_FORMS` are ready); turning `uniform_bullets` off so enemies cast their rolled forms; a hub training dummy that reports DPS (would make guardrails 2-4 a 30-second check; worth doing early in Phase 6 if cheap); moving statuses and mods into the planned `PlayerCombat` / `EnemyBrain` components when the master plan Phase 2 split happens.
+
+---
+
+## 12. Implementation status (2026-11-12)
+
+All phases are built and verified headlessly (parse check + the probes below), **not yet play-tested live or in co-op**.
+
+| Phase | Commit | Notes |
+|---|---|---|
+| 1 Normalization + plumbing | `eb69745` | |
+| 2 Four new weapons | `045b872` | |
+| 3 Wave | `c1ec060` | |
+| 4 Status core + basic signatures | `3d1f3d4` | `scenes/combat/` |
+| 5 Element x form + bespoke | `ab5bd2a` | all 49 cells, 6 bespoke |
+| 6+7 Subclasses + traits | `676e58c` | all 21 subclasses and all 22 traits built (Phase 7 folded in) |
+
+Deviations from the plan text:
+- Projectile events reach the router through `spell_data["_fx"]` (a Callable to `CastFx.dispatch`), as planned; mods additionally get `on_projectile_tick`, `on_graze` and `draw`.
+- A basic's final numbers after `modify_basic` travel in `cast["b"]` (not re-derived on each peer), because state-driven basics (Overture, Riposte, Overflow, Eclipse) can't be recomputed remotely.
+- Forks, shards, echoes and undertow are **local copies** on every peer (no RPC); things that change the caster or need the cursor (idol repeats, motes, ripples, sweeps, Janus) go through `spawn_derived_cast`.
+- Catalyst is resolved in `enemy.gd` on death, Attuned in `Combat.apply_on_hit`, Walking Cast in `player.gd` `move_state` (no mod script).
+- Annotator / Dissonant marks show the shared "marked" overlay bit.
+
+Headless probes (`delete_before_export/`): `probe_spells`, `wave_probe`, `status_probe`, `fx_probe` (`ELEM=fire` limits it), `flair_probe`, `caster_probe`.
