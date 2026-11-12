@@ -12,10 +12,10 @@ bg_color = Color(0.2, 0.4, 0.9, 1)
 script = ExtResource("1_mana")
 
 [node name="mana_bar" type="ProgressBar" parent="."]
-offset_left = 40.0
-offset_top = 120.0
-offset_right = 700.0
-offset_bottom = 190.0
+offset_left = 480.0
+offset_top = 150.0
+offset_right = 1140.0
+offset_bottom = 220.0
 theme_override_styles/background = SubResource("StyleBoxFlat_bg")
 theme_override_styles/fill = SubResource("StyleBoxFlat_fill")
 min_value = 0.0
