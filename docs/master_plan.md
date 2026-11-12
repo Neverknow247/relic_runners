@@ -148,12 +148,14 @@ Seven weapons. Each can hold **3 forms**, and each form appears on **exactly 3 w
 | Tome | Ball, Rain, Beam | yes |
 | Wand | Bolt, Ball, Cone | yes |
 | Staff | Bolt, Beam, Wave | no |
-| Orb | Bolt, Beam, Burst | yes |
+| Orb | Bolt, Rain, Burst | yes |
 | Lantern | Wave, Rain, Cone | no |
-| Instrument | Cone, Wave, Burst | no |
-| Totem | Ball, Burst, Rain | no |
+| Instrument | Cone, Beam, Burst | no |
+| Totem | Ball, Wave, Burst | no |
 
-Form coverage: Ball (Tome, Wand, Totem), Rain (Tome, Lantern, Totem), Beam (Tome, Staff, Orb), Bolt (Wand, Staff, Orb), Cone (Wand, Lantern, Instrument), Wave (Staff, Lantern, Instrument), Burst (Orb, Instrument, Totem).
+Form coverage: Ball (Tome, Wand, Totem), Rain (Tome, Orb, Lantern), Beam (Tome, Staff, Instrument), Bolt (Wand, Staff, Orb), Cone (Wand, Lantern, Instrument), Wave (Staff, Lantern, Totem), Burst (Orb, Instrument, Totem).
+
+The assignment is a Fano plane: **every pair of weapons shares exactly one form**, so no two weapons are near-duplicates. Keep this property when adding the next 7 forms.
 
 - **Wave** is a new form; it does not exist in `SpellData.FORMS` yet (needs its projectile + Form Stone item).
 - Each weapon also needs its own **basic attack profile** (`basic_*` keys in the weapon stats table), so weapon choice is the moment-to-moment feel. Tome = 3-shot spread, Orb = heavy single shot, Wand = fast stream; Staff/Lantern/Instrument/Totem still need one.

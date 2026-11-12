@@ -8,7 +8,7 @@ const EQUIPPABLE_WEAPONS = {
 	},
 	"orb": {
 		"element": "fire",
-		"forms": ["bolt", "beam", "burst"],
+		"forms": ["bolt", "rain", "burst"],
 	},
 	"wand": {
 		"element": "fire",
